@@ -2797,25 +2797,70 @@ body {
 }
 
 /* ================= 自动更新 UI ================= */
-.update-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
-  background: var(--primary-bg, #eaf1ff);
-  color: var(--primary, #2f6fed);
-  border-bottom: 1px solid var(--border, #e3e6ea);
+/* 右下角新版本提示卡片 */
+.update-toast {
+  position: fixed;
+  z-index: 1000;
+  right: 18px;
+  bottom: 18px;
+  width: 260px;
+  padding: 14px 14px 12px;
+  background: #ffffff;
+  border: 1px solid #e3e6ea;
+  border-radius: 14px;
+  box-shadow: 0 10px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08);
   font-size: 13px;
+  color: var(--text, #1f2329);
+  transition: transform .2s ease, opacity .2s ease, box-shadow .2s ease;
+  opacity: 1;
 }
-.update-banner.hidden { display: none; }
-.update-banner-dot {
-  width: 8px; height: 8px; border-radius: 50%;
+.update-toast.hidden { opacity: 0; pointer-events: none; transform: translateY(10px); }
+.update-toast:hover { transform: translateY(-2px); box-shadow: 0 14px 40px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.1); }
+.update-toast-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.update-toast-dot {
+  width: 9px; height: 9px; border-radius: 50%;
   background: #ffd400;
-  box-shadow: 0 0 0 3px rgba(255,212,0,0.22);
+  box-shadow: 0 0 0 0 rgba(255,212,0,.6);
+  animation: toastDotPulse 1.6s infinite;
+  flex-shrink: 0;
+  margin-top: 4px;
 }
-.update-banner .link-btn {
-  background: none; border: none; color: var(--primary, #2f6fed);
-  cursor: pointer; font-size: 13px; text-decoration: underline; padding: 0 4px;
+.update-toast-text { flex: 1; min-width: 0; }
+.update-toast-title { font-weight: 600; color: var(--text, #1f2329); line-height: 1.35; }
+.update-toast-sub { margin-top: 2px; font-size: 12px; color: var(--text-dim, #6b7280); line-height: 1.35; }
+.update-toast-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+.update-toast-btn {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e3e6ea);
+  background: #fff;
+  color: var(--text, #1f2329);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, transform .1s ease;
+}
+.update-toast-btn:hover { background: #f5f7fa; border-color: #d0d6de; }
+.update-toast-btn:active { transform: scale(.96); }
+.update-toast-btn.primary {
+  background: var(--primary, #2f6fed);
+  border-color: var(--primary, #2f6fed);
+  color: #fff;
+}
+.update-toast-btn.primary:hover { background: #2257d6; border-color: #2257d6; }
+@keyframes toastDotPulse {
+  0% { box-shadow: 0 0 0 0 rgba(255,212,0,.6); }
+  70% { box-shadow: 0 0 0 6px rgba(255,212,0,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,212,0,0); }
 }
 .update-row { display: flex; gap: 10px; margin-top: 4px; }
 .update-status { margin-top: 10px; font-size: 13px; color: var(--text-dim, #6b7280); }
@@ -2871,14 +2916,26 @@ body {
 }
 
 /* 深色模式下的更新 UI */
-:root.dark .update-banner {
-  background: #11233f;
-  color: #7fb0ff;
-  border-bottom-color: var(--border);
+:root.dark .update-toast {
+  background: #1c1f26;
+  border-color: #2f3440;
+  color: var(--text);
+  box-shadow: 0 10px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.25);
 }
-:root.dark .update-banner-dot {
+:root.dark .update-toast:hover { box-shadow: 0 14px 40px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.28); }
+:root.dark .update-toast-title { color: var(--text); }
+:root.dark .update-toast-sub { color: var(--text-dim); }
+:root.dark .update-toast-btn {
+  background: #232732;
+  border-color: #2f3440;
+  color: var(--text);
+}
+:root.dark .update-toast-btn:hover { background: #2a2f3a; border-color: #3a3f4a; }
+:root.dark .update-toast-btn.primary { background: #3b7bf0; border-color: #3b7bf0; color: #fff; }
+:root.dark .update-toast-btn.primary:hover { background: #5b8def; border-color: #5b8def; }
+:root.dark .update-toast-dot {
   background: #ffd400;
-  box-shadow: 0 0 0 3px rgba(255,212,0,0.25);
+  box-shadow: 0 0 0 0 rgba(255,212,0,.6);
 }
 :root.dark .progress-bar { background: #2a2f3a; }
 :root.dark .progress-fill { background: linear-gradient(90deg, #3b7bf0, #6aa0ff); }
