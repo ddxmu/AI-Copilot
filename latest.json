@@ -1,10 +1,10 @@
 {
-  "version": "0.6.7",
-  "notes": "- **右下角新版本提示**：发现新版本时不再在左侧边栏显示横幅，改为弹出右下角小提示卡片，含版本号、「升级」「关闭」按钮，更轻量、不占主界面；支持浅色/深色模式。",
-  "pubDate": "2026-08-05T17:25:33+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.7/AI.Copilot-0.6.7-arm64.dmg",
-  "sha256": "2d3d0a4b0bbdd92340a86b3b41b99d3a827f2275661e78308b7cff57ee4a7104",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.7/delta-0.6.7.zip",
-  "deltaSha256": "391e3e9fcbd734935fc0b962b97c147f7c8493c31ec09e4f653250c9afdba087",
-  "deltaFromVersion": "0.6.6"
+  "version": "0.6.8",
+  "notes": "- **更新提示移入左侧功能栏底部**：发现新版本时，不再弹右下角提示卡片，改为在左侧边栏「版本号」位置直接显示一张贴合功能栏宽度的「对话信息框」（含版本号、「立即升级」「关闭」），不占用主界面、不挤压导航、宽度始终贴合侧边栏。",
+  "pubDate": "2026-08-05T17:50:04+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.8/AI.Copilot-0.6.8-arm64.dmg",
+  "sha256": "c90df995aabd5c5e7175c763878f0e63f7cc97a9f850a2bb0b402ba9b8625bff",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.8/delta-0.6.8.zip",
+  "deltaSha256": "457428e40081cc8f6d4ae6c7317ffc1d3d970d4b524e36918d004d33d47bab62",
+  "deltaFromVersion": "0.6.7"
 }
