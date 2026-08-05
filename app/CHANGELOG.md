@@ -1,3 +1,12 @@
+## v0.6.6 — 2026-08-05
+- **新增增量更新（Delta Update）**：在线升级时，如果当前版本正好是上一版，只下载包含变更文件的小增量包（通常几十 KB ~ 几 MB），秒级完成升级，不再下载 341MB 完整 DMG。
+  - 发布脚本自动基于 `git diff` 上一版本 tag 构建增量 zip（改动文件 + 删除清单），上传到同一个 GitHub Release。
+  - `latest.json` 新增 `deltaUrl`/`deltaSha256`/`deltaFromVersion` 字段。
+  - App 端 `updater.js` 检测到版本匹配时走增量路径：下载 delta.zip → 用 `readZipEntries` 解压到 staging → 写 bash 脚本在退出后覆盖 `Resources/app/` 并重启。
+  - 当前版本与增量来源不匹配时自动回退完整 DMG 下载，保证任何版本都能升级。
+  - 设置页检测到更新时提示「支持增量升级」。
+- **兼容性**：`downloadAndInstall` 接受字符串（旧 dmgUrl）或对象（含 delta 字段），向后兼容。
+
 ## v0.6.5 — 2026-08-05
 - **修复自动更新下载卡住/无进度**：重写 `updater.js` 下载逻辑。
   - 弃用 `res.pipe()`，改用手动 `out.write(chunk)`，确保进度事件可靠触发。

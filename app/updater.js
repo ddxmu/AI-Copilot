@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile, spawn } = require('child_process');
 const { app } = require('electron');
+const { readZipEntries } = require('./office-replace');
 
 // ===== 配置（如需改仓库/分支，只动这里）=====
 const REPO = 'ddxmu/AI-Copilot';
@@ -227,19 +228,87 @@ async function checkForUpdates() {
       pubDate: m.pubDate || '',
       dmgUrl: m.dmgUrl || '',
       sha256: m.sha256 || '',
+      deltaUrl: m.deltaUrl || '',
+      deltaSha256: m.deltaSha256 || '',
+      deltaFromVersion: m.deltaFromVersion || '',
     };
   } catch (e) {
     return { updateAvailable: false, currentVersion: cur, error: e.message };
   }
 }
 
+// 增量应用：解压 delta zip 到 staging，写 bash 脚本在退出后覆盖 Resources/app
+function applyDeltaAndRelaunch(deltaZipPath, cb) {
+  const stagingDir = path.join(updateDir(), 'staging');
+  fs.rmSync(stagingDir, { recursive: true, force: true });
+  fs.mkdirSync(stagingDir, { recursive: true });
+
+  const buf = fs.readFileSync(deltaZipPath);
+  const entries = readZipEntries(buf);
+  const deletedFiles = [];
+  for (const e of entries) {
+    if (e.name === '__deleted.txt') {
+      e.data.toString('utf8').split('\n').forEach((l) => { if (l.trim()) deletedFiles.push(l.trim()); });
+      continue;
+    }
+    if (e.name === '__delta_info.json') continue;
+    const dest = path.join(stagingDir, e.name);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, e.data);
+  }
+
+  const target = currentAppPath();
+  const appResDir = path.join(target, 'Contents', 'Resources', 'app');
+  const updateRoot = updateDir();
+  // 生成删除命令
+  const deleteCmds = deletedFiles.map((f) => `rm -f "${appResDir}/${f}" 2>/dev/null`).join('\n');
+  const script = `#!/bin/bash
+sleep 2
+# 覆盖变更文件
+cp -Rf "${stagingDir}/." "${appResDir}/"
+# 删除已移除文件
+${deleteCmds}
+xattr -dr com.apple.quarantine "${target}" 2>/dev/null
+rm -rf "${updateRoot}"
+open "${target}"
+`;
+  const sp = path.join(updateDir(), 'apply.sh');
+  fs.writeFileSync(sp, script);
+  fs.chmodSync(sp, 0o755);
+  const child = spawn('bash', [sp], { detached: true, stdio: 'ignore' });
+  child.unref();
+  setTimeout(() => { app.quit(); }, 400);
+}
+
 // cb: { onProgress({percent,written,total,speedBps}), onStage(text) }
-async function downloadAndInstall(dmgUrl, cb = {}) {
-  const tmpDmg = path.join(updateDir(), 'update.dmg');
+// manifest 可以是字符串（dmgUrl，兼容旧调用）或对象（含 deltaUrl 等字段）
+async function downloadAndInstall(manifest, cb = {}) {
   fs.mkdirSync(updateDir(), { recursive: true });
-  if (cb.onStage) cb.onStage('下载更新包…');
-  await downloadFile(dmgUrl, tmpDmg, {
-    onProgress: (info) => cb.onProgress && cb.onProgress(info),
+
+  // 判断走增量还是完整包
+  const cur = app.getVersion();
+  const info = typeof manifest === 'string' ? { dmgUrl: manifest } : manifest;
+  const canDelta = info.deltaUrl && info.deltaFromVersion &&
+    compareVersions(info.deltaFromVersion, cur) === 0;
+
+  if (canDelta) {
+    // === 增量更新路径 ===
+    const deltaPath = path.join(updateDir(), 'delta.zip');
+    if (cb.onStage) cb.onStage('下载增量更新包…');
+    await downloadFile(info.deltaUrl, deltaPath, {
+      onProgress: (p) => cb.onProgress && cb.onProgress(p),
+      onStage: (s) => cb.onStage && cb.onStage(s),
+    });
+    if (cb.onStage) cb.onStage('应用增量更新…');
+    applyDeltaAndRelaunch(deltaPath, cb); // 内部会 app.quit
+    return;
+  }
+
+  // === 完整 DMG 更新路径（回退） ===
+  const tmpDmg = path.join(updateDir(), 'update.dmg');
+  if (cb.onStage) cb.onStage('下载完整安装包…');
+  await downloadFile(info.dmgUrl, tmpDmg, {
+    onProgress: (p) => cb.onProgress && cb.onProgress(p),
     onStage: (s) => cb.onStage && cb.onStage(s),
   });
   if (cb.onStage) cb.onStage('挂载磁盘映像…');
