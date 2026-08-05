@@ -1,10 +1,10 @@
 {
-  "version": "0.6.8",
-  "notes": "- **更新提示移入左侧功能栏底部**：发现新版本时，不再弹右下角提示卡片，改为在左侧边栏「版本号」位置直接显示一张贴合功能栏宽度的「对话信息框」（含版本号、「立即升级」「关闭」），不占用主界面、不挤压导航、宽度始终贴合侧边栏。",
-  "pubDate": "2026-08-05T17:50:04+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.8/AI.Copilot-0.6.8-arm64.dmg",
-  "sha256": "c90df995aabd5c5e7175c763878f0e63f7cc97a9f850a2bb0b402ba9b8625bff",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.8/delta-0.6.8.zip",
-  "deltaSha256": "457428e40081cc8f6d4ae6c7317ffc1d3d970d4b524e36918d004d33d47bab62",
-  "deltaFromVersion": "0.6.7"
+  "version": "0.6.9",
+  "notes": "- **更新检查更主动（后台静默）**：新增「文件打开即检查」——每当在任意模块选中文件/文件夹（按规则替换、AI 附件、重命名、格式转换、PDF去水印等），后台静默同步一次更新情况，有更新就弹出左侧栏提示，不打扰操作；同时把空闲轮询间隔从 20 分钟缩短为 10 分钟（带 60 秒去抖，避免高频触发反复请求 GitHub）。",
+  "pubDate": "2026-08-05T17:57:58+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.9/AI.Copilot-0.6.9-arm64.dmg",
+  "sha256": "785715f8c98e2200bb66a126cefe27031ec461f8c27c47c02ba65de79ea342f0",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.9/delta-0.6.9.zip",
+  "deltaSha256": "f1b8e405814c509ee8b4de940afe833a0b2e02a59e33b90fb8b602130d8fc5c6",
+  "deltaFromVersion": "0.6.8"
 }

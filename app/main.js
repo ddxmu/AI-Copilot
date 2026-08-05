@@ -47,24 +47,28 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
-  migrateLegacyUserData();
-  detectPdfEngines();
-  createWindow();
-  // 启动静默检查更新（仅在有新版本时通知渲染进程，不自动下载）
+// 后台静默检查更新：仅在发现新版本时通知渲染进程，不自动下载。
+// 带 60 秒去抖，避免文件选择等高频事件反复查询 GitHub。
+let lastBgUpdateCheck = 0;
+function checkUpdatesInBackground(force = false) {
+  const now = Date.now();
+  if (!force && now - lastBgUpdateCheck < 60 * 1000) return;
+  lastBgUpdateCheck = now;
   updater.checkForUpdates().then((res) => {
     if (res && res.updateAvailable && mainWindow) {
       mainWindow.webContents.send('update-available', res);
     }
   }).catch(() => {});
-  // 空闲定时检查更新（每 20 分钟自动查询一次 GitHub）
-  setInterval(() => {
-    updater.checkForUpdates().then((res) => {
-      if (res && res.updateAvailable && mainWindow) {
-        mainWindow.webContents.send('update-available', res);
-      }
-    }).catch(() => {});
-  }, 20 * 60 * 1000);
+}
+
+app.whenReady().then(() => {
+  migrateLegacyUserData();
+  detectPdfEngines();
+  createWindow();
+  // 启动静默检查更新（仅在有新版本时通知渲染进程，不自动下载）
+  checkUpdatesInBackground(true);
+  // 空闲定时检查更新（每 10 分钟自动查询一次 GitHub）
+  setInterval(() => checkUpdatesInBackground(true), 10 * 60 * 1000);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -228,7 +232,10 @@ ipcMain.handle('select-files', async (_e, exts) => {
       { name: '所有文件', extensions: ['*'] },
     ],
   });
-  return result.canceled ? [] : result.filePaths;
+  const paths = result.canceled ? [] : result.filePaths;
+  // 文件被选中后，后台静默同步一次更新情况（有更新才提示，不打扰）
+  if (paths.length) checkUpdatesInBackground();
+  return paths;
 });
 
 // 选择文件夹
@@ -237,7 +244,10 @@ ipcMain.handle('select-folder', async () => {
     title: '选择文件夹',
     properties: ['openDirectory'],
   });
-  return result.canceled ? null : result.filePaths[0];
+  if (result.canceled) return null;
+  // 文件夹被选中后，后台静默同步一次更新情况
+  checkUpdatesInBackground();
+  return result.filePaths[0];
 });
 
 // 扫描文件夹（按扩展名过滤），返回文件清单
