@@ -8,12 +8,19 @@
 </head>
 <body>
   <div class="app">
-    <!-- 更新提示横幅（发现新版本时出现） -->
-    <div id="update-banner" class="update-banner hidden">
-      <span class="update-banner-dot"></span>
-      <span id="update-banner-text">发现新版本</span>
-      <button id="update-banner-view" class="link-btn">查看</button>
-      <button id="update-banner-later" class="link-btn">稍后</button>
+    <!-- 右下角新版本提示（发现新版本时出现） -->
+    <div id="update-toast" class="update-toast hidden">
+      <div class="update-toast-main">
+        <span class="update-toast-dot"></span>
+        <div class="update-toast-text">
+          <div class="update-toast-title">发现新版本</div>
+          <div id="update-toast-sub" class="update-toast-sub">v0.0.0 可用</div>
+        </div>
+      </div>
+      <div class="update-toast-actions">
+        <button id="update-toast-now" class="update-toast-btn primary">升级</button>
+        <button id="update-toast-later" class="update-toast-btn">关闭</button>
+      </div>
     </div>
 
     <!-- 左侧功能模块导航（浅色风格） -->

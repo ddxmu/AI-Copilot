@@ -1,10 +1,10 @@
 {
-  "version": "0.6.6",
-  "notes": "- **新增增量更新（Delta Update）**：在线升级时，如果当前版本正好是上一版，只下载包含变更文件的小增量包（通常几十 KB ~ 几 MB），秒级完成升级，不再下载 341MB 完整 DMG。\n  - 发布脚本自动基于 `git diff` 上一版本 tag 构建增量 zip（改动文件 + 删除清单），上传到同一个 GitHub Release。\n  - `latest.json` 新增 `deltaUrl`/`deltaSha256`/`deltaFromVersion` 字段。\n  - App 端 `updater.js` 检测到版本匹配时走增量路径：下载 delta.zip → 用 `readZipEntries` 解压到 staging → 写 bash 脚本在退出后覆盖 `Resources/app/` 并重启。\n  - 当前版本与增量来源不匹配时自动回退完整 DMG 下载，保证任何版本都能升级。\n  - 设置页检测到更新时提示「支持增量升级」。\n- **兼容性**：`downloadAndInstall` 接受字符串（旧 dmgUrl）或对象（含 delta 字段），向后兼容。",
-  "pubDate": "2026-08-05T17:13:44+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.6/AI.Copilot-0.6.6-arm64.dmg",
-  "sha256": "9552a13aafaf22c8391e102e63390f46a7b37343cebb52a6c95901d0e4a22fd6",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.6/delta-0.6.6.zip",
-  "deltaSha256": "8b3539a301eff775332aa0d515374ca1b820dbf9d18a24f27ffc5449a6a079b6",
-  "deltaFromVersion": "0.6.5"
+  "version": "0.6.7",
+  "notes": "- **右下角新版本提示**：发现新版本时不再在左侧边栏显示横幅，改为弹出右下角小提示卡片，含版本号、「升级」「关闭」按钮，更轻量、不占主界面；支持浅色/深色模式。",
+  "pubDate": "2026-08-05T17:25:33+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.7/AI.Copilot-0.6.7-arm64.dmg",
+  "sha256": "2d3d0a4b0bbdd92340a86b3b41b99d3a827f2275661e78308b7cff57ee4a7104",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.7/delta-0.6.7.zip",
+  "deltaSha256": "391e3e9fcbd734935fc0b962b97c147f7c8493c31ec09e4f653250c9afdba087",
+  "deltaFromVersion": "0.6.6"
 }

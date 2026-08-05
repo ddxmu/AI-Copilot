@@ -692,12 +692,12 @@ function formatBytes(n) {
   return n + ' B';
 }
 
-function showUpdateBanner(res) {
-  const banner = document.getElementById('update-banner');
-  const text = document.getElementById('update-banner-text');
-  if (!banner || !text) return;
-  text.textContent = `发现新版本 v${res.version}（当前 v${res.currentVersion}）`;
-  banner.classList.remove('hidden');
+function showUpdateToast(res) {
+  const toast = document.getElementById('update-toast');
+  const sub = document.getElementById('update-toast-sub');
+  if (!toast || !sub) return;
+  sub.textContent = `v${res.version} 可用（当前 v${res.currentVersion}）`;
+  toast.classList.remove('hidden');
 }
 
 function revealInstall(res) {
@@ -737,7 +737,7 @@ async function initUpdater() {
   // 事件订阅（来自主进程的更新进度/结果）
   window.api.onUpdateAvailable((res) => {
     if (pendingUpdate && pendingUpdate.version === res.version) return; // 同版本已提示过，避免重复打扰
-    showUpdateBanner(res); revealInstall(res);
+    showUpdateToast(res); revealInstall(res);
   });
   window.api.onUpdateProgress((info) => {
     const wrap = document.getElementById('update-progress-wrap');
@@ -786,7 +786,7 @@ async function initUpdater() {
       return;
     }
     if (res.updateAvailable) {
-      showUpdateBanner(res);
+      showUpdateToast(res);
       revealInstall(res);
     } else if (status) {
       status.textContent = '已是最新版本（v' + res.currentVersion + '）';
@@ -802,7 +802,7 @@ async function initUpdater() {
     const status = document.getElementById('update-status');
     const wrap = document.getElementById('update-progress-wrap');
     const bar = document.getElementById('update-progress-bar');
-    const banner = document.getElementById('update-banner');
+    const toast = document.getElementById('update-toast');
     // 判断走增量还是完整包
     const curVer = await window.api.getAppVersion().catch(() => '');
     const isDelta = pendingUpdate.deltaUrl && pendingUpdate.deltaFromVersion === curVer;
@@ -818,7 +818,7 @@ async function initUpdater() {
     const fdot = document.getElementById('footer-update-dot');
     if (installBtn) installBtn.disabled = true;
     if (fdot) fdot.classList.add('loading');
-    if (banner) banner.classList.add('hidden');
+    if (toast) toast.classList.add('hidden');
     await window.api.downloadUpdate(pendingUpdate);
     if (status) status.textContent = '正在安装并重启…';
   }
@@ -831,13 +831,13 @@ async function initUpdater() {
   const footerUpdateDot = document.getElementById('footer-update-dot');
   if (footerUpdateDot) footerUpdateDot.addEventListener('click', startInstall);
 
-  // 横幅按钮
-  const bv = document.getElementById('update-banner-view');
-  if (bv) bv.addEventListener('click', () => switchPanel('ai-settings'));
-  const bl = document.getElementById('update-banner-later');
-  if (bl) bl.addEventListener('click', () => {
-    const banner = document.getElementById('update-banner');
-    if (banner) banner.classList.add('hidden');
+  // 右下角提示框按钮
+  const btnUpgrade = document.getElementById('update-toast-now');
+  if (btnUpgrade) btnUpgrade.addEventListener('click', startInstall);
+  const btnClose = document.getElementById('update-toast-later');
+  if (btnClose) btnClose.addEventListener('click', () => {
+    const toast = document.getElementById('update-toast');
+    if (toast) toast.classList.add('hidden');
   });
 }
 
