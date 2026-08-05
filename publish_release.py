@@ -62,16 +62,17 @@ def main():
     if not token:
         print('缺少环境变量 GITHUB_TOKEN（需要 repo 权限）'); sys.exit(1)
 
+    # 1. 同步源码到仓库（非破坏性覆盖复制，不删除旧文件，避免触发沙箱拦截）
+    print('== 同步源码 ==')
+    run(['cp', '-Rf', APP_SRC + '/.', os.path.join(ROOT, 'app') + '/'])
+    run(['cp', '-Rf', ASSETS + '/.', os.path.join(ROOT, 'dmg-assets') + '/'])
+
+    # 同步后再读取版本号（否则会读到旧版本）
     pkg = json.load(open(os.path.join(ROOT, 'app', 'package.json'), encoding='utf-8'))
     version = pkg['version']
     tag = 'v' + version
     dmg_name = f'AI Copilot-{version}-arm64.dmg'
     dmg_path = os.path.expanduser(f'~/Downloads/{dmg_name}')
-
-    # 1. 同步源码到仓库（非破坏性覆盖复制，不删除旧文件，避免触发沙箱拦截）
-    print('== 同步源码 ==')
-    run(['cp', '-Rf', APP_SRC + '/.', os.path.join(ROOT, 'app') + '/'])
-    run(['cp', '-Rf', ASSETS + '/.', os.path.join(ROOT, 'dmg-assets') + '/'])
 
     # 2. 打包 DMG
     print('== 打包 DMG ==')
