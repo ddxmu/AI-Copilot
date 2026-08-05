@@ -685,6 +685,12 @@ let pendingUpdate = null; // { version, notes, dmgUrl, ... }
 function escapeHtml(s) {
   return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 }
+function formatBytes(n) {
+  if (n >= 1073741824) return (n / 1073741824).toFixed(2) + ' GB';
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+  return n + ' B';
+}
 
 function showUpdateBanner(res) {
   const banner = document.getElementById('update-banner');
@@ -729,11 +735,17 @@ async function initUpdater() {
     if (pendingUpdate && pendingUpdate.version === res.version) return; // 同版本已提示过，避免重复打扰
     showUpdateBanner(res); revealInstall(res);
   });
-  window.api.onUpdateProgress((p) => {
+  window.api.onUpdateProgress((info) => {
     const wrap = document.getElementById('update-progress-wrap');
     const bar = document.getElementById('update-progress-bar');
+    const text = document.getElementById('update-progress-text');
+    const pct = info && typeof info.percent === 'number' ? info.percent : (typeof info === 'number' ? info : 0);
     if (wrap) wrap.classList.remove('hidden');
-    if (bar) bar.style.width = p + '%';
+    if (bar) bar.style.width = pct + '%';
+    if (text && info && typeof info.written === 'number' && info.total) {
+      const speed = info.speedBps > 0 ? ` · ${formatBytes(info.speedBps)}/s` : '';
+      text.textContent = `${formatBytes(info.written)} / ${formatBytes(info.total)} (${pct}%)${speed}`;
+    }
   });
   window.api.onUpdateStage((s) => {
     const t = document.getElementById('update-progress-text');
@@ -744,6 +756,17 @@ async function initUpdater() {
     if (status) { status.textContent = '更新失败：' + m; status.className = 'update-status error'; }
     const wrap = document.getElementById('update-progress-wrap');
     if (wrap) wrap.classList.add('hidden');
+    const installBtn = document.getElementById('btn-install-update');
+    const fdot = document.getElementById('footer-update-dot');
+    if (installBtn) installBtn.disabled = false;
+    if (fdot) fdot.classList.remove('loading');
+    const manualWrap = document.getElementById('update-manual-wrap');
+    const manualLink = document.getElementById('update-manual-link');
+    if (manualWrap) manualWrap.classList.remove('hidden');
+    if (manualLink && pendingUpdate && pendingUpdate.dmgUrl) {
+      manualLink.href = pendingUpdate.dmgUrl;
+      manualLink.textContent = 'GitHub 下载失败？点击手动下载 DMG';
+    }
   });
 
   // 手动检查
@@ -779,6 +802,8 @@ async function initUpdater() {
     if (status) { status.textContent = '正在下载更新…'; status.className = 'update-status'; }
     if (wrap) wrap.classList.remove('hidden');
     if (bar) bar.style.width = '0%';
+    const manualWrap = document.getElementById('update-manual-wrap');
+    if (manualWrap) manualWrap.classList.add('hidden');
     const installBtn = document.getElementById('btn-install-update');
     const fdot = document.getElementById('footer-update-dot');
     if (installBtn) installBtn.disabled = true;

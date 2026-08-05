@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -41,6 +41,10 @@ function createWindow() {
     },
   });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
 }
 
 app.whenReady().then(() => {
@@ -202,7 +206,7 @@ ipcMain.handle('download-update', async (_e, dmgUrl) => {
   const wc = mainWindow && mainWindow.webContents;
   try {
     await updater.downloadAndInstall(dmgUrl, {
-      onProgress: (p) => wc && wc.send('update-progress', p),
+      onProgress: (info) => wc && wc.send('update-progress', info),
       onStage: (s) => wc && wc.send('update-stage', s),
     });
     return { ok: true };

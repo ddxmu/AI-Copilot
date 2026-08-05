@@ -810,7 +810,7 @@
             <h2>软件更新</h2>
             <span id="update-version" class="tag-chip">v0.0.0</span>
           </div>
-          <p class="hint" style="margin: 4px 0 12px">自动从 GitHub（ddxmu/AI-Copilot）检查新版本。开启应用时静默检查，也可手动检查并一键安装。</p>
+          <p class="hint" style="margin: 4px 0 12px">自动从 GitHub（ddxmu/AI-Copilot）检查新版本。开启应用时静默检查，也可手动检查并一键安装。完整安装包约 340MB，网络较慢时请耐心等待或手动下载。</p>
           <div class="update-row">
             <button id="btn-check-update" class="btn">检查更新</button>
             <button id="btn-install-update" class="btn primary hidden">下载并安装</button>
@@ -819,6 +819,9 @@
           <div id="update-progress-wrap" class="hidden">
             <div class="progress-bar"><div id="update-progress-bar" class="progress-fill"></div></div>
             <div id="update-progress-text" class="hint"></div>
+          </div>
+          <div id="update-manual-wrap" class="hidden" style="margin-top:10px">
+            <a id="update-manual-link" href="#" target="_blank" class="link-btn">GitHub 下载太慢？点击手动下载 DMG</a>
           </div>
           <div id="update-notes" class="update-notes hidden"></div>
         </div>
