@@ -168,11 +168,14 @@ body {
 }
 
 .sidebar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 11px;
   color: var(--text-light);
   padding: 12px 18px;
   border-top: 1px solid var(--border-light);
-  text-align: center;
 }
 
 /* ========== AI 助手历史记录 ========== */
@@ -2807,8 +2810,8 @@ body {
 .update-banner.hidden { display: none; }
 .update-banner-dot {
   width: 8px; height: 8px; border-radius: 50%;
-  background: var(--success, #1a7f37);
-  box-shadow: 0 0 0 3px rgba(26,127,55,0.18);
+  background: #ffd400;
+  box-shadow: 0 0 0 3px rgba(255,212,0,0.22);
 }
 .update-banner .link-btn {
   background: none; border: none; color: var(--primary, #2f6fed);
@@ -2844,6 +2847,37 @@ body {
   50% { box-shadow: 0 0 0 4px rgba(47,111,237,0.4); }
 }
 
+/* ===== 左下角版本号旁的「升级」按钮 + 黄点 ===== */
+.footer-update-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--primary, #2f6fed);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease, transform .1s ease;
+}
+.footer-update-btn:hover { background: #2257d6; }
+.footer-update-btn:active { transform: scale(.96); }
+.footer-update-btn:disabled { opacity: .7; cursor: default; }
+.footer-update-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #ffd400;
+  box-shadow: 0 0 0 0 rgba(255,212,0,.6);
+  animation: footerDotPulse 1.6s infinite;
+}
+.footer-update-btn.loading .footer-update-dot { animation: none; }
+@keyframes footerDotPulse {
+  0% { box-shadow: 0 0 0 0 rgba(255,212,0,.6); }
+  70% { box-shadow: 0 0 0 6px rgba(255,212,0,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,212,0,0); }
+}
+
 /* 深色模式下的更新 UI */
 :root.dark .update-banner {
   background: #11233f;
@@ -2851,8 +2885,8 @@ body {
   border-bottom-color: var(--border);
 }
 :root.dark .update-banner-dot {
-  background: #3fb950;
-  box-shadow: 0 0 0 3px rgba(63,185,80,0.2);
+  background: #ffd400;
+  box-shadow: 0 0 0 3px rgba(255,212,0,0.25);
 }
 :root.dark .progress-bar { background: #2a2f3a; }
 :root.dark .progress-fill { background: linear-gradient(90deg, #3b7bf0, #6aa0ff); }
@@ -2861,3 +2895,6 @@ body {
   border-color: var(--border);
   color: var(--text);
 }
+:root.dark .sidebar-footer { color: var(--text-light); border-top-color: var(--border); }
+:root.dark .footer-update-btn { background: #3b7bf0; }
+:root.dark .footer-update-btn:hover { background: #5b8def; }

@@ -53,6 +53,14 @@ app.whenReady().then(() => {
       mainWindow.webContents.send('update-available', res);
     }
   }).catch(() => {});
+  // 空闲定时检查更新（每 20 分钟自动查询一次 GitHub）
+  setInterval(() => {
+    updater.checkForUpdates().then((res) => {
+      if (res && res.updateAvailable && mainWindow) {
+        mainWindow.webContents.send('update-available', res);
+      }
+    }).catch(() => {});
+  }, 20 * 60 * 1000);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

@@ -674,7 +674,7 @@ async function initAiSettings() {
 async function initAppVersion() {
   try {
     const v = await window.api.getAppVersion();
-    const el = document.querySelector('.sidebar-footer');
+    const el = document.getElementById('footer-version');
     if (el && v) el.textContent = `AI Copilot · v${v}`;
   } catch (e) {}
 }
@@ -703,6 +703,8 @@ function revealInstall(res) {
   if (ver) ver.textContent = 'v' + res.version;
   if (status) { status.textContent = '有可用更新'; status.className = 'update-status has-update'; }
   if (installBtn) installBtn.classList.remove('hidden');
+  const fbtn = document.getElementById('footer-update-btn');
+  if (fbtn) fbtn.classList.remove('hidden');
   if (notes) {
     notes.innerHTML = '<strong>更新内容：</strong><br>' + escapeHtml(res.notes || '（未提供说明）');
     notes.classList.remove('hidden');
@@ -720,7 +722,10 @@ async function initUpdater() {
     try { ver.textContent = 'v' + (await window.api.getAppVersion()); } catch (e) {}
   }
   // 事件订阅（来自主进程的更新进度/结果）
-  window.api.onUpdateAvailable((res) => { showUpdateBanner(res); revealInstall(res); });
+  window.api.onUpdateAvailable((res) => {
+    if (pendingUpdate && pendingUpdate.version === res.version) return; // 同版本已提示过，避免重复打扰
+    showUpdateBanner(res); revealInstall(res);
+  });
   window.api.onUpdateProgress((p) => {
     const wrap = document.getElementById('update-progress-wrap');
     const bar = document.getElementById('update-progress-bar');
@@ -756,25 +761,37 @@ async function initUpdater() {
     } else if (status) {
       status.textContent = '已是最新版本（v' + res.currentVersion + '）';
       status.className = 'update-status ok';
+      const fbtn = document.getElementById('footer-update-btn');
+      if (fbtn) fbtn.classList.add('hidden');
     }
   });
 
-  // 下载并安装
-  const installBtn = document.getElementById('btn-install-update');
-  if (installBtn) installBtn.addEventListener('click', async () => {
+  // 统一的「下载并安装」流程（设置卡片按钮 / 底部版本号升级按钮共用）
+  async function startInstall() {
     if (!pendingUpdate || !pendingUpdate.dmgUrl) return;
     const status = document.getElementById('update-status');
     const wrap = document.getElementById('update-progress-wrap');
     const bar = document.getElementById('update-progress-bar');
+    const banner = document.getElementById('update-banner');
     if (status) { status.textContent = '正在下载更新…'; status.className = 'update-status'; }
     if (wrap) wrap.classList.remove('hidden');
     if (bar) bar.style.width = '0%';
-    installBtn.disabled = true;
-    const banner = document.getElementById('update-banner');
+    const installBtn = document.getElementById('btn-install-update');
+    const fbtn = document.getElementById('footer-update-btn');
+    if (installBtn) installBtn.disabled = true;
+    if (fbtn) { fbtn.disabled = true; fbtn.classList.add('loading'); }
     if (banner) banner.classList.add('hidden');
     await window.api.downloadUpdate(pendingUpdate.dmgUrl);
     if (status) status.textContent = '正在安装并重启…';
-  });
+  }
+
+  // 设置卡片「下载并安装」
+  const installBtn = document.getElementById('btn-install-update');
+  if (installBtn) installBtn.addEventListener('click', startInstall);
+
+  // 左下角版本号旁的「升级」按钮（带黄点）
+  const footerUpdateBtn = document.getElementById('footer-update-btn');
+  if (footerUpdateBtn) footerUpdateBtn.addEventListener('click', startInstall);
 
   // 横幅按钮
   const bv = document.getElementById('update-banner-view');

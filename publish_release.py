@@ -68,12 +68,10 @@ def main():
     dmg_name = f'AI Copilot-{version}-arm64.dmg'
     dmg_path = os.path.expanduser(f'~/Downloads/{dmg_name}')
 
-    # 1. 同步源码到仓库
+    # 1. 同步源码到仓库（非破坏性覆盖复制，不删除旧文件，避免触发沙箱拦截）
     print('== 同步源码 ==')
-    if os.path.exists(os.path.join(ROOT, 'app')):
-        shutil.rmtree(os.path.join(ROOT, 'app'))
-    shutil.copytree(APP_SRC, os.path.join(ROOT, 'app'))
-    shutil.copytree(ASSETS, os.path.join(ROOT, 'dmg-assets'), dirs_exist_ok=True)
+    run(['cp', '-Rf', APP_SRC + '/.', os.path.join(ROOT, 'app') + '/'])
+    run(['cp', '-Rf', ASSETS + '/.', os.path.join(ROOT, 'dmg-assets') + '/'])
 
     # 2. 打包 DMG
     print('== 打包 DMG ==')
