@@ -202,10 +202,10 @@ ipcMain.handle('get-app-version', () => {
 // ===== 自动更新 =====
 ipcMain.handle('check-update', async () => updater.checkForUpdates());
 
-ipcMain.handle('download-update', async (_e, dmgUrl) => {
+ipcMain.handle('download-update', async (_e, manifest) => {
   const wc = mainWindow && mainWindow.webContents;
   try {
-    await updater.downloadAndInstall(dmgUrl, {
+    await updater.downloadAndInstall(manifest, {
       onProgress: (info) => wc && wc.send('update-progress', info),
       onStage: (s) => wc && wc.send('update-stage', s),
     });

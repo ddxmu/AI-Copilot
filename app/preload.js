@@ -65,7 +65,7 @@ contextBridge.exposeInMainWorld('api', {
   onRulesChanged: (cb) => ipcRenderer.on('rules-changed', (_e, rules) => cb(rules)),
   // 自动更新
   checkUpdate: () => ipcRenderer.invoke('check-update'),
-  downloadUpdate: (url) => ipcRenderer.invoke('download-update', url),
+  downloadUpdate: (manifest) => ipcRenderer.invoke('download-update', manifest),
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_e, res) => cb(res)),
   onUpdateProgress: (cb) => ipcRenderer.on('update-progress', (_e, p) => cb(p)),
   onUpdateStage: (cb) => ipcRenderer.on('update-stage', (_e, s) => cb(s)),

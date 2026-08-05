@@ -1,7 +1,10 @@
 {
-  "version": "0.6.5",
-  "notes": "- **修复自动更新下载卡住/无进度**：重写 `updater.js` 下载逻辑。\n  - 弃用 `res.pipe()`，改用手动 `out.write(chunk)`，确保进度事件可靠触发。\n  - 进度条下方实时显示 **已下载 / 总量 (百分比) · 速度**，例如 `12.5 / 341.6 MB (4%) · 45 KB/s`。\n  - 新增 **45 秒假死检测**：超过 45 秒没收到数据自动中断并重试。\n  - 新增 **断点续传**：中断后从已下载位置继续，最多重试 2 次。\n  - 新增 **手动下载 fallback**：下载失败时显示「GitHub 下载失败？点击手动下载 DMG」链接，点击用系统浏览器打开 Release DMG。\n- 软件更新卡片文案增加「完整安装包约 340MB，网络较慢时请耐心等待或手动下载」提示。\n- 新增 `shell.openExternal` 处理，点击 `target=\"_blank\"` 的链接会跳转到系统默认浏览器。",
-  "pubDate": "2026-08-05T16:28:27+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.5/AI.Copilot-0.6.5-arm64.dmg",
-  "sha256": "bf211570b4c98c175b4b9e30a3640e3b6bf65d960d411e595c782b4165b372e1"
+  "version": "0.6.6",
+  "notes": "- **新增增量更新（Delta Update）**：在线升级时，如果当前版本正好是上一版，只下载包含变更文件的小增量包（通常几十 KB ~ 几 MB），秒级完成升级，不再下载 341MB 完整 DMG。\n  - 发布脚本自动基于 `git diff` 上一版本 tag 构建增量 zip（改动文件 + 删除清单），上传到同一个 GitHub Release。\n  - `latest.json` 新增 `deltaUrl`/`deltaSha256`/`deltaFromVersion` 字段。\n  - App 端 `updater.js` 检测到版本匹配时走增量路径：下载 delta.zip → 用 `readZipEntries` 解压到 staging → 写 bash 脚本在退出后覆盖 `Resources/app/` 并重启。\n  - 当前版本与增量来源不匹配时自动回退完整 DMG 下载，保证任何版本都能升级。\n  - 设置页检测到更新时提示「支持增量升级」。\n- **兼容性**：`downloadAndInstall` 接受字符串（旧 dmgUrl）或对象（含 delta 字段），向后兼容。",
+  "pubDate": "2026-08-05T17:13:44+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.6/AI.Copilot-0.6.6-arm64.dmg",
+  "sha256": "9552a13aafaf22c8391e102e63390f46a7b37343cebb52a6c95901d0e4a22fd6",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.6/delta-0.6.6.zip",
+  "deltaSha256": "8b3539a301eff775332aa0d515374ca1b820dbf9d18a24f27ffc5449a6a079b6",
+  "deltaFromVersion": "0.6.5"
 }

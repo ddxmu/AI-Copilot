@@ -707,7 +707,11 @@ function revealInstall(res) {
   const installBtn = document.getElementById('btn-install-update');
   const notes = document.getElementById('update-notes');
   if (ver) ver.textContent = 'v' + res.version;
-  if (status) { status.textContent = '有可用更新'; status.className = 'update-status has-update'; }
+  if (status) {
+    const isDelta = res.deltaUrl && res.deltaFromVersion === res.currentVersion;
+    status.textContent = isDelta ? '有可用更新（支持增量升级）' : '有可用更新';
+    status.className = 'update-status has-update';
+  }
   if (installBtn) installBtn.classList.remove('hidden');
   const fdot = document.getElementById('footer-update-dot');
   if (fdot) {
@@ -799,7 +803,13 @@ async function initUpdater() {
     const wrap = document.getElementById('update-progress-wrap');
     const bar = document.getElementById('update-progress-bar');
     const banner = document.getElementById('update-banner');
-    if (status) { status.textContent = '正在下载更新…'; status.className = 'update-status'; }
+    // 判断走增量还是完整包
+    const curVer = await window.api.getAppVersion().catch(() => '');
+    const isDelta = pendingUpdate.deltaUrl && pendingUpdate.deltaFromVersion === curVer;
+    if (status) {
+      status.textContent = isDelta ? '正在下载增量更新…' : '正在下载完整安装包…';
+      status.className = 'update-status';
+    }
     if (wrap) wrap.classList.remove('hidden');
     if (bar) bar.style.width = '0%';
     const manualWrap = document.getElementById('update-manual-wrap');
@@ -809,7 +819,7 @@ async function initUpdater() {
     if (installBtn) installBtn.disabled = true;
     if (fdot) fdot.classList.add('loading');
     if (banner) banner.classList.add('hidden');
-    await window.api.downloadUpdate(pendingUpdate.dmgUrl);
+    await window.api.downloadUpdate(pendingUpdate);
     if (status) status.textContent = '正在安装并重启…';
   }
 
