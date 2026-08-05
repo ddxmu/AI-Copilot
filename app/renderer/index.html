@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+  <title>AI Copilot</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- 更新提示横幅（发现新版本时出现） -->
+    <div id="update-banner" class="update-banner hidden">
+      <span class="update-banner-dot"></span>
+      <span id="update-banner-text">发现新版本</span>
+      <button id="update-banner-view" class="link-btn">查看</button>
+      <button id="update-banner-later" class="link-btn">稍后</button>
+    </div>
+
+    <!-- 左侧功能模块导航（浅色风格） -->
+    <aside class="sidebar">
+      <div class="app-title"><img class="app-logo" src="assets/logo.jpg" alt="AI Copilot" />AI Copilot</div>
+
+      <!-- 功能导航 -->
+      <nav class="nav" style="flex:none;">
+        <button class="nav-item active" data-panel="ai">
+          <span class="nav-icon"><img src="assets/navicons/ai.png" alt="" /></span>AI 助手
+        </button>
+        <button class="nav-item" data-panel="wizard">
+          <span class="nav-icon"><img src="assets/navicons/replace.png" alt="" /></span>按规则替换文件
+        </button>
+        <button class="nav-item" data-panel="rename">
+          <span class="nav-icon"><img src="assets/navicons/rename.png" alt="" /></span>文件名修改
+        </button>
+        <button class="nav-item" data-panel="convert">
+          <span class="nav-icon"><img src="assets/navicons/convert.png" alt="" /></span>文件格式转换
+        </button>
+        <button class="nav-item" data-panel="pdfwm">
+          <span class="nav-icon"><img src="assets/navicons/pdfwm.png" alt="" /></span>PDF去水印
+        </button>
+        <button class="nav-item" data-panel="automation">
+          <span class="nav-icon"><img src="assets/navicons/automation.png" alt="" /></span>文件自动化
+        </button>
+        <button class="nav-item" data-panel="ppt">
+          <span class="nav-icon"><img src="assets/navicons/ppt.png" alt="" /></span>PPT 写手
+        </button>
+      </nav>
+
+      <!-- AI 助手历史记录 -->
+      <div class="chat-history" id="chat-history">
+        <div class="chat-history-header">
+          <span class="nav-section-label">历史记录</span>
+          <button class="chat-history-new" id="btn-new-chat" title="新建对话">+</button>
+        </div>
+        <div class="chat-history-list" id="chat-history-list"></div>
+      </div>
+
+      <!-- 底部设置 -->
+      <nav class="nav" style="padding:0;flex:none;">
+        <button class="nav-item nav-bottom" data-panel="ai-settings">
+          <span class="nav-icon"><img src="assets/navicons/settings.png" alt="" /></span>AI 设置
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">AI Copilot · v…</div>
+    </aside>
+
+    <!-- 右侧内容区 -->
+    <main class="content">
+
+      <!-- 模块一：按规则替换文件（三步向导） -->
+      <section id="panel-wizard" class="panel">
+        <!-- 步骤指示器 -->
+        <div class="stepper">
+          <div class="step" data-step="1"><span class="step-num">1</span>选择文件</div>
+          <div class="step-line"></div>
+          <div class="step" data-step="2"><span class="step-num">2</span>替换框架</div>
+          <div class="step-line"></div>
+          <div class="step" data-step="3"><span class="step-num">3</span>保存方式</div>
+        </div>
+
+        <!-- 第 1 步：选择文件 -->
+        <div class="wizard-step active" id="step-1">
+          <header class="panel-header">
+            <h1>选择文件</h1>
+            <p class="hint">选择单个或多个文件，或选择文件夹自动扫描其中所有符合类型的文件。</p>
+          </header>
+
+          <div class="card">
+            <h2>来源</h2>
+            <div class="btn-group">
+              <button id="btn-pick-files" class="btn primary">📂 选择文件</button>
+              <button id="btn-pick-folder" class="btn primary">📁 选择文件夹</button>
+              <button id="btn-clear-files" class="btn ghost">清空列表</button>
+            </div>
+            <div id="source-info" class="source-info"></div>
+
+            <h2 style="margin-top:20px">文件类型筛选</h2>
+            <div class="ext-actions">
+              <button id="btn-ext-all" class="btn small ghost">全选</button>
+              <button id="btn-ext-none" class="btn small ghost">全不选</button>
+            </div>
+            <div id="ext-list" class="ext-list"></div>
+          </div>
+
+          <div class="card">
+            <h2>待处理文件 <span id="file-count" class="count">0</span></h2>
+            <ul id="file-list" class="file-list"></ul>
+            <p id="file-empty" class="empty">尚未选择文件。</p>
+          </div>
+
+          <div class="wizard-nav">
+            <span id="step1-msg" class="wizard-msg"></span>
+            <button class="btn primary large" id="btn-to-step2">下一步 →</button>
+          </div>
+        </div>
+
+        <!-- 第 2 步：替换框架（规则管理） -->
+        <div class="wizard-step" id="step-2">
+          <header class="panel-header">
+            <h1>替换框架</h1>
+            <p class="hint">建立替换规则：每条规则包含「查找内容」和「替换内容」，执行时按规则逐条替换。</p>
+          </header>
+
+          <div class="rule-form card">
+            <h2>添加规则</h2>
+            <div class="form-row">
+              <label>规则名称</label>
+              <input id="rule-name" type="text" placeholder="例如：公司名替换" />
+            </div>
+            <div class="form-row">
+              <label>查找内容</label>
+              <textarea id="rule-find" rows="2" placeholder="要查找的原文"></textarea>
+            </div>
+            <div class="form-row">
+              <label>替换内容</label>
+              <textarea id="rule-replace" rows="2" placeholder="替换成的新内容（留空表示删除）"></textarea>
+            </div>
+            <button id="btn-add-rule" class="btn primary">＋ 添加规则</button>
+          </div>
+
+          <div class="card">
+            <h2>已建规则 <span id="rule-count" class="count">0</span></h2>
+            <ul id="rule-list" class="rule-list"></ul>
+            <p id="rule-empty" class="empty">还没有规则，先在上方添加一条。</p>
+          </div>
+
+          <div class="wizard-nav">
+            <button class="btn large" id="btn-back-step1">← 上一步</button>
+            <span id="step2-msg" class="wizard-msg"></span>
+            <button class="btn primary large" id="btn-to-step3">下一步 →</button>
+          </div>
+        </div>
+
+        <!-- 第 3 步：保存方式 -->
+        <div class="wizard-step" id="step-3">
+          <header class="panel-header">
+            <h1>保存方式</h1>
+            <p class="hint">选择替换后的文件保存到哪里。</p>
+          </header>
+
+          <div class="card">
+            <h2>保存到</h2>
+            <label class="radio-row">
+              <input type="radio" name="save-mode" value="output" checked />
+              <span>指定位置（输出到选定文件夹，不改动原文件）</span>
+            </label>
+            <label class="radio-row">
+              <input type="radio" name="save-mode" value="overwrite" />
+              <span>覆盖原文件（直接改写原文件，无法撤销）</span>
+            </label>
+          </div>
+
+          <div class="card" id="output-card">
+            <h2>位置</h2>
+            <div class="dir-row">
+              <input id="output-dir" type="text" readonly placeholder="尚未选择输出文件夹" />
+              <button id="btn-pick-output" class="btn primary">浏览</button>
+              <button id="btn-clear-output" class="btn ghost small">清空</button>
+            </div>
+
+            <h2 style="margin-top:20px">保持目录结构 <span class="important">（非常重要！）</span></h2>
+            <label class="switch-row">
+              <span class="switch"><input type="checkbox" id="keep-structure" checked /><span class="slider"></span></span>
+              <span class="switch-label">开启后按原文件夹层级保存；关闭则全部平铺到输出目录</span>
+            </label>
+          </div>
+
+          <div class="wizard-nav">
+            <button class="btn large" id="btn-back-step2">← 上一步</button>
+            <span id="step3-msg" class="wizard-msg"></span>
+            <label class="ai-assist-row" title="开启后由 AI 智能体执行替换，可处理更复杂的情况，但速度较慢、消耗 token">
+              <span class="switch"><input type="checkbox" id="ai-assist-toggle" /><span class="slider"></span></span>
+              <span>AI 助手替换</span>
+            </label>
+            <button class="btn primary large" id="btn-start">▶ 开始处理</button>
+          </div>
+        </div>
+
+        <!-- 处理结果 -->
+        <div id="result-card" class="card hidden">
+          <h2>替换结果</h2>
+          <div id="result-summary" class="result-summary"></div>
+          <ul id="result-list" class="result-list"></ul>
+        </div>
+      </section>
+
+      <!-- 模块：文件名修改（批量重命名） -->
+      <section id="panel-rename" class="panel">
+        <header class="panel-header">
+          <h1>文件名修改</h1>
+          <p class="hint">选择文件/文件夹，添加重命名规则（查找 → 替换），批量修改文件名。</p>
+        </header>
+
+        <div class="card">
+          <h2>① 选择文件 <span id="rename-file-count" class="count">0</span></h2>
+          <div class="btn-group">
+            <button id="rename-pick-files" class="btn primary">📂 选择文件</button>
+            <button id="rename-pick-folder" class="btn primary">📁 选择文件夹</button>
+            <button id="rename-clear-files" class="btn ghost">清空</button>
+          </div>
+          <ul id="rename-file-list" class="file-list"></ul>
+          <p id="rename-file-empty" class="empty">尚未选择文件。</p>
+        </div>
+
+        <div class="rule-form card">
+          <h2>② 添加重命名规则</h2>
+          <div class="form-row">
+            <label>规则名称</label>
+            <input id="rename-rule-name" type="text" placeholder="例如：去掉前缀" />
+          </div>
+          <div class="form-row">
+            <label>查找内容</label>
+            <textarea id="rename-rule-find" rows="2" placeholder="文件名中要查找的原文"></textarea>
+          </div>
+          <div class="form-row">
+            <label>替换为</label>
+            <textarea id="rename-rule-replace" rows="2" placeholder="替换成的新内容（留空表示删除）"></textarea>
+          </div>
+          <button id="rename-add-rule" class="btn primary">＋ 添加规则</button>
+        </div>
+
+        <div class="card">
+          <h2>已建规则 <span id="rename-rule-count" class="count">0</span></h2>
+          <ul id="rename-rule-list" class="rule-list"></ul>
+          <p id="rename-rule-empty" class="empty">还没有规则，先在上方添加一条。</p>
+        </div>
+
+        <div class="card">
+          <h2>③ 保存方式</h2>
+          <label class="radio-row">
+            <input type="radio" name="rename-save-mode" value="inplace" checked />
+            <span>直接重命名原文件（原地改名）</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="rename-save-mode" value="copy" />
+            <span>复制到新文件夹并重命名（保留原文件）</span>
+          </label>
+          <div class="dir-row" id="rename-output-row" style="margin-top:12px;opacity:0.45">
+            <input id="rename-output-dir" type="text" readonly placeholder="选择输出文件夹" />
+            <button id="rename-pick-output" class="btn primary">浏览</button>
+          </div>
+        </div>
+
+        <div class="wizard-nav">
+          <span id="rename-msg" class="wizard-msg"></span>
+          <button class="btn primary large" id="rename-start">▶ 开始重命名</button>
+        </div>
+
+        <div id="rename-result-card" class="card hidden">
+          <h2>重命名结果</h2>
+          <div id="rename-result-summary" class="result-summary"></div>
+          <ul id="rename-result-list" class="result-list"></ul>
+        </div>
+      </section>
+
+      <!-- 模块：文件格式转换 -->
+      <section id="panel-convert" class="panel">
+        <header class="panel-header">
+          <h1>文件格式转换</h1>
+          <p class="hint">选择文件/文件夹，选源格式与目标格式，批量转换。本地转换、离线可用，支持 Office 与常见文本格式。</p>
+        </header>
+
+        <div class="card">
+          <h2>① 选择文件 <span id="conv-file-count" class="count">0</span></h2>
+          <div class="btn-group">
+            <button id="conv-pick-files" class="btn primary">📂 选择文件</button>
+            <button id="conv-pick-folder" class="btn primary">📁 选择文件夹</button>
+            <button id="conv-clear-files" class="btn ghost">清空</button>
+          </div>
+          <ul id="conv-file-list" class="file-list"></ul>
+          <p id="conv-file-empty" class="empty">尚未选择文件。</p>
+        </div>
+
+        <div class="card">
+          <h2>② 转换规则</h2>
+          <div class="conv-rule-row">
+            <div class="conv-field">
+              <label>源格式（常规格式）</label>
+              <select id="conv-src" class="auto-select"></select>
+            </div>
+            <div class="conv-arrow">→</div>
+            <div class="conv-field">
+              <label>转成为（目标格式）</label>
+              <select id="conv-dst" class="auto-select"></select>
+            </div>
+          </div>
+          <p class="conv-note">提示：源格式选「按文件自动识别」时按每个文件实际扩展名转换。PDF 既可作源（提取文字转换，纯文本），也可作目标（文本排版，不含图片/复杂格式）。</p>
+        </div>
+
+        <div class="card">
+          <h2>③ 保存方式</h2>
+          <label class="radio-row">
+            <input type="radio" name="conv-save-mode" value="inplace" checked />
+            <span>覆盖 / 原地（保存到源文件所在文件夹，新扩展名）</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="conv-save-mode" value="output" />
+            <span>另存到文件夹</span>
+          </label>
+          <div class="dir-row" id="conv-output-row" style="margin-top:12px;opacity:0.45">
+            <input id="conv-output-dir" type="text" readonly placeholder="选择输出文件夹" />
+            <button id="conv-pick-output" class="btn primary">浏览</button>
+          </div>
+          <label class="switch-row" id="conv-keep-row" style="margin-top:14px">
+            <span class="switch"><input type="checkbox" id="conv-keep-structure" checked /><span class="slider"></span></span>
+            <span class="switch-label">保持目录结构（选文件夹转换时，在输出目录复刻原来的子文件夹层级）</span>
+          </label>
+        </div>
+
+        <div class="wizard-nav">
+          <span id="conv-msg" class="wizard-msg"></span>
+          <span id="conv-engine-tip" class="wizard-tip" style="display:none;"></span>
+          <button class="btn large" id="conv-ai-start">✦ AI 助手转换</button>
+          <button class="btn primary large" id="conv-start">▶ 开始转换</button>
+        </div>
+
+        <div id="conv-result-card" class="card hidden">
+          <h2>转换结果</h2>
+          <div id="conv-result-summary" class="result-summary"></div>
+          <ul id="conv-result-list" class="result-list"></ul>
+        </div>
+      </section>
+
+      <!-- 模块：PDF 去水印 -->
+      <section id="panel-pdfwm" class="panel">
+        <header class="panel-header">
+          <h1>PDF 去水印</h1>
+          <p class="hint">选择 PDF 文件/文件夹，分析其中的文字水印，勾选要删除的水印，输出到指定文件夹。支持文字类水印；图片水印与加密 PDF 暂不支持。</p>
+        </header>
+
+        <div class="card">
+          <h2>① 选择 PDF <span id="wm-file-count" class="count">0</span></h2>
+          <div class="btn-group">
+            <button id="wm-pick-files" class="btn primary">📂 选择文件</button>
+            <button id="wm-pick-folder" class="btn primary">📁 选择文件夹</button>
+            <button id="wm-clear-files" class="btn ghost">清空</button>
+          </div>
+          <ul id="wm-file-list" class="file-list"></ul>
+          <p id="wm-file-empty" class="empty">尚未选择 PDF 文件。</p>
+        </div>
+
+        <div class="card">
+          <h2>② 分析水印 <span id="wm-cand-count" class="count">0</span></h2>
+          <div class="btn-group" style="margin-bottom:12px">
+            <button id="wm-analyze" class="btn primary">🔍 分析水印</button>
+            <button id="wm-ai-analyze" class="btn">✦ AI 分析水印</button>
+          </div>
+          <p class="hint" style="margin-bottom:10px;font-size:12.5px">在下方勾选「要删除」的水印项（未勾选的会保留）：</p>
+          <ul id="wm-cand-list" class="wm-cand-list"></ul>
+          <p id="wm-cand-empty" class="empty">先选择 PDF，再点「分析水印」。</p>
+        </div>
+
+        <div class="card">
+          <h2>③ 保存地址</h2>
+          <div class="dir-row">
+            <input id="wm-output-dir" type="text" readonly placeholder="选择去除水印后的输出文件夹（不改动原文件）" />
+            <button id="wm-pick-output" class="btn primary">浏览</button>
+          </div>
+        </div>
+
+        <div class="wizard-nav">
+          <span id="wm-msg" class="wizard-msg"></span>
+          <button class="btn primary large" id="wm-start">▶ 去除水印</button>
+        </div>
+
+        <div id="wm-result-card" class="card hidden">
+          <h2>处理结果</h2>
+          <div id="wm-result-summary" class="result-summary"></div>
+          <ul id="wm-result-list" class="result-list"></ul>
+        </div>
+      </section>
+
+      <!-- 模块二：文件自动化（按模版 + 规范自动编写文件） -->
+      <section id="panel-automation" class="panel">
+        <header class="panel-header">
+          <h1>文件自动化</h1>
+          <p class="hint">选一个模版（文件或文件夹）作参照，再选要编写的文件，设置规范后由 AI 按模版结构与规范自动编写/整理文件，保留原文件内容。</p>
+        </header>
+
+        <!-- ① 模版文件 -->
+        <div class="card">
+          <h2>① 模版文件 <span class="hint-inline">作为参照的结构与格式（不会被修改）</span></h2>
+          <div class="btn-group">
+            <button id="auto-pick-template-file" class="btn primary">📄 选择模版文件</button>
+            <button id="auto-pick-template-folder" class="btn primary">📁 选择模版文件夹</button>
+            <button id="auto-clear-template" class="btn ghost">清空</button>
+          </div>
+          <div id="auto-template-info" class="source-info hidden"></div>
+        </div>
+
+        <!-- ② 需编写文件 -->
+        <div class="card">
+          <h2>② 需编写文件 <span id="auto-file-count" class="count">0</span></h2>
+          <div class="btn-group">
+            <button id="auto-pick-files" class="btn primary">📄 选择文件</button>
+            <button id="auto-pick-folder" class="btn primary">📁 选择文件夹</button>
+            <button id="auto-clear-files" class="btn ghost">清空</button>
+          </div>
+          <ul id="auto-file-list" class="file-list"></ul>
+          <p id="auto-file-empty" class="empty">尚未选择文件。</p>
+        </div>
+
+        <!-- ③ 设置规范 -->
+        <div class="card">
+          <h2>③ 设置规范</h2>
+          <div class="form-row">
+            <label>文件夹摆放格式</label>
+            <select id="auto-layout" class="auto-select">
+              <option value="template">按模版目录结构摆放</option>
+              <option value="flat">全部平铺到输出目录</option>
+              <option value="bytype">按文件类型归类</option>
+            </select>
+          </div>
+          <label class="switch-row">
+            <span class="switch"><input type="checkbox" id="auto-categorize" checked /><span class="slider"></span></span>
+            <span class="switch-label">文件归类：自动按模版文件的目录结构归类文件</span>
+          </label>
+          <label class="switch-row">
+            <span class="switch"><input type="checkbox" id="auto-preserve" checked /><span class="slider"></span></span>
+            <span class="switch-label">保留文件自身内容与原本内容（不清空、不覆盖丢失）</span>
+          </label>
+        </div>
+
+        <!-- ④ 文件编写规范（规则，可保存/调用） -->
+        <div class="card">
+          <h2>④ 文件编写规范 <span id="auto-rule-count" class="count">0</span></h2>
+          <div class="auto-rule-form">
+            <select id="auto-rule-type" class="auto-select">
+              <option value="时间">时间</option>
+              <option value="部门">部门</option>
+              <option value="人名">人名</option>
+              <option value="文件名">文件名</option>
+              <option value="排版">排版</option>
+              <option value="自定义">自定义</option>
+            </select>
+            <input id="auto-rule-value" type="text" placeholder="规范内容，如：技术部 / 张三 / 在文件头部加上当前日期" />
+            <button id="auto-add-rule" class="btn primary">＋ 添加</button>
+          </div>
+          <ul id="auto-rule-list" class="rule-list"></ul>
+          <p id="auto-rule-empty" class="empty">还没有编写规范。可逐条添加；也可把当前规范保存为预设，后续直接调用。</p>
+          <div class="auto-preset-row">
+            <input id="auto-preset-name" type="text" placeholder="预设名称（如：公司报告规范）" />
+            <button id="auto-save-preset" class="btn">保存为预设</button>
+            <select id="auto-preset-list" class="auto-select"></select>
+            <button id="auto-load-preset" class="btn ghost">调用</button>
+            <button id="auto-del-preset" class="btn ghost">删除</button>
+          </div>
+        </div>
+
+        <!-- ⑤ 保存方式 -->
+        <div class="card">
+          <h2>⑤ 保存方式</h2>
+          <label class="radio-row">
+            <input type="radio" name="auto-save-mode" value="output" checked />
+            <span>输出到指定目录（不改动原文件）</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="auto-save-mode" value="overwrite" />
+            <span>覆盖原文件（直接改写，无法撤销）</span>
+          </label>
+          <div class="dir-row" id="auto-output-row" style="margin-top:12px">
+            <input id="auto-output-dir" type="text" readonly placeholder="尚未选择输出文件夹" />
+            <button id="auto-pick-output" class="btn primary">浏览</button>
+          </div>
+        </div>
+
+        <!-- 执行 -->
+        <div class="wizard-nav">
+          <span id="auto-msg" class="wizard-msg"></span>
+          <button class="btn primary large" id="auto-start">▶ 开始编写（AI）</button>
+          <button class="btn large has-tip" id="auto-convert" data-tip="按关键字匹配需编写文件到模版对应位置，模版文件不复制，多余的跳过" title="按关键字匹配需编写文件到模版对应位置，模版文件不复制，多余的跳过">⇄ 转换</button>
+          <button class="btn large has-tip" id="auto-ai-convert" data-tip="先按关键字匹配归类需编写文件，再由 AI 核对文件摆放是否正确" title="先按关键字匹配归类需编写文件，再由 AI 核对文件摆放是否正确">🤖 AI 协助转换</button>
+        </div>
+        <p class="hint" style="margin-top:8px;font-size:12px;">💡 点「转换」——按关键字把需编写文件匹配到模版对应位置并复制到输出目录，模版文件不复制，多余的（模版没有的）不同步。点「AI 协助转换」则在此基础上由 AI 再核对一遍文件摆放是否正确。</p>
+
+        <!-- 转换结果 -->
+        <div id="auto-result-card" class="card hidden">
+          <h2>转换结果</h2>
+          <div id="auto-result-summary" class="result-summary"></div>
+          <ul id="auto-result-list" class="result-list"></ul>
+        </div>
+      </section>
+
+      <!-- 模块：PPT 写手（入口页 + 新编写/修改 两个子面板） -->
+      <section id="panel-ppt" class="panel">
+        <!-- ========== 入口页：两个大选项框 ========== -->
+        <div id="ppt-entry">
+          <header class="panel-header">
+            <h1>PPT 写手</h1>
+            <p class="hint">选择要进行的操作：从零编写一份新 PPT，或在现有 PPT 上修改内容。</p>
+          </header>
+          <div class="ppt-entry-cards">
+            <div class="ppt-entry-card" id="ppt-entry-new">
+              <div class="ppt-entry-icon">📽️</div>
+              <div class="ppt-entry-title">新编写 PPT</div>
+              <div class="ppt-entry-desc">选择模版，AI 按模版风格从零编写一份新 PPT</div>
+            </div>
+            <div class="ppt-entry-card" id="ppt-entry-edit">
+              <div class="ppt-entry-icon">✏️</div>
+              <div class="ppt-entry-title">修改 PPT</div>
+              <div class="ppt-entry-desc">在现有 PPT 上修改内容、替换页面、调整排版、补全缺失</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 新编写 PPT 子面板 ========== -->
+        <div id="ppt-new-panel" class="hidden">
+          <header class="panel-header">
+            <button class="btn-back" id="ppt-new-back">← 返回</button>
+            <h1>新编写 PPT</h1>
+            <p class="hint">上传 PPT 模版作风格参照，选择保存地址，然后跳转到 AI 助手描述你要编写的内容。</p>
+          </header>
+
+          <div class="card">
+            <h2>① 上传 PPT 模版 <span class="hint-inline">AI 按模版风格编写（不会被修改）</span></h2>
+            <div class="btn-group">
+              <button id="ppt-new-pick-template" class="btn primary">📽️ 选择模版 PPT</button>
+              <button id="ppt-new-clear-template" class="btn ghost">清空</button>
+            </div>
+            <div id="ppt-new-template-info" class="source-info hidden"></div>
+          </div>
+
+          <div class="card">
+            <h2>② PPT 保存地址</h2>
+            <div class="dir-row">
+              <input id="ppt-new-output-dir" type="text" readonly placeholder="尚未选择保存文件夹" />
+              <button id="ppt-new-pick-output" class="btn primary">浏览</button>
+            </div>
+          </div>
+
+          <div class="wizard-nav">
+            <span id="ppt-new-msg" class="wizard-msg"></span>
+            <button class="btn primary large has-tip" id="ppt-new-start" data-tip="跳转到 AI 助手，描述你要编写的 PPT 内容，AI 按模版风格开始编写" title="跳转到 AI 助手，描述你要编写的 PPT 内容，AI 按模版风格开始编写">✦ 开始编写</button>
+          </div>
+          <p class="hint" style="margin-top:8px;font-size:12px;">💡 点击「开始编写」后跳转到 AI 助手，在聊天框里描述你要编写的 PPT 内容（主题、页数、风格、包含哪些章节等），AI 会按模版风格从零编写并保存到指定目录。</p>
+        </div>
+
+        <!-- ========== 修改 PPT 子面板（现有功能） ========== -->
+        <div id="ppt-edit-panel" class="hidden">
+          <header class="panel-header">
+            <button class="btn-back" id="ppt-edit-back">← 返回</button>
+            <h1>修改 PPT</h1>
+            <p class="hint">上传模版作参照，选需修改的 PPT，设置编写规范后由 AI 依据模版排版与文字、补全缺失内容与页面；也可手动保存。</p>
+          </header>
+
+          <!-- ① 模版文件 -->
+          <div class="card">
+            <h2>① 模版文件 <span class="hint-inline">作为排版与内容参照（不会被修改）</span></h2>
+            <div class="btn-group">
+              <button id="ppt-pick-template" class="btn primary">📽️ 选择模版 PPT</button>
+              <button id="ppt-clear-template" class="btn ghost">清空</button>
+            </div>
+            <div id="ppt-template-info" class="source-info hidden"></div>
+          </div>
+
+          <!-- ② 需编写文件 -->
+          <div class="card">
+            <h2>② 需编写文件 <span id="ppt-file-count" class="count">0</span></h2>
+            <div class="btn-group">
+              <button id="ppt-pick-files" class="btn primary">📄 选择 PPT 文件</button>
+              <button id="ppt-clear-files" class="btn ghost">清空</button>
+            </div>
+            <ul id="ppt-file-list" class="file-list"></ul>
+            <p id="ppt-file-empty" class="empty">尚未选择需编写的 PPT 文件。</p>
+          </div>
+
+          <!-- ③ 保存方式 -->
+          <div class="card">
+            <h2>③ 保存方式</h2>
+            <label class="radio-row">
+              <input type="radio" name="ppt-save-mode" value="output" checked />
+              <span>输出到指定目录（不改动原文件）</span>
+            </label>
+            <label class="radio-row">
+              <input type="radio" name="ppt-save-mode" value="overwrite" />
+              <span>覆盖原文件（直接改写，无法撤销）</span>
+            </label>
+            <div class="dir-row" id="ppt-output-row" style="margin-top:12px">
+              <input id="ppt-output-dir" type="text" readonly placeholder="尚未选择输出文件夹" />
+              <button id="ppt-pick-output" class="btn primary">浏览</button>
+            </div>
+          </div>
+
+          <!-- ④ 文件编写规范 -->
+          <div class="card">
+            <h2>④ 文件编写规范 <span id="ppt-rule-count" class="count">0</span></h2>
+            <div class="auto-rule-form">
+              <select id="ppt-rule-type" class="auto-select">
+                <option value="自定义">自定义</option>
+                <option value="logo">logo</option>
+                <option value="替换页面">替换页面</option>
+                <option value="公司名">公司名</option>
+                <option value="排版">排版</option>
+                <option value="配色">配色</option>
+                <option value="字体">字体</option>
+                <option value="页眉页脚">页眉页脚</option>
+              </select>
+              <input id="ppt-rule-value" type="text" placeholder="规范内容，如：公司名改为「某某科技」/ 第3页替换为模版第5页版式 / 每页右下角加 logo" />
+              <button id="ppt-add-rule" class="btn primary">＋ 添加</button>
+            </div>
+            <ul id="ppt-rule-list" class="rule-list"></ul>
+            <p id="ppt-rule-empty" class="empty">还没有编写规范。可逐条添加（自定义 / logo / 替换页面 / 公司名等）。</p>
+          </div>
+
+          <!-- ⑤ 依据模版 -->
+          <div class="card">
+            <h2>⑤ 需编写文件依据模版文件</h2>
+            <label class="switch-row">
+              <span class="switch"><input type="checkbox" id="ppt-use-layout" checked /><span class="slider"></span></span>
+              <span class="switch-label">添加模版文件的主要排版和文字（版式、字体、配色、占位文字风格对齐模版）</span>
+            </label>
+            <label class="switch-row">
+              <span class="switch"><input type="checkbox" id="ppt-fill-missing" checked /><span class="slider"></span></span>
+              <span class="switch-label">缺失内容和页面依据模版文件补全（模版有而需编写文件缺失的页面/内容，按模版补齐）</span>
+            </label>
+          </div>
+
+          <!-- 执行 -->
+          <div class="wizard-nav">
+            <span id="ppt-msg" class="wizard-msg"></span>
+            <button class="btn primary large has-tip" id="ppt-ai-save" data-tip="由 AI 依据模版与规范编写 PPT：会先在聊天界面详细询问修改内容、方向、风格，确认后执行并保存" title="由 AI 依据模版与规范编写 PPT：会先在聊天界面详细询问修改内容、方向、风格，确认后执行并保存">✦ AI 助手编辑保存</button>
+            <button class="btn large has-tip" id="ppt-manual-save" data-tip="不经过 AI：按保存方式把需编写文件原样保存（字节级复制，不改动内容）" title="不经过 AI：按保存方式把需编写文件原样保存（字节级复制，不改动内容）">💾 手动保存</button>
+          </div>
+          <p class="hint" style="margin-top:8px;font-size:12px;">💡 「AI 助手编辑保存」会跳转到 AI 助手，AI 先详细询问你想修改的内容、方向、风格，确认后再依据模版与规范编写并保存 PPT。「手动保存」不经过 AI，仅按保存方式把文件原样复制/覆盖。</p>
+
+          <!-- 手动保存结果 -->
+          <div id="ppt-result-card" class="card hidden">
+            <h2>保存结果</h2>
+            <div id="ppt-result-summary" class="result-summary"></div>
+            <ul id="ppt-result-list" class="result-list"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 模块三：AI 助手（智能体对话） -->
+      <section id="panel-ai" class="panel active">
+        <header class="panel-header">
+          <h1>AI 助手</h1>
+          <p class="hint">用自然语言指挥智能体处理文件：替换内容、编写文件、修改文件、完善文件、排版文件。涉及写文件、打开文件、打开网页等操作时，会先向你请求授权，授权后才执行。</p>
+        </header>
+
+        <div class="chat-card">
+          <div id="todo-panel" class="todo-panel hidden">
+            <div class="todo-title">任务清单</div>
+            <ul id="todo-list"></ul>
+          </div>
+          <div id="chat-messages" class="chat-messages">
+            <div class="chat-msg assistant">
+              <div class="chat-bubble">你好，我是内嵌智能体。可以对我说：<br><br>
+                ·「扫描一下 ~/Documents/报告 里的 docx 文件」<br>
+                ·「把这批文件里的『XX公司』替换成『YY公司』」<br>
+                ·「帮我写一个 README.md 放在 xxx 目录」<br>
+                ·「把这个文件的内容整理排版一下」<br><br>
+                使用前请先在「AI 设置」里配置好模型。</div>
+            </div>
+          </div>
+
+          <div id="confirm-bar" class="confirm-bar hidden">
+            <div class="confirm-head">
+              <span id="confirm-icon" class="confirm-icon">🔒</span>
+              <div class="confirm-body">
+                <div id="confirm-title" class="confirm-title">需要授权</div>
+                <div id="confirm-text" class="confirm-text"></div>
+              </div>
+            </div>
+            <label class="confirm-remember" title="勾选后，本次会话内同类型操作自动授权，不再弹窗">
+              <input type="checkbox" id="confirm-remember" />
+              <span>本次会话对该类操作不再询问</span>
+            </label>
+            <div class="confirm-btns">
+              <button id="btn-confirm-no" class="btn small ghost">拒绝</button>
+              <button id="btn-confirm-yes" class="btn small primary">授权并继续</button>
+            </div>
+          </div>
+
+          <!-- 技能安装授权 -->
+          <div id="install-skill-bar" class="confirm-bar hidden">
+            <div class="confirm-head">
+              <span class="confirm-icon">📦</span>
+              <div class="confirm-body">
+                <div class="confirm-title">安装技能</div>
+                <div id="install-skill-text" class="confirm-text"></div>
+              </div>
+            </div>
+            <div class="confirm-btns">
+              <button id="btn-install-skill-no" class="btn small ghost">拒绝</button>
+              <button id="btn-install-skill-yes" class="btn small primary">安装并继续</button>
+            </div>
+          </div>
+
+          <div class="composer">
+            <div class="composer-box">
+              <button id="btn-attach" class="composer-icon has-tip" data-tip="引用对话文件" title="引用对话文件">＋</button>
+              <textarea id="chat-input" rows="1" placeholder="今天帮你做些什么？@引用对话文件，/调用技能与指令"></textarea>
+              <button id="btn-voice" class="composer-icon has-tip" data-tip="语音输入（点一下开始说话）" title="语音输入"><img class="icon-img" src="assets/icon-mic.png" alt="语音输入" /></button>
+              <button id="btn-send" class="composer-send has-tip" data-tip="发送（Enter）" title="发送"><img id="send-icon" class="icon-img" src="assets/icon-send.png" alt="发送" /></button>
+            </div>
+            <div class="composer-bar">
+              <div class="perm" id="perm">
+                <button id="perm-trigger" class="perm-trigger has-tip" data-tip="权限设置" title="权限设置">
+                  <span class="perm-check">✓</span>
+                  <span id="perm-label">默认权限</span>
+                  <span class="perm-caret">▾</span>
+                </button>
+                <div id="perm-menu" class="perm-menu hidden">
+                  <div class="perm-item active" data-mode="ask">
+                    <span class="perm-dot"></span>
+                    <div class="perm-text">
+                      <div class="perm-name">默认权限</div>
+                      <div class="perm-desc">敏感操作前征求你的同意（推荐）</div>
+                    </div>
+                    <span class="perm-mark">✓</span>
+                  </div>
+                  <div class="perm-item" data-mode="trust">
+                    <span class="perm-dot"></span>
+                    <div class="perm-text">
+                      <div class="perm-name">信任此会话</div>
+                      <div class="perm-desc">本次会话自动放行所有敏感操作</div>
+                    </div>
+                    <span class="perm-mark">✓</span>
+                  </div>
+                  <div class="perm-item" data-mode="deny">
+                    <span class="perm-dot"></span>
+                    <div class="perm-text">
+                      <div class="perm-name">只读模式</div>
+                      <div class="perm-desc">拒绝所有写入、打开等敏感操作</div>
+                    </div>
+                    <span class="perm-mark">✓</span>
+                  </div>
+                </div>
+              </div>
+              <div class="model-wrap">
+                <span id="model-info" class="model-info has-tip" data-tip="切换模型" title="切换模型">
+                  <img class="model-ico-img" src="assets/ai-agent.png" alt="" /><span id="model-name">未配置模型</span><span class="model-arrow">▾</span>
+                </span>
+                <span id="web-badge" class="web-badge hidden has-tip" data-tip="联网已开启：AI 可搜索互联网和读取网页" title="联网已开启">🌐</span>
+                <div id="model-menu" class="model-menu hidden">
+                  <div class="model-menu-title">切换模型</div>
+                  <div id="model-menu-list"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="chat-footer">
+            <span id="chat-status"></span>
+            <span id="chat-usage"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 模块三：AI 设置 -->
+      <section id="panel-ai-settings" class="panel">
+        <header class="panel-header">
+          <h1>AI 设置</h1>
+          <p class="hint">添加 AI 配置（API 地址、Key），从服务商拉取可用模型，保存后供 AI 助手使用。配置保存在本机。</p>
+        </header>
+
+        <div class="card">
+          <h2>外观</h2>
+          <p class="hint" style="margin: 4px 0 12px">切换界面主题（深色在长时间使用和夜间更护眼）。选择会立即生效并自动保存。</p>
+          <div class="theme-segment" id="theme-segment" role="tablist" aria-label="外观主题">
+            <button class="theme-opt active" data-theme="light" role="tab" aria-selected="true">
+              <span class="theme-icon">☀️</span><span>浅色</span>
+            </button>
+            <button class="theme-opt" data-theme="dark" role="tab" aria-selected="false">
+              <span class="theme-icon">🌙</span><span>深色</span>
+            </button>
+            <span class="theme-thumb" aria-hidden="true"></span>
+          </div>
+        </div>
+
+        <!-- AI 助手联网开关 -->
+        <div class="card">
+          <div class="card-title-row">
+            <h2>AI 助手联网</h2>
+            <label class="switch" id="web-access-switch-wrap">
+              <input type="checkbox" id="web-access-toggle" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <p class="hint" style="margin: 4px 0 0">开启后，AI 助手可以使用「联网搜索」和「读取网页」工具，帮你查最新信息、技术文档、新闻等。关闭时 AI 助手只能操作本机文件。设置自动保存。</p>
+        </div>
+
+        <!-- 软件更新 -->
+        <div class="card" id="update-card">
+          <div class="card-title-row">
+            <h2>软件更新</h2>
+            <span id="update-version" class="tag-chip">v0.0.0</span>
+          </div>
+          <p class="hint" style="margin: 4px 0 12px">自动从 GitHub（ddxmu/AI-Copilot）检查新版本。开启应用时静默检查，也可手动检查并一键安装。</p>
+          <div class="update-row">
+            <button id="btn-check-update" class="btn">检查更新</button>
+            <button id="btn-install-update" class="btn primary hidden">下载并安装</button>
+          </div>
+          <div id="update-status" class="update-status"></div>
+          <div id="update-progress-wrap" class="hidden">
+            <div class="progress-bar"><div id="update-progress-bar" class="progress-fill"></div></div>
+            <div id="update-progress-text" class="hint"></div>
+          </div>
+          <div id="update-notes" class="update-notes hidden"></div>
+        </div>
+
+        <div class="card">
+          <h2>AI 配置 <span id="profile-count" class="count">0</span></h2>
+          <div class="form-row" style="margin-bottom:14px">
+            <label>当前使用</label>
+            <select id="active-profile"></select>
+          </div>
+          <ul id="profile-list" class="profile-list"></ul>
+          <p id="profile-empty" class="empty">还没有 AI 配置，点击下方「新增配置」开始。</p>
+          <button id="btn-new-profile" class="btn primary">＋ 新增配置</button>
+        </div>
+
+        <div id="profile-editor" class="card hidden">
+          <div class="card-title-row">
+            <h2 id="editor-title">新增配置</h2>
+            <span class="hint">配置模型地址、API Key 后可拉取模型并选择</span>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-cell">
+              <label>模型提供商</label>
+              <select id="p-provider"></select>
+            </div>
+            <div class="form-cell">
+              <label>模型地址</label>
+              <input id="p-baseurl" type="text" placeholder="https://api.deepseek.com/v1" />
+            </div>
+            <div class="form-cell">
+              <label>API Key</label>
+              <input id="p-apikey" type="password" placeholder="sk-..." />
+              <div id="key-hint" class="field-hint hidden">已保存，留空则保留原 Key</div>
+            </div>
+            <div class="form-cell">
+              <label>模型名称</label>
+              <select id="p-model">
+                <option value="">（先拉取模型）</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="model-price" class="model-price"></div>
+          <div id="fetch-status" class="fetch-status"></div>
+
+          <div class="btn-group" style="margin-top:18px">
+            <button id="btn-fetch-models" class="btn">拉取模型</button>
+            <button id="btn-test-conn" class="btn ghost">测试连接</button>
+            <button id="btn-save-profile" class="btn primary">保存模型配置</button>
+            <button id="btn-cancel-edit" class="btn ghost">取消</button>
+          </div>
+        </div>
+
+        <!-- 智能体技能 -->
+        <div class="card">
+          <h2>智能体技能 <span id="skill-count" class="count">0</span></h2>
+          <p class="hint" style="margin-bottom:14px">技能是智能体的专项能力包。安装后 AI 助手会自动调用对应技能（格式转换 / 看图 / 终端命令等）。</p>
+
+          <!-- 已安装技能 -->
+          <div class="skill-section-title">已安装技能</div>
+          <ul id="skill-list" class="skill-list"></ul>
+
+          <!-- 推荐技能（一键安装） -->
+          <div class="skill-section-title" style="margin-top:18px">推荐技能 <span class="count" style="font-size:12px;color:var(--text-3)">点击安装即用</span></div>
+          <ul id="skill-recommended-list" class="skill-list"></ul>
+
+          <!-- 在线查找 -->
+          <div class="skill-section-title" style="margin-top:18px">在线查找技能（GitHub）</div>
+          <div class="skill-search-row">
+            <input id="skill-search-input" type="text" placeholder="输入技能类别，如：pdf / image / excel / 格式转换" />
+            <button id="skill-search-btn" class="btn primary">🔍 搜索 GitHub</button>
+          </div>
+          <div id="skill-search-status" class="field-hint"></div>
+          <ul id="skill-search-list" class="skill-list"></ul>
+
+          <!-- 本地源码包技能 -->
+          <div class="skill-section-title" style="margin-top:18px">本地源码包技能（Claude Code 源码）</div>
+          <div class="skill-search-row">
+            <input id="skill-local-dir" type="text" readonly placeholder="选择源码包目录（含 src/skills/bundled）" />
+            <button id="skill-pick-dir" class="btn">选择目录</button>
+            <button id="skill-scan-local" class="btn primary">扫描技能</button>
+          </div>
+          <ul id="skill-local-list" class="skill-list"></ul>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- 开始处理前的重要提示弹窗 -->
+  <div id="notice-modal" class="modal hidden">
+    <div class="modal-box">
+      <h2>请认真阅读以下重要提示</h2>
+      <ol class="notice-list">
+        <li>您有义务对处理前后的数据进行备份、核对与验证，我们不承担任何相关责任或法律问题。</li>
+        <li>使用软件即代表您已阅读并同意《用户协议》和《隐私政策》。</li>
+        <li>若选择了「覆盖原文件」，替换将直接改写原文件，无法撤销。</li>
+        <li class="danger">为了防止误操作带来的数据损坏或丢失，请务必仔细检查与确认。</li>
+      </ol>
+      <div class="modal-btns">
+        <button id="btn-notice-cancel" class="btn">我再想想</button>
+        <button id="btn-notice-go" class="btn warn">已知晓，开始处理</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

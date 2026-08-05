@@ -1,0 +1,74 @@
+{
+  "name": "ai-copilot",
+  "productName": "AI Copilot",
+  "version": "0.6.2",
+  "description": "选择文件或文件夹，按规则批量替换文件内容",
+  "main": "main.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac dmg",
+    "dist:arm": "electron-builder --mac dmg --arm64",
+    "dist:intel": "electron-builder --mac dmg --x64"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.app.aifilereplacer",
+    "productName": "AI Copilot",
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "title": "AI Copilot",
+      "icon": "build/icon.png",
+      "background": "build/dmg-background.png",
+      "iconSize": 100,
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 130,
+          "y": 190,
+          "type": "file"
+        },
+        {
+          "x": 410,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "ai-config.js",
+      "agent.js",
+      "filetypes.js",
+      "office-replace.js",
+      "pdf-watermark.js",
+      "updater.js",
+      "CHANGELOG.md",
+      "renderer/**/*",
+      "package.json"
+    ]
+  }
+}
