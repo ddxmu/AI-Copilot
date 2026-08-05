@@ -8,21 +8,6 @@
 </head>
 <body>
   <div class="app">
-    <!-- 右下角新版本提示（发现新版本时出现） -->
-    <div id="update-toast" class="update-toast hidden">
-      <div class="update-toast-main">
-        <span class="update-toast-dot"></span>
-        <div class="update-toast-text">
-          <div class="update-toast-title">发现新版本</div>
-          <div id="update-toast-sub" class="update-toast-sub">v0.0.0 可用</div>
-        </div>
-      </div>
-      <div class="update-toast-actions">
-        <button id="update-toast-now" class="update-toast-btn primary">升级</button>
-        <button id="update-toast-later" class="update-toast-btn">关闭</button>
-      </div>
-    </div>
-
     <!-- 左侧功能模块导航（浅色风格） -->
     <aside class="sidebar">
       <div class="app-title"><img class="app-logo" src="assets/logo.jpg" alt="AI Copilot" />AI Copilot</div>
@@ -70,7 +55,19 @@
 
       <div class="sidebar-footer" id="sidebar-footer">
         <span id="footer-version">AI Copilot · v…</span>
-        <button id="footer-update-dot" class="footer-update-dot hidden" title="发现新版本，点击升级" aria-label="升级"></button>
+        <!-- 侧边栏更新信息框（发现新版本时出现，宽度贴合功能栏，不挤压导航） -->
+        <div id="sidebar-update-box" class="sidebar-update-box hidden">
+          <button id="sidebar-update-close" class="sidebar-update-close" title="关闭提示" aria-label="关闭">✕</button>
+          <div class="sidebar-update-head">
+            <span class="sidebar-update-ico">⬆</span>
+            <div class="sidebar-update-titles">
+              <div class="sidebar-update-title">发现新版本</div>
+              <div id="sidebar-update-sub" class="sidebar-update-sub">v0.0.0 可用</div>
+            </div>
+          </div>
+          <div id="sidebar-update-note" class="sidebar-update-note"></div>
+          <button id="sidebar-update-now" class="sidebar-update-btn">立即升级</button>
+        </div>
       </div>
     </aside>
 

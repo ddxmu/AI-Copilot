@@ -692,12 +692,26 @@ function formatBytes(n) {
   return n + ' B';
 }
 
-function showUpdateToast(res) {
-  const toast = document.getElementById('update-toast');
-  const sub = document.getElementById('update-toast-sub');
-  if (!toast || !sub) return;
-  sub.textContent = `v${res.version} 可用（当前 v${res.currentVersion}）`;
-  toast.classList.remove('hidden');
+function showSidebarUpdateBox(res) {
+  const box = document.getElementById('sidebar-update-box');
+  const sub = document.getElementById('sidebar-update-sub');
+  const note = document.getElementById('sidebar-update-note');
+  if (!box) return;
+  if (sub) sub.textContent = `v${res.version} 可用（当前 v${res.currentVersion}）`;
+  if (note) {
+    const isDelta = res.deltaUrl && res.deltaFromVersion === res.currentVersion;
+    note.textContent = isDelta
+      ? '支持增量升级，点击「立即升级」一键更新。'
+      : '点击「立即升级」下载并安装（完整包约 340MB）。';
+  }
+  const btn = document.getElementById('sidebar-update-now');
+  if (btn) { btn.disabled = false; btn.textContent = '立即升级'; }
+  box.classList.remove('hidden');
+}
+
+function hideSidebarUpdateBox() {
+  const box = document.getElementById('sidebar-update-box');
+  if (box) box.classList.add('hidden');
 }
 
 function revealInstall(res) {
@@ -713,11 +727,6 @@ function revealInstall(res) {
     status.className = 'update-status has-update';
   }
   if (installBtn) installBtn.classList.remove('hidden');
-  const fdot = document.getElementById('footer-update-dot');
-  if (fdot) {
-    fdot.classList.remove('hidden');
-    fdot.title = `发现新版本 v${res.version}（当前 v${res.currentVersion}），点击升级`;
-  }
   if (notes) {
     notes.innerHTML = '<strong>更新内容：</strong><br>' + escapeHtml(res.notes || '（未提供说明）');
     notes.classList.remove('hidden');
@@ -737,7 +746,7 @@ async function initUpdater() {
   // 事件订阅（来自主进程的更新进度/结果）
   window.api.onUpdateAvailable((res) => {
     if (pendingUpdate && pendingUpdate.version === res.version) return; // 同版本已提示过，避免重复打扰
-    showUpdateToast(res); revealInstall(res);
+    showSidebarUpdateBox(res); revealInstall(res);
   });
   window.api.onUpdateProgress((info) => {
     const wrap = document.getElementById('update-progress-wrap');
@@ -761,9 +770,9 @@ async function initUpdater() {
     const wrap = document.getElementById('update-progress-wrap');
     if (wrap) wrap.classList.add('hidden');
     const installBtn = document.getElementById('btn-install-update');
-    const fdot = document.getElementById('footer-update-dot');
     if (installBtn) installBtn.disabled = false;
-    if (fdot) fdot.classList.remove('loading');
+    const sbtn = document.getElementById('sidebar-update-now');
+    if (sbtn) { sbtn.disabled = false; sbtn.textContent = '立即升级'; }
     const manualWrap = document.getElementById('update-manual-wrap');
     const manualLink = document.getElementById('update-manual-link');
     if (manualWrap) manualWrap.classList.remove('hidden');
@@ -786,13 +795,12 @@ async function initUpdater() {
       return;
     }
     if (res.updateAvailable) {
-      showUpdateToast(res);
+      showSidebarUpdateBox(res);
       revealInstall(res);
     } else if (status) {
       status.textContent = '已是最新版本（v' + res.currentVersion + '）';
       status.className = 'update-status ok';
-      const fdot = document.getElementById('footer-update-dot');
-      if (fdot) { fdot.classList.add('hidden'); fdot.title = '已是最新版本'; }
+      hideSidebarUpdateBox();
     }
   });
 
@@ -802,7 +810,6 @@ async function initUpdater() {
     const status = document.getElementById('update-status');
     const wrap = document.getElementById('update-progress-wrap');
     const bar = document.getElementById('update-progress-bar');
-    const toast = document.getElementById('update-toast');
     // 判断走增量还是完整包
     const curVer = await window.api.getAppVersion().catch(() => '');
     const isDelta = pendingUpdate.deltaUrl && pendingUpdate.deltaFromVersion === curVer;
@@ -815,30 +822,22 @@ async function initUpdater() {
     const manualWrap = document.getElementById('update-manual-wrap');
     if (manualWrap) manualWrap.classList.add('hidden');
     const installBtn = document.getElementById('btn-install-update');
-    const fdot = document.getElementById('footer-update-dot');
     if (installBtn) installBtn.disabled = true;
-    if (fdot) fdot.classList.add('loading');
-    if (toast) toast.classList.add('hidden');
+    const sbtn = document.getElementById('sidebar-update-now');
+    if (sbtn) { sbtn.disabled = true; sbtn.textContent = '升级中…'; }
     await window.api.downloadUpdate(pendingUpdate);
     if (status) status.textContent = '正在安装并重启…';
   }
 
+  // 侧边栏更新信息框：立即升级 / 关闭
+  const sidebarUpdateNow = document.getElementById('sidebar-update-now');
+  if (sidebarUpdateNow) sidebarUpdateNow.addEventListener('click', startInstall);
+  const sidebarUpdateClose = document.getElementById('sidebar-update-close');
+  if (sidebarUpdateClose) sidebarUpdateClose.addEventListener('click', hideSidebarUpdateBox);
+
   // 设置卡片「下载并安装」
   const installBtn = document.getElementById('btn-install-update');
   if (installBtn) installBtn.addEventListener('click', startInstall);
-
-  // 左下角版本号旁的黄色升级提示点
-  const footerUpdateDot = document.getElementById('footer-update-dot');
-  if (footerUpdateDot) footerUpdateDot.addEventListener('click', startInstall);
-
-  // 右下角提示框按钮
-  const btnUpgrade = document.getElementById('update-toast-now');
-  if (btnUpgrade) btnUpgrade.addEventListener('click', startInstall);
-  const btnClose = document.getElementById('update-toast-later');
-  if (btnClose) btnClose.addEventListener('click', () => {
-    const toast = document.getElementById('update-toast');
-    if (toast) toast.classList.add('hidden');
-  });
 }
 
 /* ================= 外观主题（浅色 / 深色） ================= */
