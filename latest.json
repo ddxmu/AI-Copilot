@@ -1,7 +1,7 @@
 {
   "version": "0.6.2",
-  "notes": "新增自动更新：App 从 GitHub 拉取 latest.json 检查新版本，AI 设置「软件更新」卡片可一键下载并安装；仓库托管完整源码、构建脚本与文档。",
-  "pubDate": "2026-08-05T15:20:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.2/AI%20Copilot-0.6.2-arm64.dmg",
-  "sha256": ""
+  "notes": "- **新增自动更新**：App 内置更新器，从 GitHub（ddxmu/AI-Copilot）拉取 `latest.json` 检查新版本。\n- 启动静默检查（仅在有新版本时提示）；AI 设置 → 软件更新卡片支持「检查更新」与「下载并安装」一键安装。\n- 更新流程：下载 Release 里的 DMG → 挂载 → 拷贝新版本 → 退出后自动替换并重启（适配未签名 DMG 分发）。\n- 仓库托管完整源码 + 构建脚本 + 文档；DMG 安装包发到 GitHub Releases。",
+  "pubDate": "2026-08-05T15:31:45+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.2/AI.Copilot-0.6.2-arm64.dmg",
+  "sha256": "73101b5e09a27314ffde191fb202555266ff2c10dc781b1ba8fe97e7390452f0"
 }
