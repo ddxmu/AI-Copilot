@@ -58,7 +58,7 @@ def main():
     version = pkg['version']
     tag = 'v' + version
     dmg_name = f'AI Copilot-{version}-arm64.dmg'
-    dmg_path = os.path.expanduser(f'~/Downloads/{dmg_name}')
+    dmg_path = os.path.join('/tmp/AIReplace/release', dmg_name)
     if not os.path.exists(dmg_path):
         print('DMG 不存在:', dmg_path); sys.exit(1)
 

@@ -2847,31 +2847,23 @@ body {
   50% { box-shadow: 0 0 0 4px rgba(47,111,237,0.4); }
 }
 
-/* ===== 左下角版本号旁的「升级」按钮 + 黄点 ===== */
-.footer-update-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--primary, #2f6fed);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 3px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background .15s ease, transform .1s ease;
-}
-.footer-update-btn:hover { background: #2257d6; }
-.footer-update-btn:active { transform: scale(.96); }
-.footer-update-btn:disabled { opacity: .7; cursor: default; }
+/* ===== 左下角版本号旁的黄色升级提示点 ===== */
 .footer-update-dot {
+  display: inline-block;
   width: 8px; height: 8px; border-radius: 50%;
   background: #ffd400;
   box-shadow: 0 0 0 0 rgba(255,212,0,.6);
   animation: footerDotPulse 1.6s infinite;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform .1s ease;
 }
-.footer-update-btn.loading .footer-update-dot { animation: none; }
+.footer-update-dot.hidden { display: none; }
+.footer-update-dot:hover { transform: scale(1.25); }
+.footer-update-dot:active { transform: scale(.95); }
+.footer-update-dot.loading { animation: none; }
 @keyframes footerDotPulse {
   0% { box-shadow: 0 0 0 0 rgba(255,212,0,.6); }
   70% { box-shadow: 0 0 0 6px rgba(255,212,0,0); }
@@ -2896,5 +2888,4 @@ body {
   color: var(--text);
 }
 :root.dark .sidebar-footer { color: var(--text-light); border-top-color: var(--border); }
-:root.dark .footer-update-btn { background: #3b7bf0; }
-:root.dark .footer-update-btn:hover { background: #5b8def; }
+:root.dark .footer-update-dot { background: #ffd400; }

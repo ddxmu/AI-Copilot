@@ -72,7 +72,7 @@ def main():
     version = pkg['version']
     tag = 'v' + version
     dmg_name = f'AI Copilot-{version}-arm64.dmg'
-    dmg_path = os.path.expanduser(f'~/Downloads/{dmg_name}')
+    dmg_path = os.path.join('/tmp/AIReplace/release', dmg_name)
 
     # 2. 打包 DMG
     print('== 打包 DMG ==')

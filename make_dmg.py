@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # 打品牌化 DMG：hdiutil UDRW -> 挂载可写卷 -> 排布文件 -> Python 写 .DS_Store -> 转 UDZO
-import os, shutil, subprocess, sys, time
+import os, shutil, subprocess, sys, time, json
 
 APP = "/tmp/AIReplace/appbuild/AI Copilot.app"
 ASSETS = "/tmp/AIReplace/dmg-assets"
-OUT = os.path.expanduser("~/Downloads/AI Copilot-0.6.2-arm64.dmg")
+PKG = json.load(open(os.path.join(APP, "Contents", "Resources", "app", "package.json"), encoding="utf-8"))
+VERSION = PKG["version"]
+OUT_DIR = "/tmp/AIReplace/release"
+OUT = os.path.join(OUT_DIR, f"AI Copilot-{VERSION}-arm64.dmg")
 VOL = "AI Copilot"
 TMP_DMG = "/tmp/AIReplace/_tmp_aicopilot.dmg"
 MOUNT = "/Volumes/" + VOL
@@ -26,6 +29,7 @@ def detach_all():
         time.sleep(1)
 
 # 0. 清理
+os.makedirs(OUT_DIR, exist_ok=True)
 detach_all()
 for p in (TMP_DMG, OUT):
     if os.path.exists(p): os.remove(p)

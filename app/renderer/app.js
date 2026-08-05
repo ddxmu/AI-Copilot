@@ -703,8 +703,11 @@ function revealInstall(res) {
   if (ver) ver.textContent = 'v' + res.version;
   if (status) { status.textContent = '有可用更新'; status.className = 'update-status has-update'; }
   if (installBtn) installBtn.classList.remove('hidden');
-  const fbtn = document.getElementById('footer-update-btn');
-  if (fbtn) fbtn.classList.remove('hidden');
+  const fdot = document.getElementById('footer-update-dot');
+  if (fdot) {
+    fdot.classList.remove('hidden');
+    fdot.title = `发现新版本 v${res.version}（当前 v${res.currentVersion}），点击升级`;
+  }
   if (notes) {
     notes.innerHTML = '<strong>更新内容：</strong><br>' + escapeHtml(res.notes || '（未提供说明）');
     notes.classList.remove('hidden');
@@ -761,8 +764,8 @@ async function initUpdater() {
     } else if (status) {
       status.textContent = '已是最新版本（v' + res.currentVersion + '）';
       status.className = 'update-status ok';
-      const fbtn = document.getElementById('footer-update-btn');
-      if (fbtn) fbtn.classList.add('hidden');
+      const fdot = document.getElementById('footer-update-dot');
+      if (fdot) { fdot.classList.add('hidden'); fdot.title = '已是最新版本'; }
     }
   });
 
@@ -777,9 +780,9 @@ async function initUpdater() {
     if (wrap) wrap.classList.remove('hidden');
     if (bar) bar.style.width = '0%';
     const installBtn = document.getElementById('btn-install-update');
-    const fbtn = document.getElementById('footer-update-btn');
+    const fdot = document.getElementById('footer-update-dot');
     if (installBtn) installBtn.disabled = true;
-    if (fbtn) { fbtn.disabled = true; fbtn.classList.add('loading'); }
+    if (fdot) fdot.classList.add('loading');
     if (banner) banner.classList.add('hidden');
     await window.api.downloadUpdate(pendingUpdate.dmgUrl);
     if (status) status.textContent = '正在安装并重启…';
@@ -789,9 +792,9 @@ async function initUpdater() {
   const installBtn = document.getElementById('btn-install-update');
   if (installBtn) installBtn.addEventListener('click', startInstall);
 
-  // 左下角版本号旁的「升级」按钮（带黄点）
-  const footerUpdateBtn = document.getElementById('footer-update-btn');
-  if (footerUpdateBtn) footerUpdateBtn.addEventListener('click', startInstall);
+  // 左下角版本号旁的黄色升级提示点
+  const footerUpdateDot = document.getElementById('footer-update-dot');
+  if (footerUpdateDot) footerUpdateDot.addEventListener('click', startInstall);
 
   // 横幅按钮
   const bv = document.getElementById('update-banner-view');
