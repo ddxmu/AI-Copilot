@@ -38,7 +38,10 @@ function compareVersions(a, b) {
 function fetchJson(url) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith('https') ? https : http;
-    const req = mod.get(url, { timeout: 20000 }, (res) => {
+    // 加缓存戳，避免 raw.githubusercontent.com CDN 缓存导致不能及时读到最新 latest.json
+    const sep = url.includes('?') ? '&' : '?';
+    const urlWithCb = `${url}${sep}_cb=${Date.now()}`;
+    const req = mod.get(urlWithCb, { timeout: 20000 }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         return fetchJson(new URL(res.headers.location, url).href).then(resolve, reject);
       }

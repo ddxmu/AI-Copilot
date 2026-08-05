@@ -1,7 +1,7 @@
 {
   "version": "0.6.5",
   "notes": "- **修复自动更新下载卡住/无进度**：重写 `updater.js` 下载逻辑。\n  - 弃用 `res.pipe()`，改用手动 `out.write(chunk)`，确保进度事件可靠触发。\n  - 进度条下方实时显示 **已下载 / 总量 (百分比) · 速度**，例如 `12.5 / 341.6 MB (4%) · 45 KB/s`。\n  - 新增 **45 秒假死检测**：超过 45 秒没收到数据自动中断并重试。\n  - 新增 **断点续传**：中断后从已下载位置继续，最多重试 2 次。\n  - 新增 **手动下载 fallback**：下载失败时显示「GitHub 下载失败？点击手动下载 DMG」链接，点击用系统浏览器打开 Release DMG。\n- 软件更新卡片文案增加「完整安装包约 340MB，网络较慢时请耐心等待或手动下载」提示。\n- 新增 `shell.openExternal` 处理，点击 `target=\"_blank\"` 的链接会跳转到系统默认浏览器。",
-  "pubDate": "2026-08-05T16:20:45+08:00",
+  "pubDate": "2026-08-05T16:28:27+08:00",
   "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.5/AI.Copilot-0.6.5-arm64.dmg",
-  "sha256": "9d9c77b436ecfa71f19416e87d3bf1d64148d7adc00ab107364dc9f2ebe8e306"
+  "sha256": "bf211570b4c98c175b4b9e30a3640e3b6bf65d960d411e595c782b4165b372e1"
 }

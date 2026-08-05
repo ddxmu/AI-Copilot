@@ -73,6 +73,8 @@ def main():
     tag = 'v' + version
     dmg_name = f'AI Copilot-{version}-arm64.dmg'
     dmg_path = os.path.join('/tmp/AIReplace/release', dmg_name)
+    # GitHub 上传后会把文件名里的空格规范成点，统一用这个名称做资产比对/上传
+    gh_asset_name = dmg_name.replace(' ', '.')
 
     # 2. 打包 DMG
     print('== 打包 DMG ==')
@@ -83,26 +85,27 @@ def main():
     if not os.path.exists(dmg_path):
         print('DMG 未生成'); sys.exit(1)
 
-    # 3. 创建 / 获取 Release
+    # 3. 创建 / 获取 Release（已存在则复用）
     print('== Release', tag, '==')
-    rel = api('POST', f'{API}/releases', token, {
-        'tag_name': tag, 'name': f'AI Copilot {version}',
-        'body': extract_notes(version), 'draft': False, 'prerelease': False,
-    })
+    try:
+        rel = api('POST', f'{API}/releases', token, {
+            'tag_name': tag, 'name': f'AI Copilot {version}',
+            'body': extract_notes(version), 'draft': False, 'prerelease': False,
+        })
+    except SystemExit:
+        # 可能已存在，尝试获取
+        rel = api('GET', f'{API}/releases/tags/{tag}', token)
     rel_id = rel.get('id')
     if not rel_id:
-        rel = api('GET', f'{API}/releases/tags/{tag}', token)
-        rel_id = rel.get('id')
-        if not rel_id:
-            print('无法获取 release id'); sys.exit(1)
+        print('无法获取 release id'); sys.exit(1)
 
     # 4. 上传 DMG（先删同名旧资产）
     for a in rel.get('assets', []):
-        if a['name'] == dmg_name:
+        if a['name'] == gh_asset_name:
             api('DELETE', f'{API}/releases/assets/{a["id"]}', token)
     with open(dmg_path, 'rb') as f:
         data = f.read()
-    name_q = urllib.parse.quote(dmg_name)
+    name_q = urllib.parse.quote(gh_asset_name)
     upload_url = f'https://uploads.github.com/repos/{REPO}/releases/{rel_id}/assets?name={name_q}'
     req = urllib.request.Request(upload_url, data=data, method='POST', headers={
         'Authorization': f'Bearer {token}', 'Content-Type': 'application/octet-stream', **UA})
