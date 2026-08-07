@@ -2905,3 +2905,96 @@ body {
   color: var(--text);
 }
 :root.dark .sidebar-footer { color: var(--text-light); border-top-color: var(--border); }
+
+/* ================= MCP 服务器 ================= */
+.mcp-list {
+  list-style: none;
+  margin-bottom: 14px;
+}
+
+.mcp-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 13px 16px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  background: #fafbfc;
+  transition: all 0.15s;
+}
+
+.mcp-list li:hover {
+  background: #fff;
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.mcp-status {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+.mcp-status.ok   { background: var(--success-bg); color: var(--success); }
+.mcp-status.err  { background: var(--danger-bg);  color: var(--danger); }
+.mcp-status.wait { background: #fff7e6; color: #b26a00; }
+.mcp-status.off  { background: #f1f2f4; color: #8a9099; }
+
+.mcp-error {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--danger);
+  word-break: break-all;
+}
+
+.mcp-tools {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  word-break: break-all;
+}
+
+#mcp-editor textarea,
+#mcp-json-editor textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  line-height: 1.6;
+  resize: vertical;
+  background: #fff;
+  color: var(--text);
+}
+#mcp-editor textarea:focus,
+#mcp-json-editor textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.1);
+}
+
+.btn.small { padding: 5px 12px; font-size: 12px; }
+
+:root.dark .mcp-list li {
+  background: var(--card-bg);
+  border-color: var(--border);
+}
+:root.dark .mcp-list li:hover {
+  background: var(--hover-bg, #232833);
+  border-color: var(--border);
+}
+:root.dark .mcp-status.off { background: #2a2f3a; color: var(--text-light); }
+:root.dark .mcp-status.wait { background: #3a2f16; color: #e0a33a; }
+:root.dark #mcp-editor textarea,
+:root.dark #mcp-json-editor textarea {
+  background: var(--card-bg);
+  color: var(--text);
+  border-color: var(--border);
+}

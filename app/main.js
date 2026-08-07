@@ -69,6 +69,8 @@ app.whenReady().then(() => {
   checkUpdatesInBackground(true);
   // 空闲定时检查更新（每 10 分钟自动查询一次 GitHub）
   setInterval(() => checkUpdatesInBackground(true), 10 * 60 * 1000);
+  // 按配置连接 MCP 服务器（后台异步）
+  initMcpServers();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -1220,6 +1222,71 @@ ipcMain.handle('ai-test-connection', async (_e, profile) => {
   } catch (err) {
     return { ok: false, error: err.message };
   }
+});
+
+/* ---------------- MCP 服务器 ---------------- */
+const mcp = require('./mcp');
+
+// 启动时按配置连接（异步，不阻塞窗口）
+function initMcpServers() {
+  mcp.connectFromConfig()
+    .then((list) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('mcp-status-changed', mcp.getAllStatus());
+      }
+      const ready = (list || []).filter((s) => s.status === 'ready').length;
+      if (list && list.length) console.log(`[MCP] 已连接 ${ready}/${list.length} 个服务器`);
+    })
+    .catch((e) => console.log('[MCP] 连接失败：' + e.message));
+}
+
+ipcMain.handle('mcp-get', () => ({
+  servers: aiConfig.getMcpServers(),
+  status: mcp.getAllStatus(),
+}));
+
+ipcMain.handle('mcp-save', async (_e, server) => {
+  try {
+    const saved = aiConfig.upsertMcpServer(server);
+    await mcp.connectFromConfig();
+    return { ok: true, server: saved, status: mcp.getAllStatus() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('mcp-delete', async (_e, id) => {
+  try {
+    aiConfig.deleteMcpServer(id);
+    await mcp.connectFromConfig();
+    return { ok: true, servers: aiConfig.getMcpServers(), status: mcp.getAllStatus() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('mcp-refresh', async () => {
+  try {
+    await mcp.connectFromConfig();
+    return { ok: true, status: mcp.getAllStatus() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// 单个服务器连通性测试（用独立进程，不影响常驻连接）
+ipcMain.handle('mcp-test', async (_e, server) => {
+  try {
+    const r = await mcp.testServer(server);
+    if (r.status === 'ready') return { ok: true, toolCount: r.toolCount, tools: r.tools };
+    return { ok: false, error: r.error || '连接失败' };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+app.on('before-quit', () => {
+  try { mcp.disconnectAll(); } catch (e) { /* ignore */ }
 });
 
 /* ---------------- AI 助手（智能体） ---------------- */

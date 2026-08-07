@@ -41,6 +41,13 @@ contextBridge.exposeInMainWorld('api', {
   aiSetWebAccess: (enabled) => ipcRenderer.invoke('ai-set-web-access', enabled),
   aiFetchModels: (profile) => ipcRenderer.invoke('ai-fetch-models', profile),
   aiTestConnection: (profile) => ipcRenderer.invoke('ai-test-connection', profile),
+  // MCP 服务器
+  mcpGet: () => ipcRenderer.invoke('mcp-get'),
+  mcpSave: (server) => ipcRenderer.invoke('mcp-save', server),
+  mcpDelete: (id) => ipcRenderer.invoke('mcp-delete', id),
+  mcpRefresh: () => ipcRenderer.invoke('mcp-refresh'),
+  mcpTest: (server) => ipcRenderer.invoke('mcp-test', server),
+  onMcpStatusChanged: (cb) => ipcRenderer.on('mcp-status-changed', (_e, s) => cb(s)),
   // AI 助手（智能体对话）
   aiChat: (history, text) => ipcRenderer.invoke('ai-chat', { history, text }),
   aiConfirmReply: (ok, remember) => ipcRenderer.invoke('ai-chat-confirm-reply', ok, remember),

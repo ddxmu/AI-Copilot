@@ -9,7 +9,7 @@ function configPath() {
   return path.join(app.getPath('userData'), 'ai-config.json');
 }
 
-const DEFAULT_STATE = { profiles: [], activeId: null, webAccess: false };
+const DEFAULT_STATE = { profiles: [], activeId: null, webAccess: false, mcpServers: [] };
 
 function loadState() {
   try {
@@ -19,9 +19,10 @@ function loadState() {
       profiles: Array.isArray(data.profiles) ? data.profiles : [],
       activeId: data.activeId ?? null,
       webAccess: data.webAccess ?? false,
+      mcpServers: Array.isArray(data.mcpServers) ? data.mcpServers : [],
     };
   } catch (e) {
-    return { ...DEFAULT_STATE };
+    return { ...DEFAULT_STATE, mcpServers: [] };
   }
 }
 
@@ -81,6 +82,73 @@ function setWebAccess(enabled) {
 
 function getWebAccess() {
   return loadState().webAccess ?? false;
+}
+
+/* ---------------- MCP 服务器配置 ---------------- */
+// 单条结构：
+// {
+//   id: 'mcp_xxx',
+//   name: 'filesystem',          // 唯一标识（用于工具名前缀），仅字母数字下划线短横
+//   enabled: true,
+//   transport: 'stdio',          // 目前支持 stdio
+//   command: 'npx',
+//   args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+//   env: { KEY: 'value' },
+//   cwd: ''                      // 可选工作目录
+// }
+
+function normalizeMcpServer(s) {
+  const name = String(s.name || '').trim().replace(/[^A-Za-z0-9_-]/g, '_');
+  let args = s.args;
+  if (typeof args === 'string') {
+    args = args.split('\n').map((x) => x.trim()).filter(Boolean);
+  }
+  if (!Array.isArray(args)) args = [];
+  let env = s.env;
+  if (typeof env === 'string') {
+    const obj = {};
+    env.split('\n').forEach((line) => {
+      const t = line.trim();
+      if (!t) return;
+      const i = t.indexOf('=');
+      if (i > 0) obj[t.slice(0, i).trim()] = t.slice(i + 1).trim();
+    });
+    env = obj;
+  }
+  if (!env || typeof env !== 'object') env = {};
+  return {
+    id: s.id || `mcp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    name: name || 'server',
+    enabled: s.enabled !== false,
+    transport: s.transport || 'stdio',
+    command: String(s.command || '').trim(),
+    args,
+    env,
+    cwd: String(s.cwd || '').trim(),
+  };
+}
+
+function getMcpServers() {
+  return loadState().mcpServers || [];
+}
+
+function upsertMcpServer(server) {
+  const state = loadState();
+  const item = normalizeMcpServer(server);
+  const list = state.mcpServers || [];
+  const idx = list.findIndex((s) => s.id === item.id);
+  if (idx >= 0) list[idx] = item;
+  else list.push(item);
+  state.mcpServers = list;
+  saveState(state);
+  return item;
+}
+
+function deleteMcpServer(id) {
+  const state = loadState();
+  state.mcpServers = (state.mcpServers || []).filter((s) => s.id !== id);
+  saveState(state);
+  return state.mcpServers;
 }
 
 /* ---------------- 模型拉取 ---------------- */
@@ -179,6 +247,9 @@ module.exports = {
   getActiveProfile,
   setWebAccess,
   getWebAccess,
+  getMcpServers,
+  upsertMcpServer,
+  deleteMcpServer,
   fetchModels,
   testConnection,
 };
