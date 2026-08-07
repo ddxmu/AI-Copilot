@@ -1,10 +1,10 @@
 {
-  "version": "0.7.6",
-  "notes": "- **修复 MCP 市场模板占位符实际从未被替换的 bug**：v0.7.2 加文件系统模板时，`interpolateMcpTemplate` 的正则写错（带多余反斜杠 `/\\\\{\\{...\\}\\}/g`，实际匹配 `\\{\\{path\\}\\}` 带反斜杠的字面量），而模板里是 `{{path}}`（无反斜杠），导致从市场添加任何带 `{{变量}}` 占位符的模板（filesystem、SQLite、PostgreSQL 等）时，占位符都不会被替换、原样写入 `args`/`env`。以前因为没保存校验，问题被掩盖；v0.7.5 的占位符校验暴露了所有之前写坏的配置。这次修复正则，市场流程可以正常替换为用户填入的真实路径/Key。",
-  "pubDate": "2026-08-07T14:08:15+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.6/AI.Copilot-0.7.6-arm64.dmg",
-  "sha256": "a7473cf2bbdbfc9f10ab64d3c0aed2a4240264b174b3a59af79cee6cc433cb95",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.6/delta-0.7.6.zip",
-  "deltaSha256": "652f59b9eb90370af674e18bebb2120edf0ffe01282848ce54e583cabf075552",
-  "deltaFromVersion": "0.7.5"
+  "version": "0.7.7",
+  "notes": "- **修复深色模式下 AI 助手回复「看不见」的 bug**：用户反馈「聊天里说好对话，点其他模块再回到聊天，AI 恢复的内容不显示」，截图里 AI 一侧只剩浅灰色空条。\n  - 根因：`.chat-msg.assistant .chat-bubble` 的背景色写死成 `#f4f5f7`（浅灰），深色模式下没有覆盖；而文字色用了 `var(--text)`，深色模式 `var(--text)` 是浅色。**浅灰背景 + 浅色文字 = 文字完全不可见**，所以所有 AI 回复在深色模式下看起来都像「空条」，切换 tab 后 DOM 没变，看起来像「恢复的内容丢了」。\n  - 修复：深色模式覆盖 AI 气泡背景为 `#2a2f3a`（深灰）、边框调整为 `rgba(255,255,255,0.06)`，与浅色文字正常对比。\n  - 顺手加防御：新增 `removeEmptyAssistantBubbles()`，在流式输出切换到工具调用（`onAiToolStart`）、对话回合结束（`sendChat`）、恢复历史（`switchToChat` / `loadChats`）时清理真正没有任何文字的 AI 气泡空条，避免残留。",
+  "pubDate": "2026-08-07T14:16:57+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.7/AI.Copilot-0.7.7-arm64.dmg",
+  "sha256": "0d7437018abad5564d7cebdefcc2fd5036716adb2414fee599211d3ba1692dd1",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.7/delta-0.7.7.zip",
+  "deltaSha256": "cc8b5fb64b40ca17dc41cb0b881b17bbe4dd4fa2d584c10e5a3187bea35a2759",
+  "deltaFromVersion": "0.7.6"
 }

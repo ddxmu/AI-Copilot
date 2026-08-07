@@ -2623,7 +2623,9 @@ body {
 
 /* 聊天气泡 */
 :root.dark .chat-msg.assistant .chat-bubble {
+  background: #2a2f3a;
   color: var(--text);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 :root.dark .chat-msg.user .chat-bubble {
   background: var(--primary);
