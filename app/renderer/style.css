@@ -1312,6 +1312,28 @@ body {
   opacity: 0.9;
 }
 
+/* MCP 服务器单选下拉（开启 MCP 时显示在开关旁） */
+.mcp-server-select {
+  border: 1.5px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  max-width: 160px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  outline: none;
+}
+.mcp-server-select:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+.mcp-server-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .perm-menu {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -2591,6 +2613,15 @@ body {
 :root.dark .mcp-toggle:hover {
   background: var(--primary);
   color: #fff;
+}
+:root.dark .mcp-server-select {
+  background: #1c1f26;
+  color: var(--text);
+  border-color: var(--border);
+}
+:root.dark .mcp-server-select option {
+  background: #1c1f26;
+  color: var(--text);
 }
 
 /* 悬停状态 */

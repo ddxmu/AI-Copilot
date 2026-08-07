@@ -1127,12 +1127,14 @@ async function httpPostJsonWithRetry(urlStr, headers, body, timeoutMs = 300000, 
 }
 
 // 把已连接的 MCP 服务器的工具包装成本地工具条目
-function buildMcpToolList() {
+// serverName 指定时只返回该服务器的工具（用户在聊天栏单选了某个服务器时使用）
+function buildMcpToolList(serverName) {
   let defs = [];
   try {
     const mcp = require('./mcp');
     defs = mcp.getMcpToolDefs() || [];
   } catch (e) { return []; }
+  if (serverName) defs = defs.filter((d) => d.serverName === serverName);
   return defs.map((d) => ({
     name: d.toolName,
     description: `[MCP·${d.serverName}] ${d.description || d.originalName}`,
@@ -1172,7 +1174,8 @@ function normalizeMcpSchema(schema) {
 }
 
 // mcpEnabled=false 时完全不把 MCP 外部工具暴露给模型（用户可在聊天界面关掉）
-function buildToolList(allowedTools, isSubagent, webAccess, mcpEnabled = true) {
+// mcpServer 指定时只注入该服务器的工具（用户单选了某个服务器）
+function buildToolList(allowedTools, isSubagent, webAccess, mcpEnabled = true, mcpServer = null) {
   const local = Object.entries(tools)
     .filter(([name, t]) => {
       if (allowedTools) return allowedTools.includes(name);
@@ -1182,10 +1185,11 @@ function buildToolList(allowedTools, isSubagent, webAccess, mcpEnabled = true) {
     })
     .map(([name, t]) => ({ name, description: t.description, schema: t.schema, tool: t }));
 
-  const mcpTools = buildMcpToolList()
-    .filter((t) => (allowedTools ? allowedTools.includes(t.name) : true));
+  const mcpTools = mcpEnabled
+    ? buildMcpToolList(mcpServer).filter((t) => (allowedTools ? allowedTools.includes(t.name) : true))
+    : [];
 
-  return local.concat(mcpEnabled ? mcpTools : []);
+  return local.concat(mcpTools);
 }
 
 async function callApi(profile, apiType, system, messages, toolList) {
@@ -1235,7 +1239,7 @@ async function callApi(profile, apiType, system, messages, toolList) {
 
 /* ================= 系统提示词 ================= */
 
-function buildSystemPrompt(webAccess, mcpEnabled = true) {
+function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null) {
   const home = os.homedir();
   const skillList = Object.entries(SKILLS).map(([k, v]) => `- ${k}：${v.description}`).join('\n');
   // 推荐技能：尚未安装的列出来，提示模型可按需安装
@@ -1254,10 +1258,12 @@ function buildSystemPrompt(webAccess, mcpEnabled = true) {
     ? `\n- 需要查最新信息、技术文档、新闻时用 web_search 搜索互联网；需要读取某个网页的详细内容时用 web_fetch。`
     : '';
   // MCP 外部工具（用户在「AI 设置 → MCP 服务器」中配置）。关闭 MCP 开关时不注入，避免模型调用外部服务
+  // mcpServer 指定时只注入该服务器的工具
   let mcpSection = '';
   if (mcpEnabled) {
     try {
-      const defs = require('./mcp').getMcpToolDefs() || [];
+      let defs = require('./mcp').getMcpToolDefs() || [];
+      if (mcpServer) defs = defs.filter((d) => d.serverName === mcpServer);
       if (defs.length) {
         const byServer = {};
         for (const d of defs) {
@@ -1397,9 +1403,9 @@ function sanitizeMessages(messages, apiType) {
 /* ================= Agent Loop（核心，主对话与子代理共用） ================= */
 // opts: { system, allowedTools, maxTurns, isSubagent }
 async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
-  const system = opts.system || buildSystemPrompt(ctx.webAccess, ctx.mcpEnabled);
+  const system = opts.system || buildSystemPrompt(ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer);
   const maxTurns = opts.maxTurns || MAX_TURNS;
-  const toolList = buildToolList(opts.allowedTools, opts.isSubagent, ctx.webAccess, ctx.mcpEnabled);
+  const toolList = buildToolList(opts.allowedTools, opts.isSubagent, ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer);
 
   // 接收完整消息历史（含 tool_calls/tool/tool_result），不仅取 role+content；
   // 这样续接对话时模型能看到之前的工具调用和结果，不会"忘记"上下文。
@@ -1506,7 +1512,8 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
     confirm: callbacks.onConfirm,
     rulesChanged: callbacks.onRulesChanged || (() => {}),
     webAccess: callbacks.webAccess || false,
-    mcpEnabled: callbacks.mcpEnabled !== false, // 默认开启；渲染层可通过 setMcpEnabled 关闭
+    mcpEnabled: callbacks.mcpEnabled === true, // 默认关闭；用户在聊天栏开启后传 true
+    mcpServer: callbacks.mcpServer || null,    // 用户单选的服务器名（null=未指定）
     skillsDir: callbacks.skillsDir || null,
     onInstallSkill: callbacks.onInstallSkill || null,
     setTodos: (todos) => { ctx.todos = todos; callbacks.onTodo && callbacks.onTodo(todos); },
