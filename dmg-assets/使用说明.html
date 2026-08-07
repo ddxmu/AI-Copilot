@@ -11,8 +11,95 @@ code{background:#eef2ff;color:var(--primary);border-radius:5px;padding:1px 7px;f
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--light);text-align:center;}
 .warn{background:#fff8e6;border:1px solid #f0dca0;border-radius:10px;padding:12px 16px;font-size:13px;color:#8a6d1b;}
+.gate{background:#eef4ff;border:1px solid #c9dbff;border-left:4px solid var(--primary);border-radius:10px;padding:16px 18px;margin-bottom:26px;}
+.gate h3{font-size:15px;color:var(--primary);margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+.gate .lead{font-size:13.5px;color:#33415c;margin-bottom:6px;}
+.steps{margin:12px 0 2px;}
+.step{display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;}
+.step .n{flex:0 0 26px;width:26px;height:26px;border-radius:50%;background:var(--primary);color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;margin-top:2px;}
+.step .b{flex:1;min-width:0;}
+.step h4{font-size:14px;margin-bottom:4px;color:var(--text);}
+.step p{font-size:13px;margin-bottom:8px;}
+.shot{display:block;width:100%;max-width:480px;border:1px solid var(--border);border-radius:12px;background:#fbfbfd;box-shadow:0 4px 14px rgba(0,0,0,.05);margin:4px 0 2px;}
+.cap{font-size:12px;color:var(--light);margin:2px 0 4px;}
 </style></head><body><div class="page">
 <div class="head"><img src="data:image/jpeg;base64,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"/><div><h1>AI Copilot</h1><div class="ver">版本 0.7.0 · macOS（Apple Silicon / arm64）· 使用说明</div></div></div>
+<div class="gate">
+  <h3>🔒 首次打开被拦截？这是正常的</h3>
+  <p class="lead">由于应用暂未经过 Apple 开发者签名与公证，macOS 在首次打开时会弹出「<b>无法验证开发者</b>」的安全提示。<b>这不是病毒</b>，按下面 4 步放行一次即可，之后双击直接打开。</p>
+  <div class="steps">
+    <div class="step"><div class="n">1</div><div class="b">
+      <h4>双击打开被拦 → 关掉提示</h4>
+      <p>双击 <code>AI Copilot.app</code> 会弹出「“AI Copilot.app” 无法打开，因为无法验证开发者」，点「完成」关掉它。</p>
+      <svg class="shot" viewBox="0 0 480 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="拦截弹窗">
+        <rect x="40" y="18" width="400" height="150" rx="14" fill="#ffffff" stroke="#d9d9de"/>
+        <rect x="68" y="44" width="46" height="46" rx="11" fill="#2f6fed"/>
+        <text x="128" y="64" font-family="-apple-system,sans-serif" font-size="15" font-weight="600" fill="#1f2328">AI Copilot.app</text>
+        <text x="128" y="86" font-family="-apple-system,sans-serif" font-size="12.5" fill="#656d76">“AI Copilot.app” 无法打开，</text>
+        <text x="128" y="104" font-family="-apple-system,sans-serif" font-size="12.5" fill="#656d76">因为无法验证开发者。</text>
+        <rect x="330" y="126" width="84" height="28" rx="7" fill="#e8e8ed"/>
+        <text x="372" y="145" font-family="-apple-system,sans-serif" font-size="13" fill="#1f2328" text-anchor="middle">完成</text>
+      </svg>
+      <div class="cap">图 1 · 首次打开的拦截弹窗</div>
+    </div></div>
+    <div class="step"><div class="n">2</div><div class="b">
+      <h4>打开「系统设置 → 隐私与安全性」</h4>
+      <p>点屏幕左上角 菜单 →「系统设置」，在左侧找到并进入「隐私与安全性」。</p>
+      <svg class="shot" viewBox="0 0 480 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="系统设置">
+        <rect x="20" y="14" width="440" height="272" rx="12" fill="#ffffff" stroke="#d9d9de"/>
+        <rect x="20" y="14" width="150" height="272" rx="12" fill="#f3f3f5"/>
+        <text x="40" y="44" font-family="-apple-system,sans-serif" font-size="13" font-weight="600" fill="#1f2328">系统设置</text>
+        <text x="40" y="80" font-family="-apple-system,sans-serif" font-size="12.5" fill="#656d76">通用</text>
+        <text x="40" y="104" font-family="-apple-system,sans-serif" font-size="12.5" fill="#656d76">外观</text>
+        <text x="40" y="128" font-family="-apple-system,sans-serif" font-size="12.5" fill="#656d76">控制中心</text>
+        <text x="40" y="152" font-family="-apple-system,sans-serif" font-size="12.5" fill="#656d76">桌面与程序坞</text>
+        <rect x="28" y="162" width="134" height="26" rx="6" fill="#2f6fed" opacity="0.16"/>
+        <text x="40" y="180" font-family="-apple-system,sans-serif" font-size="12.5" font-weight="600" fill="#2f6fed">隐私与安全性</text>
+        <text x="190" y="44" font-family="-apple-system,sans-serif" font-size="16" font-weight="600" fill="#1f2328">隐私与安全性</text>
+        <rect x="190" y="58" width="250" height="26" rx="7" fill="#f0f0f2"/>
+        <text x="202" y="75" font-family="-apple-system,sans-serif" font-size="12" fill="#9aa0a6">搜索</text>
+        <line x1="190" y1="98" x2="430" y2="98" stroke="#eceef0"/>
+        <text x="190" y="122" font-family="-apple-system,sans-serif" font-size="12.5" fill="#656d76">定位服务</text>
+        <text x="190" y="150" font-family="-apple-system,sans-serif" font-size="12.5" fill="#656d76">通讯录</text>
+        <text x="190" y="178" font-family="-apple-system,sans-serif" font-size="12.5" fill="#656d76">日历</text>
+        <text x="190" y="206" font-family="-apple-system,sans-serif" font-size="12.5" fill="#656d76">⌄ 更多 ▾</text>
+      </svg>
+      <div class="cap">图 2 · 系统设置中的「隐私与安全性」</div>
+    </div></div>
+    <div class="step"><div class="n">3</div><div class="b">
+      <h4>点「仍要打开」</h4>
+      <p>往下滚到「安全性」区域，会出现一行「AI Copilot.app 已被阻止使用，因为来自身份不明的开发者」，点右侧的「仍要打开 (Open Anyway)」。</p>
+      <svg class="shot" viewBox="0 0 480 230" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="仍要打开">
+        <rect x="20" y="14" width="440" height="200" rx="12" fill="#ffffff" stroke="#d9d9de"/>
+        <text x="40" y="46" font-family="-apple-system,sans-serif" font-size="15" font-weight="600" fill="#1f2328">安全性</text>
+        <line x1="40" y1="58" x2="440" y2="58" stroke="#eceef0"/>
+        <rect x="40" y="72" width="400" height="94" rx="10" fill="#fbfbfd" stroke="#e8e8ec"/>
+        <text x="56" y="104" font-family="-apple-system,sans-serif" font-size="12.5" fill="#1f2328">AI Copilot.app 已被阻止使用，</text>
+        <text x="56" y="126" font-family="-apple-system,sans-serif" font-size="12.5" fill="#1f2328">因为来自身份不明的开发者</text>
+        <rect x="330" y="106" width="96" height="30" rx="7" fill="#2f6fed"/>
+        <text x="378" y="126" font-family="-apple-system,sans-serif" font-size="13" font-weight="500" fill="#ffffff" text-anchor="middle">仍要打开</text>
+      </svg>
+      <div class="cap">图 3 · 「安全性」区域出现「仍要打开」</div>
+    </div></div>
+    <div class="step"><div class="n">4</div><div class="b">
+      <h4>输入密码 → 启动</h4>
+      <p>弹出验证框，输入您的管理员密码（或 Touch ID），点「好」，应用即可启动。此后再双击不再提示。</p>
+      <svg class="shot" viewBox="0 0 480 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="输入密码">
+        <rect x="60" y="20" width="360" height="150" rx="14" fill="#ffffff" stroke="#d9d9de"/>
+        <text x="84" y="60" font-family="-apple-system,sans-serif" font-size="14" font-weight="600" fill="#1f2328">“AI Copilot.app” 想打开</text>
+        <text x="84" y="84" font-family="-apple-system,sans-serif" font-size="12.5" fill="#656d76">输入您的密码以允许此操作。</text>
+        <rect x="84" y="100" width="252" height="28" rx="6" fill="#f3f3f5" stroke="#d9d9de"/>
+        <text x="96" y="119" font-family="-apple-system,sans-serif" font-size="12" fill="#9aa0a6">••••••••</text>
+        <rect x="300" y="142" width="68" height="26" rx="6" fill="#e8e8ed"/>
+        <text x="334" y="159" font-family="-apple-system,sans-serif" font-size="12.5" fill="#1f2328" text-anchor="middle">取消</text>
+        <rect x="200" y="142" width="68" height="26" rx="6" fill="#2f6fed"/>
+        <text x="234" y="159" font-family="-apple-system,sans-serif" font-size="12.5" fill="#fff" text-anchor="middle">好</text>
+      </svg>
+      <div class="cap">图 4 · 输入密码放行</div>
+    </div></div>
+  </div>
+  <p style="font-size:13px;color:#33415c;margin-top:4px">💡 <b>更省事的办法</b>：在 <code>AI Copilot.app</code> 上<b>右键（或 Control+单击）→「打开」</b>，弹窗点「打开」也能一次放行。</p>
+</div>
 <h2>这是什么</h2><p>AI Copilot 是一款运行在本机的 macOS 桌面应用，把「<b>批量处理文件</b>」和「<b>AI 智能体</b>」结合：批量替换内容、改文件名、转格式（含 PDF 互转、保留格式）、PDF 去水印、按模版归类整理文件；内置 AI 智能体可对话式处理文件，并支持<b>技能扩展</b>——在线搜索/本地移植/预置技能，能力可持续增长。全部本地运行，只有调用你自己配置的 AI 接口时才联网。</p>
 <h2>大概功能</h2><div class="grid">
 <div class="card"><b>✦ AI 助手</b><br>用自然语言指挥智能体：扫描、读取、编写、修改、排版文件，看图、格式转换、执行终端命令、打开文件/网页。敏感操作先弹授权。侧边栏自动记录对话历史，可切换/改名/归档/删除。</div>

@@ -1,3 +1,11 @@
+## v0.7.1 — 2026-08-07
+- **MCP 新增 SSE（远程服务）传输方式，兼容 Cherry Studio 配置格式**：
+  - 此前仅支持 stdio（本地命令）。现在「新增服务器」可选择 **SSE** 传输，填写**服务地址 (baseUrl)、请求头 (headers)** 即可接入远程 MCP 服务，无需本地运行 npx。
+  - 自研零依赖 SSE 客户端：GET 建立 `text/event-stream` 流 → 读取 `endpoint` 事件 → POST 发送 JSON-RPC，响应按 id 在流上匹配；支持 `${KEY}` 占位符，运行时用「环境变量」里的值替换（如 `${DASHSCOPE_API_KEY}`）。
+  - **从 JSON 导入**现在同时兼容 **Claude Desktop 与 Cherry Studio** 的 `mcpServers` 格式：能自动识别 `type:"sse"` + `baseUrl` + `headers` 配置并正确接入（如阿里云百炼托管的 GitHub MCP 服务）。
+  - **MCP 市场**新增模板「GitHub（阿里云百炼）」，点一下填 DashScope API Key 即可用，无需本地环境。
+  - 编辑器按传输方式显示不同字段（stdio：命令/参数/目录；SSE：地址/请求头），并自动把 headers 里的 `${KEY}` 占位符预填入环境变量供填写。
+
 ## v0.7.0 — 2026-08-05
 - **新增 MCP 服务器接入（AI 设置 → MCP 服务器）**：填好连接信息，AI 助手即可直接使用该服务器提供的全部工具。
   - 支持 stdio 方式启动的本地 MCP 服务（npx / uvx / node / python3 等），可配置**启动命令、参数、环境变量、工作目录**，并可单独启用/禁用。
