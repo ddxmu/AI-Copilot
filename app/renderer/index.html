@@ -895,6 +895,7 @@
 
           <div class="btn-group" style="margin-top:6px">
             <button id="btn-new-mcp" class="btn primary">＋ 新增服务器</button>
+            <button id="btn-mcp-market" class="btn">🏪 从市场添加</button>
             <button id="btn-mcp-json" class="btn ghost">从 JSON 导入</button>
           </div>
         </div>
@@ -903,40 +904,66 @@
         <div id="mcp-editor" class="card hidden">
           <div class="card-title-row">
             <h2 id="mcp-editor-title">新增 MCP 服务器</h2>
-            <span class="hint">目前支持 stdio 方式启动的本地 MCP 服务</span>
+            <span class="hint">stdio：本地命令启动　|　SSE：远程服务地址（如阿里云百炼）</span>
           </div>
 
           <div class="form-grid">
             <div class="form-cell">
               <label>服务器名称</label>
-              <input id="m-name" type="text" placeholder="filesystem（仅字母数字下划线）" />
+              <input id="m-name" type="text" placeholder="github（仅字母数字下划线）" />
               <div class="field-hint">用作工具名前缀：mcp__名称__工具名</div>
             </div>
             <div class="form-cell">
-              <label>启动命令</label>
-              <input id="m-command" type="text" placeholder="npx" />
-              <div class="field-hint">如 npx / uvx / node / python3</div>
+              <label>传输方式</label>
+              <select id="m-transport">
+                <option value="stdio">stdio（本地命令）</option>
+                <option value="sse">SSE（远程服务地址）</option>
+              </select>
             </div>
           </div>
 
+          <!-- stdio 字段 -->
+          <div id="m-stdio-fields">
+            <div class="form-grid" style="margin-top:14px">
+              <div class="form-cell">
+                <label>启动命令</label>
+                <input id="m-command" type="text" placeholder="npx" />
+                <div class="field-hint">如 npx / uvx / node / python3</div>
+              </div>
+              <div class="form-cell">
+                <label>工作目录（可选）</label>
+                <input id="m-cwd" type="text" placeholder="留空则使用用户主目录" />
+              </div>
+            </div>
+            <div class="form-cell" style="margin-top:14px">
+              <label>启动参数（每行一个）</label>
+              <textarea id="m-args" rows="4" placeholder="-y&#10;@modelcontextprotocol/server-fetch"></textarea>
+            </div>
+          </div>
+
+          <!-- sse 字段 -->
+          <div id="m-sse-fields" class="hidden">
+            <div class="form-cell" style="margin-top:14px">
+              <label>服务地址 (baseUrl)</label>
+              <input id="m-baseurl" type="text" placeholder="https://example.com/mcp/sse" />
+              <div class="field-hint">以 /sse 结尾的远程 MCP 服务地址</div>
+            </div>
+            <div class="form-cell" style="margin-top:14px">
+              <label>请求头（每行一行为 <code>Header: Value</code>，支持 ${KEY} 占位）</label>
+              <textarea id="m-headers" rows="3" placeholder="Authorization: Bearer ${DASHSCOPE_API_KEY}"></textarea>
+            </div>
+          </div>
+
+          <!-- 公共：环境变量 -->
           <div class="form-cell" style="margin-top:14px">
-            <label>启动参数（每行一个）</label>
-            <textarea id="m-args" rows="4" placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/Users/你的用户名/Documents"></textarea>
+            <label>环境变量（每行 <code>KEY=VALUE</code>）</label>
+            <div class="field-hint">stdio：传给本地进程；SSE：用于替换上面 ${KEY} 占位符（如 API Key）</div>
+            <textarea id="m-env" rows="3" placeholder="DASHSCOPE_API_KEY=sk-..."></textarea>
           </div>
 
-          <div class="form-grid" style="margin-top:14px">
-            <div class="form-cell">
-              <label>环境变量（每行 KEY=VALUE）</label>
-              <textarea id="m-env" rows="3" placeholder="API_TOKEN=xxxx"></textarea>
-            </div>
-            <div class="form-cell">
-              <label>工作目录（可选）</label>
-              <input id="m-cwd" type="text" placeholder="留空则使用用户主目录" />
-              <label style="margin-top:12px;display:flex;align-items:center;gap:8px;font-weight:400">
-                <input id="m-enabled" type="checkbox" checked style="width:auto" /> 启用该服务器
-              </label>
-            </div>
-          </div>
+          <label style="margin-top:12px;display:flex;align-items:center;gap:8px;font-weight:400">
+            <input id="m-enabled" type="checkbox" checked style="width:auto" /> 启用该服务器
+          </label>
 
           <div id="mcp-test-status" class="fetch-status"></div>
 
@@ -951,13 +978,18 @@
         <div id="mcp-json-editor" class="card hidden">
           <div class="card-title-row">
             <h2>从 JSON 导入</h2>
-            <span class="hint">兼容 Claude Desktop 的 mcpServers 配置格式</span>
+            <span class="hint">兼容 Claude Desktop 与 Cherry Studio 的 mcpServers 配置（支持 stdio 与 sse）</span>
           </div>
-          <textarea id="m-json" rows="10" placeholder='{
+          <textarea id="m-json" rows="12" placeholder='{
   "mcpServers": {
-    "filesystem": {
+    "fetch": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/me/Documents"]
+      "args": ["-y", "@modelcontextprotocol/server-fetch"]
+    },
+    "github-bailian": {
+      "type": "sse",
+      "baseUrl": "https://dashscope.aliyuncs.com/api/v1/mcps/gitHub/sse",
+      "headers": { "Authorization": "Bearer ${DASHSCOPE_API_KEY}" }
     }
   }
 }'></textarea>
@@ -965,6 +997,39 @@
           <div class="btn-group" style="margin-top:14px">
             <button id="btn-mcp-json-save" class="btn primary">导入并连接</button>
             <button id="btn-mcp-json-cancel" class="btn ghost">取消</button>
+          </div>
+        </div>
+
+        <!-- MCP 市场 -->
+        <div id="mcp-market" class="card hidden">
+          <div class="card-title-row">
+            <h2>MCP 市场</h2>
+            <span class="hint">选择常用服务器模板，自动填充启动命令，只需填必要参数</span>
+          </div>
+          <div class="mcp-market-search">
+            <input id="mcp-market-search" type="text" placeholder="搜索服务器，如：github / fetch / 文件" />
+            <select id="mcp-market-category">
+              <option value="">全部分类</option>
+              <option value="常用">常用</option>
+              <option value="搜索">搜索</option>
+              <option value="开发">开发</option>
+              <option value="数据库">数据库</option>
+            </select>
+          </div>
+          <div id="mcp-market-list" class="mcp-market-list"></div>
+          <div id="mcp-market-params" class="mcp-market-params hidden">
+            <div class="card-title-row" style="margin:18px 0 10px">
+              <h3 id="mcp-market-params-title">配置服务器</h3>
+            </div>
+            <div id="mcp-market-params-body"></div>
+            <div id="mcp-market-status" class="fetch-status"></div>
+            <div class="btn-group" style="margin-top:14px">
+              <button id="btn-mcp-market-add" class="btn primary">添加并连接</button>
+              <button id="btn-mcp-market-params-cancel" class="btn ghost">取消</button>
+            </div>
+          </div>
+          <div class="btn-group" style="margin-top:18px">
+            <button id="btn-mcp-market-cancel" class="btn ghost">关闭市场</button>
           </div>
         </div>
 

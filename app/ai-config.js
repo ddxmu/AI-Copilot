@@ -85,42 +85,77 @@ function getWebAccess() {
 }
 
 /* ---------------- MCP 服务器配置 ---------------- */
-// 单条结构：
-// {
-//   id: 'mcp_xxx',
-//   name: 'filesystem',          // 唯一标识（用于工具名前缀），仅字母数字下划线短横
-//   enabled: true,
-//   transport: 'stdio',          // 目前支持 stdio
-//   command: 'npx',
-//   args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
-//   env: { KEY: 'value' },
-//   cwd: ''                      // 可选工作目录
-// }
+// 单条结构（两种传输）：
+//  stdio（默认，本地进程）：
+//    { id, name, enabled, transport:'stdio', command, args[], env{}, cwd }
+//  sse（远程服务，Cherry Studio / 阿里云百炼等格式）：
+//    { id, name, enabled, transport:'sse', baseUrl, headers{}, env{}, description }
+//    其中 headers 中的 ${KEY} 会以 env 中对应值（或 process.env）替换，方便填 API Key
+
+function parseKv(str) {
+  const obj = {};
+  String(str || '').split('\n').forEach((line) => {
+    const t = line.trim();
+    if (!t) return;
+    const i = t.indexOf('=');
+    if (i > 0) obj[t.slice(0, i).trim()] = t.slice(i + 1).trim();
+  });
+  return obj;
+}
 
 function normalizeMcpServer(s) {
-  const name = String(s.name || '').trim().replace(/[^A-Za-z0-9_-]/g, '_');
-  let args = s.args;
-  if (typeof args === 'string') {
-    args = args.split('\n').map((x) => x.trim()).filter(Boolean);
-  }
-  if (!Array.isArray(args)) args = [];
+  const name = String(s.name || s.id || '').trim().replace(/[^A-Za-z0-9_-]/g, '_') || 'server';
+  const transport = s.transport ||
+    (s.type === 'stdio' ? 'stdio' :
+      (s.type === 'sse' || s.type === 'http' || s.baseUrl || s.url) ? 'sse' : 'stdio');
+
+  // env：stdio 传给本地进程；sse 用于替换 headers/baseUrl 中的 ${KEY}
   let env = s.env;
-  if (typeof env === 'string') {
-    const obj = {};
-    env.split('\n').forEach((line) => {
-      const t = line.trim();
-      if (!t) return;
-      const i = t.indexOf('=');
-      if (i > 0) obj[t.slice(0, i).trim()] = t.slice(i + 1).trim();
-    });
-    env = obj;
-  }
+  if (typeof env === 'string') env = parseKv(env);
   if (!env || typeof env !== 'object') env = {};
+  const enabled = s.enabled !== false && s.isActive !== false;
+
+  if (transport === 'sse') {
+    const baseUrl = String(s.baseUrl || s.url || '').trim();
+    let headers = s.headers;
+    if (typeof headers === 'string') headers = (() => {
+      const obj = {};
+      headers.split('\n').forEach((line) => {
+        const t = line.trim();
+        if (!t) return;
+        const i = t.indexOf(':');
+        if (i > 0) obj[t.slice(0, i).trim()] = t.slice(i + 1).trim();
+      });
+      return obj;
+    })();
+    if (!headers || typeof headers !== 'object') headers = {};
+    // 自动把 headers / baseUrl 里出现的 ${KEY} 占位符预填入 env（缺省空值），方便用户填写
+    const ph = new Set();
+    const scan = (str) => String(str || '').replace(/\$\{([^}]+)\}/g, (_, k) => { ph.add(k); return ''; });
+    Object.values(headers).forEach(scan);
+    scan(baseUrl);
+    ph.forEach((k) => { if (!(k in env)) env[k] = ''; });
+    return {
+      id: s.id || `mcp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      enabled,
+      transport: 'sse',
+      baseUrl,
+      headers,
+      env,
+      description: String(s.description || '').trim(),
+    };
+  }
+
+  // stdio
+  let args = s.args;
+  if (typeof args === 'string') args = args.split('\n').map((x) => x.trim()).filter(Boolean);
+  if (!Array.isArray(args)) args = [];
   return {
     id: s.id || `mcp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    name: name || 'server',
-    enabled: s.enabled !== false,
-    transport: s.transport || 'stdio',
+    name,
+    enabled,
+    transport: 'stdio',
     command: String(s.command || '').trim(),
     args,
     env,
@@ -250,6 +285,7 @@ module.exports = {
   getMcpServers,
   upsertMcpServer,
   deleteMcpServer,
+  normalizeMcpServer,
   fetchModels,
   testConnection,
 };

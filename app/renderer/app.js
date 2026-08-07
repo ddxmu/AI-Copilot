@@ -674,6 +674,102 @@ async function initAiSettings() {
 /* ================= MCP 服务器配置 ================= */
 const mcpState = { servers: [], status: [], editing: null };
 
+// MCP 市场模板：用户选择后自动填充启动命令，只需填必要参数
+const MCP_MARKET_TEMPLATES = [
+  {
+    id: 'fetch',
+    name: 'Fetch',
+    category: '常用',
+    icon: '🌐',
+    desc: '让 AI 助手获取任意网页内容，并转换为 Markdown。无需 API Key。',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-fetch'],
+    env: {},
+    params: []
+  },
+  {
+    id: 'filesystem',
+    name: '文件系统',
+    category: '常用',
+    icon: '📁',
+    desc: '让 AI 助手读取、写入指定目录下的文件。请填入允许访问的目录。',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-filesystem', '{{path}}'],
+    env: {},
+    params: [
+      { key: 'path', label: '允许访问的目录', placeholder: '/Users/你的用户名/Documents', required: true }
+    ]
+  },
+  {
+    id: 'github',
+    name: 'GitHub',
+    category: '开发',
+    icon: '🐙',
+    desc: '查询仓库、Issue、PR，读写文件，执行 GitHub 自动化操作。',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-github'],
+    env: { GITHUB_PERSONAL_ACCESS_TOKEN: '{{token}}' },
+    params: [
+      { key: 'token', label: 'GitHub Personal Access Token', placeholder: 'ghp_...', required: true, type: 'password' }
+    ]
+  },
+  {
+    id: 'brave-search',
+    name: 'Brave 搜索',
+    category: '搜索',
+    icon: '🔍',
+    desc: '让 AI 助手使用 Brave Search API 搜索互联网。',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-brave-search'],
+    env: { BRAVE_API_KEY: '{{key}}' },
+    params: [
+      { key: 'key', label: 'Brave API Key', placeholder: 'BS...', required: true, type: 'password' }
+    ]
+  },
+  {
+    id: 'sqlite',
+    name: 'SQLite',
+    category: '数据库',
+    icon: '🗄️',
+    desc: '让 AI 助手查询本地 SQLite 数据库。',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-sqlite', '--db-path', '{{dbPath}}'],
+    env: {},
+    params: [
+      { key: 'dbPath', label: '数据库文件路径', placeholder: '/Users/.../data.db', required: true }
+    ]
+  },
+  {
+    id: 'postgres',
+    name: 'PostgreSQL',
+    category: '数据库',
+    icon: '🐘',
+    desc: '让 AI 助手查询 PostgreSQL 数据库。',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-postgres', '{{connectionUrl}}'],
+    env: {},
+    params: [
+      { key: 'connectionUrl', label: '数据库连接字符串', placeholder: 'postgresql://user:pass@localhost/db', required: true, type: 'password' }
+    ]
+  },
+  {
+    id: 'github-bailian',
+    name: 'GitHub（阿里云百炼）',
+    category: '开发',
+    icon: '🐙',
+    transport: 'sse',
+    desc: '通过阿里云百炼托管的 GitHub MCP 服务连接 GitHub，无需本地运行 npx，只需填写阿里云 DashScope API Key。',
+    baseUrl: 'https://dashscope.aliyuncs.com/api/v1/mcps/gitHub/sse',
+    headers: { Authorization: 'Bearer ${DASHSCOPE_API_KEY}' },
+    env: {},
+    params: [
+      { key: 'DASHSCOPE_API_KEY', label: 'DashScope API Key', placeholder: 'sk-...', required: true, type: 'password' }
+    ]
+  }
+];
+
+let mcpMarketSelected = null;
+
 function $m(id) { return document.getElementById(id); }
 
 function mcpStatusMeta(st) {
@@ -714,7 +810,7 @@ function renderMcpList() {
 
     const sub = document.createElement('div');
     sub.className = 'profile-sub';
-    sub.textContent = `${s.command} ${(s.args || []).join(' ')}`.trim().slice(0, 120);
+    sub.textContent = (s.transport === 'sse' ? (s.baseUrl || '') : `${s.command} ${(s.args || []).join(' ')}`).trim().slice(0, 120);
     main.append(name, sub);
 
     if (st.status === 'error' && st.error) {
@@ -747,6 +843,12 @@ function renderMcpList() {
   });
 }
 
+function toggleMcpTransport() {
+  const t = $m('m-transport').value;
+  $m('m-stdio-fields').classList.toggle('hidden', t !== 'stdio');
+  $m('m-sse-fields').classList.toggle('hidden', t !== 'sse');
+}
+
 function openMcpEditor(server) {
   mcpState.editing = server || null;
   const box = $m('mcp-editor');
@@ -755,27 +857,47 @@ function openMcpEditor(server) {
   box.classList.remove('hidden');
   $m('mcp-editor-title').textContent = server ? `编辑：${server.name}` : '新增 MCP 服务器';
   $m('m-name').value = server ? server.name : '';
-  $m('m-command').value = server ? server.command : '';
-  $m('m-args').value = server ? (server.args || []).join('\n') : '';
+  const isSse = server && server.transport === 'sse';
+  $m('m-transport').value = isSse ? 'sse' : 'stdio';
+  $m('m-command').value = !isSse && server ? (server.command || '') : '';
+  $m('m-args').value = !isSse && server ? (server.args || []).join('\n') : '';
+  $m('m-cwd').value = !isSse && server ? (server.cwd || '') : '';
+  $m('m-baseurl').value = isSse ? (server.baseUrl || '') : '';
+  $m('m-headers').value = isSse
+    ? Object.entries(server.headers || {}).map(([k, v]) => `${k}: ${v}`).join('\n')
+    : '';
   $m('m-env').value = server
     ? Object.entries(server.env || {}).map(([k, v]) => `${k}=${v}`).join('\n')
     : '';
-  $m('m-cwd').value = server ? (server.cwd || '') : '';
   $m('m-enabled').checked = server ? server.enabled !== false : true;
   $m('mcp-test-status').textContent = '';
+  toggleMcpTransport();
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function collectMcpForm() {
+  const transport = $m('m-transport').value;
+  const name = $m('m-name').value.trim();
+  const env = $m('m-env').value;
+  const enabled = $m('m-enabled').checked;
+  const id = mcpState.editing ? mcpState.editing.id : undefined;
+  if (transport === 'sse') {
+    const headers = {};
+    $m('m-headers').value.split('\n').forEach((line) => {
+      const t = line.trim();
+      if (!t) return;
+      const i = t.indexOf(':');
+      if (i > 0) headers[t.slice(0, i).trim()] = t.slice(i + 1).trim();
+    });
+    return { id, name, transport: 'sse', baseUrl: $m('m-baseurl').value.trim(), headers, env, enabled };
+  }
   return {
-    id: mcpState.editing ? mcpState.editing.id : undefined,
-    name: $m('m-name').value.trim(),
+    id, name, transport: 'stdio',
     command: $m('m-command').value.trim(),
     args: $m('m-args').value,
-    env: $m('m-env').value,
+    env,
     cwd: $m('m-cwd').value.trim(),
-    enabled: $m('m-enabled').checked,
-    transport: 'stdio',
+    enabled,
   };
 }
 
@@ -788,12 +910,169 @@ async function refreshMcpState() {
   } catch (e) { /* ignore */ }
 }
 
+function interpolateMcpTemplate(str, values) {
+  return String(str).replace(/\\{\{([^}]+)\\}\}/g, (_, key) => values[key] ?? '');
+}
+
+function renderMcpMarketList(filter = '', category = '') {
+  const listEl = $m('mcp-market-list');
+  if (!listEl) return;
+  const term = filter.trim().toLowerCase();
+  const items = MCP_MARKET_TEMPLATES.filter((t) => {
+    if (category && t.category !== category) return false;
+    if (!term) return true;
+    return (t.name + t.desc + t.category).toLowerCase().includes(term);
+  });
+  listEl.innerHTML = '';
+  if (!items.length) {
+    listEl.innerHTML = '<p class="empty">未找到匹配的服务器模板</p>';
+    return;
+  }
+  items.forEach((t) => {
+    const card = document.createElement('div');
+    card.className = 'mcp-market-card';
+    card.innerHTML = `
+      <div class="mcp-market-card-head">
+        <span class="mcp-market-icon">${t.icon}</span>
+        <div>
+          <div class="mcp-market-name">${t.name}</div>
+          <div class="mcp-market-category">${t.category}</div>
+        </div>
+      </div>
+      <div class="mcp-market-desc">${t.desc}</div>
+      <div class="mcp-market-cmd">${t.transport === 'sse' ? '🌐 远程 SSE：' + (t.baseUrl || '') : t.command + ' ' + t.args.join(' ')}</div>
+      <button class="btn small mcp-market-add" data-id="${t.id}">配置并添加</button>
+    `;
+    card.querySelector('.mcp-market-add').addEventListener('click', () => selectMcpMarketTemplate(t));
+    listEl.appendChild(card);
+  });
+}
+
+function selectMcpMarketTemplate(template) {
+  mcpMarketSelected = template;
+  const paramsBox = $m('mcp-market-params');
+  const title = $m('mcp-market-params-title');
+  const body = $m('mcp-market-params-body');
+  const status = $m('mcp-market-status');
+  if (!paramsBox) return;
+  title.textContent = `配置：${template.icon} ${template.name}`;
+  status.textContent = '';
+  body.innerHTML = '';
+
+  if (!template.params || !template.params.length) {
+    body.innerHTML = '<p class="hint">该服务器无需额外参数，点击「添加并连接」即可。</p>';
+  } else {
+    template.params.forEach((p) => {
+      const row = document.createElement('div');
+      row.className = 'form-cell';
+      row.style.marginBottom = '12px';
+      row.innerHTML = `
+        <label>${p.label}${p.required ? ' <span style="color:#e74c3c">*</span>' : ''}</label>
+        <input id="mcp-market-param-${p.key}" type="${p.type === 'password' ? 'password' : 'text'}" placeholder="${p.placeholder || ''}" />
+      `;
+      body.appendChild(row);
+    });
+  }
+  paramsBox.classList.remove('hidden');
+  paramsBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function addMcpMarketTemplate() {
+  const template = mcpMarketSelected;
+  const status = $m('mcp-market-status');
+  if (!template) { status.textContent = '请先选择一个模板'; status.className = 'fetch-status err'; return; }
+
+  const values = {};
+  for (const p of (template.params || [])) {
+    const el = $m(`mcp-market-param-${p.key}`);
+    const v = el ? el.value.trim() : '';
+    if (p.required && !v) { status.textContent = `请填写 ${p.label}`; status.className = 'fetch-status err'; return; }
+    values[p.key] = v;
+  }
+
+  const name = template.id;
+  const exist = mcpState.servers.find((s) => s.name === name);
+
+  let cfg;
+  if (template.transport === 'sse') {
+    cfg = {
+      id: exist ? exist.id : undefined,
+      name,
+      transport: 'sse',
+      baseUrl: template.baseUrl || '',
+      headers: template.headers || {},
+      // SSE 用 env 承载 ${KEY} 占位符的真实值（如 API Key）
+      env: Object.fromEntries((template.params || []).map((p) => [p.key, values[p.key] || ''])),
+      enabled: true,
+    };
+  } else {
+    cfg = {
+      id: exist ? exist.id : undefined,
+      name,
+      transport: 'stdio',
+      command: template.command,
+      args: (template.args || []).map((a) => interpolateMcpTemplate(a, values)),
+      env: Object.fromEntries(Object.entries(template.env || {}).map(([k, v]) => [k, interpolateMcpTemplate(v, values)])),
+      cwd: '',
+      enabled: true,
+    };
+  }
+
+  status.textContent = '正在保存并连接…';
+  status.className = 'fetch-status';
+  const r = await window.api.mcpSave(cfg);
+  if (r.ok) {
+    await refreshMcpState();
+    status.className = 'fetch-status ok';
+    status.textContent = '已添加并连接';
+    $m('mcp-market-params').classList.add('hidden');
+    mcpMarketSelected = null;
+  } else {
+    status.className = 'fetch-status err';
+    status.textContent = '添加失败：' + r.error;
+  }
+}
+
+function openMcpMarket() {
+  $m('mcp-editor').classList.add('hidden');
+  $m('mcp-json-editor').classList.add('hidden');
+  $m('mcp-market').classList.remove('hidden');
+  $m('mcp-market-search').value = '';
+  $m('mcp-market-category').value = '';
+  $m('mcp-market-params').classList.add('hidden');
+  mcpMarketSelected = null;
+  renderMcpMarketList();
+  $m('mcp-market').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeMcpMarket() {
+  $m('mcp-market').classList.add('hidden');
+  $m('mcp-market-params').classList.add('hidden');
+  mcpMarketSelected = null;
+}
+
 function initMcpSettings() {
   if (!$m('mcp-list')) return;
   refreshMcpState();
 
   $m('btn-new-mcp').addEventListener('click', () => openMcpEditor(null));
   $m('btn-mcp-cancel').addEventListener('click', () => $m('mcp-editor').classList.add('hidden'));
+  $m('m-transport').addEventListener('change', toggleMcpTransport);
+
+  // MCP 市场
+  $m('btn-mcp-market').addEventListener('click', openMcpMarket);
+  $m('btn-mcp-market-cancel').addEventListener('click', closeMcpMarket);
+  $m('btn-mcp-market-params-cancel').addEventListener('click', () => {
+    $m('mcp-market-params').classList.add('hidden');
+    mcpMarketSelected = null;
+  });
+  $m('btn-mcp-market-add').addEventListener('click', addMcpMarketTemplate);
+  $m('mcp-market-search').addEventListener('input', (e) => {
+    renderMcpMarketList(e.target.value, $m('mcp-market-category').value);
+  });
+  $m('mcp-market-category').addEventListener('change', (e) => {
+    renderMcpMarketList($m('mcp-market-search').value, e.target.value);
+  });
 
   $m('btn-mcp-refresh').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
@@ -807,8 +1086,12 @@ function initMcpSettings() {
   $m('btn-mcp-test').addEventListener('click', async () => {
     const cfg = collectMcpForm();
     const status = $m('mcp-test-status');
-    if (!cfg.command) { status.textContent = '请先填写启动命令'; status.className = 'fetch-status err'; return; }
-    status.textContent = '正在启动并握手，请稍候…';
+    if (cfg.transport === 'sse') {
+      if (!cfg.baseUrl) { status.textContent = '请先填写服务地址'; status.className = 'fetch-status err'; return; }
+    } else if (!cfg.command) {
+      status.textContent = '请先填写启动命令'; status.className = 'fetch-status err'; return;
+    }
+    status.textContent = '正在连接并握手，请稍候…';
     status.className = 'fetch-status';
     const r = await window.api.mcpTest(cfg);
     if (r.ok) {
@@ -825,7 +1108,11 @@ function initMcpSettings() {
     const cfg = collectMcpForm();
     const status = $m('mcp-test-status');
     if (!cfg.name) { status.textContent = '请填写服务器名称'; status.className = 'fetch-status err'; return; }
-    if (!cfg.command) { status.textContent = '请填写启动命令'; status.className = 'fetch-status err'; return; }
+    if (cfg.transport === 'sse') {
+      if (!cfg.baseUrl) { status.textContent = '请填写服务地址'; status.className = 'fetch-status err'; return; }
+    } else if (!cfg.command) {
+      status.textContent = '请填写启动命令'; status.className = 'fetch-status err'; return;
+    }
     status.textContent = '保存并连接中…';
     status.className = 'fetch-status';
     const r = await window.api.mcpSave(cfg);
@@ -858,15 +1145,12 @@ function initMcpSettings() {
     let ok = 0;
     for (const [name, v] of entries) {
       const exist = mcpState.servers.find((s) => s.name === name);
+      // 直接把 Cherry Studio / Claude Desktop 的字段透传，由 normalizeMcpServer 判断 stdio / sse
       const r = await window.api.mcpSave({
+        ...v,
         id: exist ? exist.id : undefined,
         name,
-        command: v.command || '',
-        args: v.args || [],
-        env: v.env || {},
-        cwd: v.cwd || '',
-        enabled: v.disabled ? false : true,
-        transport: 'stdio',
+        enabled: v.isActive !== false && v.enabled !== false,
       });
       if (r.ok) ok++;
     }
