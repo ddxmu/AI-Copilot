@@ -1245,8 +1245,26 @@ ipcMain.handle('mcp-get', () => ({
   status: mcp.getAllStatus(),
 }));
 
+function hasUnresolvedTemplate(v) {
+  return typeof v === 'string' && /\{\{[^}]+\}\}/.test(v);
+}
+
 ipcMain.handle('mcp-save', async (_e, server) => {
   try {
+    // 防止把字面占位符（如 {{path}}）保存进配置
+    if (server.transport === 'stdio') {
+      for (const a of (server.args || [])) {
+        if (hasUnresolvedTemplate(a)) throw new Error('启动参数中仍包含未替换占位符（如 {{path}}），请填写真实值后再保存。');
+      }
+      for (const v of Object.values(server.env || {})) {
+        if (hasUnresolvedTemplate(v)) throw new Error('环境变量中仍包含未替换占位符（如 {{token}}），请填写真实值后再保存。');
+      }
+    } else if (server.transport === 'sse') {
+      if (hasUnresolvedTemplate(server.baseUrl || '')) throw new Error('服务地址中仍包含未替换占位符，请填写真实值后再保存。');
+      for (const v of Object.values(server.headers || {})) {
+        if (hasUnresolvedTemplate(v)) throw new Error('请求头中仍包含未替换占位符，请填写真实值后再保存。');
+      }
+    }
     const saved = aiConfig.upsertMcpServer(server);
     await mcp.connectFromConfig();
     return { ok: true, server: saved, status: mcp.getAllStatus() };
