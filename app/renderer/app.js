@@ -1451,6 +1451,7 @@ async function loadChats() {
         chatHistory.push(m);
         renderHistoryMessage(m);
       });
+      removeEmptyAssistantBubbles();
     }
   }
   renderChatList();
@@ -1516,6 +1517,7 @@ function switchToChat(chatId) {
       renderHistoryMessage(m);
     });
   }
+  removeEmptyAssistantBubbles();
   renderChatList();
   saveChats();
   switchPanel('ai');
@@ -1905,6 +1907,17 @@ function addBubble(role, text) {
   return bubble;
 }
 
+// 清理没有任何文字内容的 AI 气泡（防止流式输出或历史恢复时留下空条）
+function removeEmptyAssistantBubbles() {
+  if (!chatMessagesEl) return;
+  chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble').forEach((b) => {
+    if (!b.textContent.trim()) {
+      const wrap = b.closest('.chat-msg');
+      if (wrap) wrap.remove();
+    }
+  });
+}
+
 function addToolLine(name, detail) {
   const div = document.createElement('div');
   div.className = 'chat-tool';
@@ -1932,8 +1945,13 @@ window.api.onAiText((t) => {
 });
 
 window.api.onAiToolStart(({ name, input }) => {
-  addToolLine(name, toolSummary(name, input));
+  // 助手只调用工具没出文字时，把空文字气泡清掉，避免留下空条
+  if (currentAssistantBubble && !currentAssistantBubble.textContent.trim()) {
+    const emptyWrap = currentAssistantBubble.closest('.chat-msg');
+    if (emptyWrap) emptyWrap.remove();
+  }
   currentAssistantBubble = null;
+  addToolLine(name, toolSummary(name, input));
 });
 
 window.api.onAiToolEnd(({ name, result }) => {
@@ -2099,6 +2117,7 @@ async function sendChat() {
   }
   currentAssistantBubble = null;
   setSending(false);
+  removeEmptyAssistantBubbles();
   persistCurrentChat();
   saveChats();
   chatInput.focus();
