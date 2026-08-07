@@ -1,10 +1,10 @@
 {
-  "version": "0.7.1",
-  "notes": "- **MCP 新增 SSE（远程服务）传输方式，兼容 Cherry Studio 配置格式**：\n  - 此前仅支持 stdio（本地命令）。现在「新增服务器」可选择 **SSE** 传输，填写**服务地址 (baseUrl)、请求头 (headers)** 即可接入远程 MCP 服务，无需本地运行 npx。\n  - 自研零依赖 SSE 客户端：GET 建立 `text/event-stream` 流 → 读取 `endpoint` 事件 → POST 发送 JSON-RPC，响应按 id 在流上匹配；支持 `${KEY}` 占位符，运行时用「环境变量」里的值替换（如 `${DASHSCOPE_API_KEY}`）。\n  - **从 JSON 导入**现在同时兼容 **Claude Desktop 与 Cherry Studio** 的 `mcpServers` 格式：能自动识别 `type:\"sse\"` + `baseUrl` + `headers` 配置并正确接入（如阿里云百炼托管的 GitHub MCP 服务）。\n  - **MCP 市场**新增模板「GitHub（阿里云百炼）」，点一下填 DashScope API Key 即可用，无需本地环境。\n  - 编辑器按传输方式显示不同字段（stdio：命令/参数/目录；SSE：地址/请求头），并自动把 headers 里的 `${KEY}` 占位符预填入环境变量供填写。",
-  "pubDate": "2026-08-07T12:47:07+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.1/AI.Copilot-0.7.1-arm64.dmg",
-  "sha256": "3ecc7c70922e6f229c9876bae2aaf746ad41e80d8d76038284804e89a2b4da5d",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.1/delta-0.7.1.zip",
-  "deltaSha256": "c1cec04dc6c9fae746d8d8e6ad3b684b12b411f71f40881e66f29d6e189ed925",
-  "deltaFromVersion": "0.7.0"
+  "version": "0.7.2",
+  "notes": "- **修复 MCP 市场「文件系统」模板接入失败**：原模板目录参数为 `{{path}}` 占位符，若未填真实目录就保存，会把字面 `{{path}}` 传给服务器导致「Cannot access directory /Users/xxx/{{path}}」报错。\n  - 目录类参数（如文件系统）新增**「浏览…」按钮**，直接调用系统选文件夹弹窗，避免手敲路径出错。\n  - 卡片预览不再显示裸 `{{path}}`，改为可读占位 `<path>`，减少误解。\n  - 「新增服务器」编辑器的工作目录字段同样加「浏览…」按钮。\n  - 文件系统类服务器**不需要 API Key**，只需给一个真实存在的目录即可。",
+  "pubDate": "2026-08-07T13:07:59+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.2/AI.Copilot-0.7.2-arm64.dmg",
+  "sha256": "c347c5241f6ad0f1d22e004d7945e42e9063b5564e366224903008b9b439f976",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.2/delta-0.7.2.zip",
+  "deltaSha256": "f9e39bcbb7b3def85c50881b344a59475280c8fb84cd7440e636ed83b3597d5e",
+  "deltaFromVersion": "0.7.1"
 }

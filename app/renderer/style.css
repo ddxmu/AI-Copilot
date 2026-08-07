@@ -2982,6 +2982,9 @@ body {
 
 .btn.small { padding: 5px 12px; font-size: 12px; }
 
+.param-input-row { display: flex; gap: 8px; align-items: center; }
+.param-input-row input { flex: 1; min-width: 0; }
+
 :root.dark .mcp-list li {
   background: var(--card-bg);
   border-color: var(--border);
