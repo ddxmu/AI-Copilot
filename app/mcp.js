@@ -94,6 +94,14 @@ class McpConnection {
       return this;
     }
 
+    // 旧版市场模板曾把 {{path}} 等占位符直接保存进 args，启动前拦截并给出清晰指引
+    const badArg = (cfg.args || []).find((a) => typeof a === 'string' && /\{\{[^}]+\}\}/.test(a));
+    if (badArg) {
+      this.status = 'error';
+      this.error = `配置包含未替换占位符（${badArg.match(/\{\{[^}]+\}\}/)[0]}）。请删除此服务器，重新从「MCP 市场」添加并填写真实值。`;
+      return this;
+    }
+
     const env = { ...process.env, ...(cfg.env || {}) };
     env.PATH = buildEnvPath(env);
 
