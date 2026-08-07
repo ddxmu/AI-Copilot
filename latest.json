@@ -1,10 +1,10 @@
 {
-  "version": "0.7.2",
-  "notes": "- **修复 MCP 市场「文件系统」模板接入失败**：原模板目录参数为 `{{path}}` 占位符，若未填真实目录就保存，会把字面 `{{path}}` 传给服务器导致「Cannot access directory /Users/xxx/{{path}}」报错。\n  - 目录类参数（如文件系统）新增**「浏览…」按钮**，直接调用系统选文件夹弹窗，避免手敲路径出错。\n  - 卡片预览不再显示裸 `{{path}}`，改为可读占位 `<path>`，减少误解。\n  - 「新增服务器」编辑器的工作目录字段同样加「浏览…」按钮。\n  - 文件系统类服务器**不需要 API Key**，只需给一个真实存在的目录即可。",
-  "pubDate": "2026-08-07T13:07:59+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.2/AI.Copilot-0.7.2-arm64.dmg",
-  "sha256": "c347c5241f6ad0f1d22e004d7945e42e9063b5564e366224903008b9b439f976",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.2/delta-0.7.2.zip",
-  "deltaSha256": "f9e39bcbb7b3def85c50881b344a59475280c8fb84cd7440e636ed83b3597d5e",
-  "deltaFromVersion": "0.7.1"
+  "version": "0.7.3",
+  "notes": "- **AI 助手聊天界面新增「MCP 开关」**：放在底部输入栏「权限」按钮旁边（🔌 MCP · 开/关）。\n  - 默认开启。开启时，AI 助手可调用你在「AI 设置 → MCP 服务器」里已配置并连上的全部 MCP 工具（与之前行为一致，调用前仍弹授权确认）。\n  - 关闭后，本次会话不再把任何 MCP 外部工具注入给模型，也不会写进系统提示词——即使 MCP 服务器已连接也不会被调用。适合想临时禁用外部服务、只让 AI 用本机内置工具的场景。\n  - 开关为**会话级**：在聊天界面点一下切换，立即对新一轮对话生效；重新打开应用后回到默认「开」。",
+  "pubDate": "2026-08-07T13:24:20+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.3/AI.Copilot-0.7.3-arm64.dmg",
+  "sha256": "7d278bd544f36191e1d9e66ad9b816c2b7c5ef1001a2518bc4170fe2c780ff32",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.3/delta-0.7.3.zip",
+  "deltaSha256": "b4a12ed6c97b49be96c7600cbebb9a4cf9123c8c9650f61bd17b0f36211a6784",
+  "deltaFromVersion": "0.7.2"
 }

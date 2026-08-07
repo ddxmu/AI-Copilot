@@ -1757,6 +1757,23 @@ permMenu.addEventListener('click', (e) => {
 document.addEventListener('click', () => permMenu.classList.add('hidden'));
 setPermMode('ask'); // 默认：每次询问（同步给主进程）
 
+// MCP 外部工具开关（会话级，默认开启；关闭后本会话不再调用已配置的 MCP 服务器）
+const mcpToggle = document.getElementById('mcp-toggle');
+const mcpStateEl = document.getElementById('mcp-state');
+let mcpEnabled = true;
+function setMcpEnabled(v) {
+  mcpEnabled = !!v;
+  mcpToggle.classList.toggle('on', mcpEnabled);
+  mcpToggle.classList.toggle('off', !mcpEnabled);
+  if (mcpStateEl) mcpStateEl.textContent = mcpEnabled ? '开' : '关';
+  const tip = 'MCP 外部工具：' + (mcpEnabled ? '开' : '关');
+  mcpToggle.dataset.tip = tip;
+  mcpToggle.title = tip;
+  if (window.api.setMcpEnabled) window.api.setMcpEnabled(mcpEnabled);
+}
+mcpToggle.addEventListener('click', () => setMcpEnabled(!mcpEnabled));
+setMcpEnabled(true); // 默认开启，同步给主进程
+
 // 模型信息显示
 function updateModelInfo() {
   const p = aiState.profiles.find((x) => x.id === aiState.activeId);

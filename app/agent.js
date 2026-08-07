@@ -1171,7 +1171,8 @@ function normalizeMcpSchema(schema) {
   return s;
 }
 
-function buildToolList(allowedTools, isSubagent, webAccess) {
+// mcpEnabled=false 时完全不把 MCP 外部工具暴露给模型（用户可在聊天界面关掉）
+function buildToolList(allowedTools, isSubagent, webAccess, mcpEnabled = true) {
   const local = Object.entries(tools)
     .filter(([name, t]) => {
       if (allowedTools) return allowedTools.includes(name);
@@ -1184,7 +1185,7 @@ function buildToolList(allowedTools, isSubagent, webAccess) {
   const mcpTools = buildMcpToolList()
     .filter((t) => (allowedTools ? allowedTools.includes(t.name) : true));
 
-  return local.concat(mcpTools);
+  return local.concat(mcpEnabled ? mcpTools : []);
 }
 
 async function callApi(profile, apiType, system, messages, toolList) {
@@ -1234,7 +1235,7 @@ async function callApi(profile, apiType, system, messages, toolList) {
 
 /* ================= 系统提示词 ================= */
 
-function buildSystemPrompt(webAccess) {
+function buildSystemPrompt(webAccess, mcpEnabled = true) {
   const home = os.homedir();
   const skillList = Object.entries(SKILLS).map(([k, v]) => `- ${k}：${v.description}`).join('\n');
   // 推荐技能：尚未安装的列出来，提示模型可按需安装
@@ -1252,23 +1253,25 @@ function buildSystemPrompt(webAccess) {
   const webGuidance = webAccess
     ? `\n- 需要查最新信息、技术文档、新闻时用 web_search 搜索互联网；需要读取某个网页的详细内容时用 web_fetch。`
     : '';
-  // MCP 外部工具（用户在「AI 设置 → MCP 服务器」中配置）
+  // MCP 外部工具（用户在「AI 设置 → MCP 服务器」中配置）。关闭 MCP 开关时不注入，避免模型调用外部服务
   let mcpSection = '';
-  try {
-    const defs = require('./mcp').getMcpToolDefs() || [];
-    if (defs.length) {
-      const byServer = {};
-      for (const d of defs) {
-        (byServer[d.serverName] = byServer[d.serverName] || []).push(
-          `  - ${d.toolName}：${(d.description || d.originalName).slice(0, 160)}`
-        );
+  if (mcpEnabled) {
+    try {
+      const defs = require('./mcp').getMcpToolDefs() || [];
+      if (defs.length) {
+        const byServer = {};
+        for (const d of defs) {
+          (byServer[d.serverName] = byServer[d.serverName] || []).push(
+            `  - ${d.toolName}：${(d.description || d.originalName).slice(0, 160)}`
+          );
+        }
+        const lines = Object.entries(byServer)
+          .map(([s, arr]) => `- 服务器 ${s}：\n${arr.join('\n')}`)
+          .join('\n');
+        mcpSection = `\n\n## MCP 外部工具（用户已接入）\n以下工具由用户配置的 MCP 服务器提供，命名规则 mcp__<服务器>__<工具名>，调用前会请求用户授权：\n${lines}\n优先在这些工具能力覆盖的场景使用它们（例如数据库、云服务、第三方 API）。`;
       }
-      const lines = Object.entries(byServer)
-        .map(([s, arr]) => `- 服务器 ${s}：\n${arr.join('\n')}`)
-        .join('\n');
-      mcpSection = `\n\n## MCP 外部工具（用户已接入）\n以下工具由用户配置的 MCP 服务器提供，命名规则 mcp__<服务器>__<工具名>，调用前会请求用户授权：\n${lines}\n优先在这些工具能力覆盖的场景使用它们（例如数据库、云服务、第三方 API）。`;
-    }
-  } catch (e) { /* ignore */ }
+    } catch (e) { /* ignore */ }
+  }
   return `你是「AI Copilot」应用内嵌的智能体，运行在本机（macOS）。你可以自主查找、读取、修改、创建本机文件，帮助用户：替换内容、编写文件、修改文件、完善文件、排版文件。
 
 ## 环境
@@ -1394,9 +1397,9 @@ function sanitizeMessages(messages, apiType) {
 /* ================= Agent Loop（核心，主对话与子代理共用） ================= */
 // opts: { system, allowedTools, maxTurns, isSubagent }
 async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
-  const system = opts.system || buildSystemPrompt(ctx.webAccess);
+  const system = opts.system || buildSystemPrompt(ctx.webAccess, ctx.mcpEnabled);
   const maxTurns = opts.maxTurns || MAX_TURNS;
-  const toolList = buildToolList(opts.allowedTools, opts.isSubagent, ctx.webAccess);
+  const toolList = buildToolList(opts.allowedTools, opts.isSubagent, ctx.webAccess, ctx.mcpEnabled);
 
   // 接收完整消息历史（含 tool_calls/tool/tool_result），不仅取 role+content；
   // 这样续接对话时模型能看到之前的工具调用和结果，不会"忘记"上下文。
@@ -1503,6 +1506,7 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
     confirm: callbacks.onConfirm,
     rulesChanged: callbacks.onRulesChanged || (() => {}),
     webAccess: callbacks.webAccess || false,
+    mcpEnabled: callbacks.mcpEnabled !== false, // 默认开启；渲染层可通过 setMcpEnabled 关闭
     skillsDir: callbacks.skillsDir || null,
     onInstallSkill: callbacks.onInstallSkill || null,
     setTodos: (todos) => { ctx.todos = todos; callbacks.onTodo && callbacks.onTodo(todos); },

@@ -1305,6 +1305,7 @@ ipcMain.handle('ai-chat', async (event, { history, text }) => {
     const result = await agent.runAgent(profile, history, text, {
       skillsDir: SKILLS_DIR,
       webAccess: aiConfig.getWebAccess(),
+      mcpEnabled: mcpEnabledMode,
       onText: (t) => wc.send('ai-chat-text', t),
       onToolStart: (d) => wc.send('ai-chat-tool-start', d),
       onToolEnd: (d) => wc.send('ai-chat-tool-end', d),
@@ -1356,6 +1357,13 @@ let permissionMode = 'ask';
 ipcMain.handle('set-permission-mode', (_e, mode) => {
   if (['ask', 'trust', 'deny'].includes(mode)) permissionMode = mode;
   return permissionMode;
+});
+
+// MCP 外部工具开关：'true'（开启，默认，模型可调用已配置的 MCP 服务器）| 'false'（关闭，本会话禁用 MCP）
+let mcpEnabledMode = true;
+ipcMain.handle('set-mcp-enabled', (_e, enabled) => {
+  mcpEnabledMode = !!enabled;
+  return mcpEnabledMode;
 });
 
 let pendingConfirm = null;
