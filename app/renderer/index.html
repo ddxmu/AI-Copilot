@@ -723,44 +723,46 @@
               <button id="btn-send" class="composer-send has-tip" data-tip="发送（Enter）" title="发送"><img id="send-icon" class="icon-img" src="assets/icon-send.png" alt="发送" /></button>
             </div>
             <div class="composer-bar">
-              <div class="perm" id="perm">
-                <button id="perm-trigger" class="perm-trigger has-tip" data-tip="权限设置" title="权限设置">
-                  <span class="perm-check">✓</span>
-                  <span id="perm-label">默认权限</span>
-                  <span class="perm-caret">▾</span>
-                </button>
-                <div id="perm-menu" class="perm-menu hidden">
-                  <div class="perm-item active" data-mode="ask">
-                    <span class="perm-dot"></span>
-                    <div class="perm-text">
-                      <div class="perm-name">默认权限</div>
-                      <div class="perm-desc">敏感操作前征求你的同意（推荐）</div>
+              <div class="composer-left">
+                <div class="perm" id="perm">
+                  <button id="perm-trigger" class="perm-trigger has-tip" data-tip="权限设置" title="权限设置">
+                    <span class="perm-check">✓</span>
+                    <span id="perm-label">默认权限</span>
+                    <span class="perm-caret">▾</span>
+                  </button>
+                  <div id="perm-menu" class="perm-menu hidden">
+                    <div class="perm-item active" data-mode="ask">
+                      <span class="perm-dot"></span>
+                      <div class="perm-text">
+                        <div class="perm-name">默认权限</div>
+                        <div class="perm-desc">敏感操作前征求你的同意（推荐）</div>
+                      </div>
+                      <span class="perm-mark">✓</span>
                     </div>
-                    <span class="perm-mark">✓</span>
-                  </div>
-                  <div class="perm-item" data-mode="trust">
-                    <span class="perm-dot"></span>
-                    <div class="perm-text">
-                      <div class="perm-name">信任此会话</div>
-                      <div class="perm-desc">本次会话自动放行所有敏感操作</div>
+                    <div class="perm-item" data-mode="trust">
+                      <span class="perm-dot"></span>
+                      <div class="perm-text">
+                        <div class="perm-name">信任此会话</div>
+                        <div class="perm-desc">本次会话自动放行所有敏感操作</div>
+                      </div>
+                      <span class="perm-mark">✓</span>
                     </div>
-                    <span class="perm-mark">✓</span>
-                  </div>
-                  <div class="perm-item" data-mode="deny">
-                    <span class="perm-dot"></span>
-                    <div class="perm-text">
-                      <div class="perm-name">只读模式</div>
-                      <div class="perm-desc">拒绝所有写入、打开等敏感操作</div>
+                    <div class="perm-item" data-mode="deny">
+                      <span class="perm-dot"></span>
+                      <div class="perm-text">
+                        <div class="perm-name">只读模式</div>
+                        <div class="perm-desc">拒绝所有写入、打开等敏感操作</div>
+                      </div>
+                      <span class="perm-mark">✓</span>
                     </div>
-                    <span class="perm-mark">✓</span>
                   </div>
                 </div>
+                <button id="mcp-toggle" class="mcp-toggle on has-tip" data-tip="MCP 外部工具：开" title="MCP 外部工具">
+                  <span class="mcp-ico">🔌</span>
+                  <span class="mcp-label">MCP</span>
+                  <span id="mcp-state" class="mcp-state">开</span>
+                </button>
               </div>
-              <button id="mcp-toggle" class="mcp-toggle on has-tip" data-tip="MCP 外部工具：开" title="MCP 外部工具">
-                <span class="mcp-ico">🔌</span>
-                <span class="mcp-label">MCP</span>
-                <span id="mcp-state" class="mcp-state">开</span>
-              </button>
               <div class="model-wrap">
                 <span id="model-info" class="model-info has-tip" data-tip="切换模型" title="切换模型">
                   <img class="model-ico-img" src="assets/ai-agent.png" alt="" /><span id="model-name">未配置模型</span><span class="model-arrow">▾</span>

@@ -1,10 +1,10 @@
 {
-  "version": "0.7.3",
-  "notes": "- **AI 助手聊天界面新增「MCP 开关」**：放在底部输入栏「权限」按钮旁边（🔌 MCP · 开/关）。\n  - 默认开启。开启时，AI 助手可调用你在「AI 设置 → MCP 服务器」里已配置并连上的全部 MCP 工具（与之前行为一致，调用前仍弹授权确认）。\n  - 关闭后，本次会话不再把任何 MCP 外部工具注入给模型，也不会写进系统提示词——即使 MCP 服务器已连接也不会被调用。适合想临时禁用外部服务、只让 AI 用本机内置工具的场景。\n  - 开关为**会话级**：在聊天界面点一下切换，立即对新一轮对话生效；重新打开应用后回到默认「开」。",
-  "pubDate": "2026-08-07T13:24:20+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.3/AI.Copilot-0.7.3-arm64.dmg",
-  "sha256": "7d278bd544f36191e1d9e66ad9b816c2b7c5ef1001a2518bc4170fe2c780ff32",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.3/delta-0.7.3.zip",
-  "deltaSha256": "b4a12ed6c97b49be96c7600cbebb9a4cf9123c8c9650f61bd17b0f36211a6784",
-  "deltaFromVersion": "0.7.2"
+  "version": "0.7.4",
+  "notes": "- **调整 AI 助手「MCP 开关」位置**：从底部输入栏右侧移到**左侧「权限」按钮旁边**，并和权限按钮组成一组，避免视觉上过靠中、与右侧模型/联网信息混淆。\n  - 布局改为 `.composer-left` 包裹「权限」+「MCP 开关」，右侧仍保留模型切换与联网徽章。\n  - 功能与 v0.7.3 完全一致：默认开，点击切换本次会话是否允许 AI 调用已接入的 MCP 外部工具。",
+  "pubDate": "2026-08-07T13:38:15+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.4/AI.Copilot-0.7.4-arm64.dmg",
+  "sha256": "58a4f51c7cef651abc6ce0d807d533e34aa10a49350c48ad1fd840b5865b7274",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.4/delta-0.7.4.zip",
+  "deltaSha256": "68d1fe70f13b7d6d123b5bca5ca2c21dc4067bcf61aff58aae2c50ffcc4e6293",
+  "deltaFromVersion": "0.7.3"
 }
