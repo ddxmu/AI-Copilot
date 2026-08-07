@@ -911,7 +911,7 @@ async function refreshMcpState() {
 }
 
 function interpolateMcpTemplate(str, values) {
-  return String(str).replace(/\\{\{([^}]+)\\}\}/g, (_, key) => values[key] ?? '');
+  return String(str).replace(/\{\{([^}]+)\}\}/g, (_, key) => values[key] ?? '');
 }
 
 function renderMcpMarketList(filter = '', category = '') {

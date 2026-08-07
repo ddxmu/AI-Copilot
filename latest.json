@@ -1,10 +1,10 @@
 {
-  "version": "0.7.5",
-  "notes": "- **修复 MCP 旧配置中未替换的 `{{path}}` 占位符导致文件系统服务器反复连接失败**：\n  - 连接 stdio MCP 前，若 `args` 仍含 `{{...}}` 字面占位符，直接报清晰错误：「配置包含未替换占位符（{{path}}）。请删除此服务器，重新从 MCP 市场添加并填写真实值。」不再把 `{{path}}` 当真实路径传给服务器。\n  - 保存 MCP 服务器时新增校验：stdio 的 `args` / `env`，SSE 的 `baseUrl` / `headers` 中如果仍含 `{{...}}` 占位符，拒绝保存并提示填写真实值，防止再次把模板占位符固化到配置里。",
-  "pubDate": "2026-08-07T13:48:53+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.5/AI.Copilot-0.7.5-arm64.dmg",
-  "sha256": "36c148da0807f5effce4a93ec9cb691685de7c78bd5c219abb37537574d2485b",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.5/delta-0.7.5.zip",
-  "deltaSha256": "00f1730c56045029b6d1bd5ba7e25d058168799308ea2102dc2f2ff93a04c1d2",
-  "deltaFromVersion": "0.7.4"
+  "version": "0.7.6",
+  "notes": "- **修复 MCP 市场模板占位符实际从未被替换的 bug**：v0.7.2 加文件系统模板时，`interpolateMcpTemplate` 的正则写错（带多余反斜杠 `/\\\\{\\{...\\}\\}/g`，实际匹配 `\\{\\{path\\}\\}` 带反斜杠的字面量），而模板里是 `{{path}}`（无反斜杠），导致从市场添加任何带 `{{变量}}` 占位符的模板（filesystem、SQLite、PostgreSQL 等）时，占位符都不会被替换、原样写入 `args`/`env`。以前因为没保存校验，问题被掩盖；v0.7.5 的占位符校验暴露了所有之前写坏的配置。这次修复正则，市场流程可以正常替换为用户填入的真实路径/Key。",
+  "pubDate": "2026-08-07T14:08:15+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.6/AI.Copilot-0.7.6-arm64.dmg",
+  "sha256": "a7473cf2bbdbfc9f10ab64d3c0aed2a4240264b174b3a59af79cee6cc433cb95",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.6/delta-0.7.6.zip",
+  "deltaSha256": "652f59b9eb90370af674e18bebb2120edf0ffe01282848ce54e583cabf075552",
+  "deltaFromVersion": "0.7.5"
 }
