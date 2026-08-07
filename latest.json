@@ -1,10 +1,10 @@
 {
-  "version": "0.7.7",
-  "notes": "- **修复深色模式下 AI 助手回复「看不见」的 bug**：用户反馈「聊天里说好对话，点其他模块再回到聊天，AI 恢复的内容不显示」，截图里 AI 一侧只剩浅灰色空条。\n  - 根因：`.chat-msg.assistant .chat-bubble` 的背景色写死成 `#f4f5f7`（浅灰），深色模式下没有覆盖；而文字色用了 `var(--text)`，深色模式 `var(--text)` 是浅色。**浅灰背景 + 浅色文字 = 文字完全不可见**，所以所有 AI 回复在深色模式下看起来都像「空条」，切换 tab 后 DOM 没变，看起来像「恢复的内容丢了」。\n  - 修复：深色模式覆盖 AI 气泡背景为 `#2a2f3a`（深灰）、边框调整为 `rgba(255,255,255,0.06)`，与浅色文字正常对比。\n  - 顺手加防御：新增 `removeEmptyAssistantBubbles()`，在流式输出切换到工具调用（`onAiToolStart`）、对话回合结束（`sendChat`）、恢复历史（`switchToChat` / `loadChats`）时清理真正没有任何文字的 AI 气泡空条，避免残留。",
-  "pubDate": "2026-08-07T14:16:57+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.7/AI.Copilot-0.7.7-arm64.dmg",
-  "sha256": "0d7437018abad5564d7cebdefcc2fd5036716adb2414fee599211d3ba1692dd1",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.7/delta-0.7.7.zip",
-  "deltaSha256": "cc8b5fb64b40ca17dc41cb0b881b17bbe4dd4fa2d584c10e5a3187bea35a2759",
-  "deltaFromVersion": "0.7.6"
+  "version": "0.7.8",
+  "notes": "- **AI 助手 MCP 开关默认改为「关」**：之前默认开启会让模型自动调用所有已连接的 MCP 服务器，现在默认关闭，避免不必要的工具注入；需要时点一下开关即可开启。\n- **开启 MCP 后可单选一个服务器使用**：开关旁边新增一个下拉，列出当前已连接（ready）的 MCP 服务器，单选其一后本次会话只把该服务器的工具注入给模型（工具列表 + 系统提示词都按选中的服务器过滤）。服务器连接状态变化时下拉自动刷新；无已连接服务器时显示占位并禁用。",
+  "pubDate": "2026-08-07T14:26:34+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.8/AI.Copilot-0.7.8-arm64.dmg",
+  "sha256": "5b05a1532b0d6751b928c9b1b3538680f170d21fbc67d70676828dd44fb6e5a2",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.8/delta-0.7.8.zip",
+  "deltaSha256": "e5f9cb10923514a30f78ebcbb2a3574a5ef8cfa2f9d3aaaa623508f7954e4468",
+  "deltaFromVersion": "0.7.7"
 }

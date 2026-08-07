@@ -1324,6 +1324,7 @@ ipcMain.handle('ai-chat', async (event, { history, text }) => {
       skillsDir: SKILLS_DIR,
       webAccess: aiConfig.getWebAccess(),
       mcpEnabled: mcpEnabledMode,
+      mcpServer: mcpSelectedServer,
       onText: (t) => wc.send('ai-chat-text', t),
       onToolStart: (d) => wc.send('ai-chat-tool-start', d),
       onToolEnd: (d) => wc.send('ai-chat-tool-end', d),
@@ -1377,11 +1378,18 @@ ipcMain.handle('set-permission-mode', (_e, mode) => {
   return permissionMode;
 });
 
-// MCP 外部工具开关：'true'（开启，默认，模型可调用已配置的 MCP 服务器）| 'false'（关闭，本会话禁用 MCP）
-let mcpEnabledMode = true;
+// MCP 外部工具开关：默认关闭，用户在聊天栏开启后才注入 MCP 工具
+let mcpEnabledMode = false;
 ipcMain.handle('set-mcp-enabled', (_e, enabled) => {
   mcpEnabledMode = !!enabled;
   return mcpEnabledMode;
+});
+
+// 用户在聊天栏单选的 MCP 服务器名（null=未指定，开启 MCP 时注入该服务器的工具）
+let mcpSelectedServer = null;
+ipcMain.handle('set-mcp-server', (_e, name) => {
+  mcpSelectedServer = name || null;
+  return mcpSelectedServer;
 });
 
 let pendingConfirm = null;

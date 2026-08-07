@@ -1759,22 +1759,78 @@ permMenu.addEventListener('click', (e) => {
 document.addEventListener('click', () => permMenu.classList.add('hidden'));
 setPermMode('ask'); // 默认：每次询问（同步给主进程）
 
-// MCP 外部工具开关（会话级，默认开启；关闭后本会话不再调用已配置的 MCP 服务器）
+// MCP 外部工具开关（会话级，默认关闭；开启后可单选一个已连接的 MCP 服务器）
 const mcpToggle = document.getElementById('mcp-toggle');
 const mcpStateEl = document.getElementById('mcp-state');
-let mcpEnabled = true;
+const mcpServerSelect = document.getElementById('mcp-server-select');
+let mcpEnabled = false;
+let mcpSelectedServer = null;
+
+// 用已连接（ready）的 MCP 服务器填充单选下拉；开启 MCP 时显示，关闭时隐藏
+async function refreshMcpServerSelect() {
+  if (!mcpServerSelect) return;
+  let servers = [];
+  try {
+    const r = await window.api.mcpGet();
+    const status = r.status || [];
+    // 只列已启用且连接成功的服务器
+    servers = status.filter((s) => s.status === 'ready').map((s) => s.name);
+  } catch (e) { /* ignore */ }
+  mcpServerSelect.innerHTML = '';
+  if (!servers.length) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '（无已连接服务器）';
+    mcpServerSelect.appendChild(opt);
+    mcpServerSelect.disabled = true;
+    mcpSelectedServer = null;
+    if (window.api.setMcpServer) window.api.setMcpServer(null);
+    return;
+  }
+  mcpServerSelect.disabled = false;
+  servers.forEach((name) => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    mcpServerSelect.appendChild(opt);
+  });
+  // 保留之前的选择（若仍存在），否则默认第一个
+  if (mcpSelectedServer && servers.includes(mcpSelectedServer)) {
+    mcpServerSelect.value = mcpSelectedServer;
+  } else {
+    mcpSelectedServer = servers[0];
+    mcpServerSelect.value = mcpSelectedServer;
+    if (window.api.setMcpServer) window.api.setMcpServer(mcpSelectedServer);
+  }
+}
+
 function setMcpEnabled(v) {
   mcpEnabled = !!v;
   mcpToggle.classList.toggle('on', mcpEnabled);
   mcpToggle.classList.toggle('off', !mcpEnabled);
   if (mcpStateEl) mcpStateEl.textContent = mcpEnabled ? '开' : '关';
-  const tip = 'MCP 外部工具：' + (mcpEnabled ? '开' : '关');
+  const tip = 'MCP 外部工具：' + (mcpEnabled ? '开' + (mcpSelectedServer ? '·' + mcpSelectedServer : '') : '关');
   mcpToggle.dataset.tip = tip;
   mcpToggle.title = tip;
+  if (mcpServerSelect) mcpServerSelect.classList.toggle('hidden', !mcpEnabled);
   if (window.api.setMcpEnabled) window.api.setMcpEnabled(mcpEnabled);
+  if (mcpEnabled) refreshMcpServerSelect();
 }
 mcpToggle.addEventListener('click', () => setMcpEnabled(!mcpEnabled));
-setMcpEnabled(true); // 默认开启，同步给主进程
+if (mcpServerSelect) {
+  mcpServerSelect.addEventListener('change', () => {
+    mcpSelectedServer = mcpServerSelect.value || null;
+    if (window.api.setMcpServer) window.api.setMcpServer(mcpSelectedServer);
+    const tip = 'MCP 外部工具：开' + (mcpSelectedServer ? '·' + mcpSelectedServer : '');
+    mcpToggle.dataset.tip = tip;
+    mcpToggle.title = tip;
+  });
+}
+// MCP 服务器连接状态变化时刷新下拉（只在 MCP 开启时）
+if (window.api.onMcpStatusChanged) {
+  window.api.onMcpStatusChanged(() => { if (mcpEnabled) refreshMcpServerSelect(); });
+}
+setMcpEnabled(false); // 默认关闭，同步给主进程
 
 // 模型信息显示
 function updateModelInfo() {

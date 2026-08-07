@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('api', {
   aiConfirmReply: (ok, remember) => ipcRenderer.invoke('ai-chat-confirm-reply', ok, remember),
   setPermissionMode: (mode) => ipcRenderer.invoke('set-permission-mode', mode),
   setMcpEnabled: (enabled) => ipcRenderer.invoke('set-mcp-enabled', enabled),
+  setMcpServer: (name) => ipcRenderer.invoke('set-mcp-server', name),
   syncRules: (rules) => ipcRenderer.send('sync-rules', rules),
   // 文件自动化：编写规范预设
   automationGetPresets: () => ipcRenderer.invoke('automation-get-presets'),
