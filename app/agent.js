@@ -1126,8 +1126,53 @@ async function httpPostJsonWithRetry(urlStr, headers, body, timeoutMs = 300000, 
   throw lastErr;
 }
 
+// 把已连接的 MCP 服务器的工具包装成本地工具条目
+function buildMcpToolList() {
+  let defs = [];
+  try {
+    const mcp = require('./mcp');
+    defs = mcp.getMcpToolDefs() || [];
+  } catch (e) { return []; }
+  return defs.map((d) => ({
+    name: d.toolName,
+    description: `[MCP·${d.serverName}] ${d.description || d.originalName}`,
+    schema: normalizeMcpSchema(d.schema),
+    tool: {
+      description: d.description,
+      schema: normalizeMcpSchema(d.schema),
+      readOnly: false,
+      permission: 'ask',
+      isMcp: true,
+      async run(args, ctx) {
+        const brief = JSON.stringify(args || {}).slice(0, 300);
+        const ok = await ctx.confirm({
+          type: 'mcp',
+          title: `调用 MCP 工具（${d.serverName}）`,
+          desc: `${d.originalName}\n参数：${brief}`,
+        });
+        if (!ok) return '用户取消了该操作';
+        try {
+          const mcp = require('./mcp');
+          return await mcp.callTool(d.serverName, d.originalName, args || {});
+        } catch (e) {
+          return `MCP 工具调用失败：${e.message}`;
+        }
+      },
+    },
+  }));
+}
+
+// MCP 的 inputSchema 可能缺字段，补全成各家 API 都能接受的形式
+function normalizeMcpSchema(schema) {
+  const s = schema && typeof schema === 'object' ? { ...schema } : {};
+  if (s.type !== 'object') s.type = 'object';
+  if (!s.properties || typeof s.properties !== 'object') s.properties = {};
+  if (s.required && !Array.isArray(s.required)) delete s.required;
+  return s;
+}
+
 function buildToolList(allowedTools, isSubagent, webAccess) {
-  return Object.entries(tools)
+  const local = Object.entries(tools)
     .filter(([name, t]) => {
       if (allowedTools) return allowedTools.includes(name);
       if (isSubagent && name === 'agent') return false; // 子代理不再嵌套子代理
@@ -1135,6 +1180,11 @@ function buildToolList(allowedTools, isSubagent, webAccess) {
       return true;
     })
     .map(([name, t]) => ({ name, description: t.description, schema: t.schema, tool: t }));
+
+  const mcpTools = buildMcpToolList()
+    .filter((t) => (allowedTools ? allowedTools.includes(t.name) : true));
+
+  return local.concat(mcpTools);
 }
 
 async function callApi(profile, apiType, system, messages, toolList) {
@@ -1202,6 +1252,23 @@ function buildSystemPrompt(webAccess) {
   const webGuidance = webAccess
     ? `\n- 需要查最新信息、技术文档、新闻时用 web_search 搜索互联网；需要读取某个网页的详细内容时用 web_fetch。`
     : '';
+  // MCP 外部工具（用户在「AI 设置 → MCP 服务器」中配置）
+  let mcpSection = '';
+  try {
+    const defs = require('./mcp').getMcpToolDefs() || [];
+    if (defs.length) {
+      const byServer = {};
+      for (const d of defs) {
+        (byServer[d.serverName] = byServer[d.serverName] || []).push(
+          `  - ${d.toolName}：${(d.description || d.originalName).slice(0, 160)}`
+        );
+      }
+      const lines = Object.entries(byServer)
+        .map(([s, arr]) => `- 服务器 ${s}：\n${arr.join('\n')}`)
+        .join('\n');
+      mcpSection = `\n\n## MCP 外部工具（用户已接入）\n以下工具由用户配置的 MCP 服务器提供，命名规则 mcp__<服务器>__<工具名>，调用前会请求用户授权：\n${lines}\n优先在这些工具能力覆盖的场景使用它们（例如数据库、云服务、第三方 API）。`;
+    }
+  } catch (e) { /* ignore */ }
   return `你是「AI Copilot」应用内嵌的智能体，运行在本机（macOS）。你可以自主查找、读取、修改、创建本机文件，帮助用户：替换内容、编写文件、修改文件、完善文件、排版文件。
 
 ## 环境
@@ -1230,7 +1297,7 @@ function buildSystemPrompt(webAccess) {
 - 一次性回复中最多 40 轮工具调用（系统限制），如超出请用普通文本回复用户当前进度，让用户说"继续"再续做。
 
 ## 技能包
-${skillList}${recommendedSection}`;
+${skillList}${recommendedSection}${mcpSection}`;
 }
 
 function buildSubagentPrompt(type) {

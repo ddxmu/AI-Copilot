@@ -668,6 +668,217 @@ async function initAiSettings() {
       if (webBadge) webBadge.classList.toggle('hidden', !webToggle.checked);
     });
   }
+  initMcpSettings();
+}
+
+/* ================= MCP 服务器配置 ================= */
+const mcpState = { servers: [], status: [], editing: null };
+
+function $m(id) { return document.getElementById(id); }
+
+function mcpStatusMeta(st) {
+  switch (st) {
+    case 'ready': return { text: '已连接', cls: 'ok' };
+    case 'connecting': return { text: '连接中…', cls: 'wait' };
+    case 'error': return { text: '连接失败', cls: 'err' };
+    case 'disabled': return { text: '已禁用', cls: 'off' };
+    case 'stopped': return { text: '已停止', cls: 'off' };
+    default: return { text: '未连接', cls: 'off' };
+  }
+}
+
+function renderMcpList() {
+  const listEl = $m('mcp-list');
+  const emptyEl = $m('mcp-empty');
+  const countEl = $m('mcp-count');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  if (emptyEl) emptyEl.style.display = mcpState.servers.length ? 'none' : 'block';
+  if (countEl) countEl.textContent = mcpState.servers.length;
+
+  mcpState.servers.forEach((s) => {
+    const st = mcpState.status.find((x) => x.id === s.id || x.name === s.name) || {};
+    const meta = mcpStatusMeta(s.enabled === false ? 'disabled' : (st.status || 'idle'));
+
+    const li = document.createElement('li');
+    const main = document.createElement('div');
+    main.className = 'profile-main';
+
+    const name = document.createElement('div');
+    name.className = 'profile-name';
+    name.textContent = s.name;
+    const dot = document.createElement('span');
+    dot.className = 'mcp-status ' + meta.cls;
+    dot.textContent = meta.text + (st.toolCount ? ` · ${st.toolCount} 个工具` : '');
+    name.appendChild(dot);
+
+    const sub = document.createElement('div');
+    sub.className = 'profile-sub';
+    sub.textContent = `${s.command} ${(s.args || []).join(' ')}`.trim().slice(0, 120);
+    main.append(name, sub);
+
+    if (st.status === 'error' && st.error) {
+      const err = document.createElement('div');
+      err.className = 'mcp-error';
+      err.textContent = String(st.error).slice(0, 300);
+      main.appendChild(err);
+    } else if (st.tools && st.tools.length) {
+      const tools = document.createElement('div');
+      tools.className = 'mcp-tools';
+      tools.textContent = '工具：' + st.tools.map((t) => t.name).join('、').slice(0, 240);
+      main.appendChild(tools);
+    }
+
+    const ops = document.createElement('div');
+    ops.className = 'profile-ops';
+    const editBtn = document.createElement('button');
+    editBtn.textContent = '编辑';
+    editBtn.addEventListener('click', () => openMcpEditor(s));
+    const delBtn = document.createElement('button');
+    delBtn.textContent = '删除';
+    delBtn.className = 'del';
+    delBtn.addEventListener('click', async () => {
+      const r = await window.api.mcpDelete(s.id);
+      if (r.ok) { mcpState.servers = r.servers; mcpState.status = r.status; renderMcpList(); }
+    });
+    ops.append(editBtn, delBtn);
+    li.append(main, ops);
+    listEl.appendChild(li);
+  });
+}
+
+function openMcpEditor(server) {
+  mcpState.editing = server || null;
+  const box = $m('mcp-editor');
+  if (!box) return;
+  $m('mcp-json-editor').classList.add('hidden');
+  box.classList.remove('hidden');
+  $m('mcp-editor-title').textContent = server ? `编辑：${server.name}` : '新增 MCP 服务器';
+  $m('m-name').value = server ? server.name : '';
+  $m('m-command').value = server ? server.command : '';
+  $m('m-args').value = server ? (server.args || []).join('\n') : '';
+  $m('m-env').value = server
+    ? Object.entries(server.env || {}).map(([k, v]) => `${k}=${v}`).join('\n')
+    : '';
+  $m('m-cwd').value = server ? (server.cwd || '') : '';
+  $m('m-enabled').checked = server ? server.enabled !== false : true;
+  $m('mcp-test-status').textContent = '';
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function collectMcpForm() {
+  return {
+    id: mcpState.editing ? mcpState.editing.id : undefined,
+    name: $m('m-name').value.trim(),
+    command: $m('m-command').value.trim(),
+    args: $m('m-args').value,
+    env: $m('m-env').value,
+    cwd: $m('m-cwd').value.trim(),
+    enabled: $m('m-enabled').checked,
+    transport: 'stdio',
+  };
+}
+
+async function refreshMcpState() {
+  try {
+    const r = await window.api.mcpGet();
+    mcpState.servers = r.servers || [];
+    mcpState.status = r.status || [];
+    renderMcpList();
+  } catch (e) { /* ignore */ }
+}
+
+function initMcpSettings() {
+  if (!$m('mcp-list')) return;
+  refreshMcpState();
+
+  $m('btn-new-mcp').addEventListener('click', () => openMcpEditor(null));
+  $m('btn-mcp-cancel').addEventListener('click', () => $m('mcp-editor').classList.add('hidden'));
+
+  $m('btn-mcp-refresh').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true; btn.textContent = '连接中…';
+    const r = await window.api.mcpRefresh();
+    if (r.ok) mcpState.status = r.status;
+    renderMcpList();
+    btn.disabled = false; btn.textContent = '↻ 重新连接';
+  });
+
+  $m('btn-mcp-test').addEventListener('click', async () => {
+    const cfg = collectMcpForm();
+    const status = $m('mcp-test-status');
+    if (!cfg.command) { status.textContent = '请先填写启动命令'; status.className = 'fetch-status err'; return; }
+    status.textContent = '正在启动并握手，请稍候…';
+    status.className = 'fetch-status';
+    const r = await window.api.mcpTest(cfg);
+    if (r.ok) {
+      status.className = 'fetch-status ok';
+      status.textContent = `连接成功，发现 ${r.toolCount} 个工具：` +
+        r.tools.map((t) => t.name).join('、').slice(0, 200);
+    } else {
+      status.className = 'fetch-status err';
+      status.textContent = '连接失败：' + r.error;
+    }
+  });
+
+  $m('btn-mcp-save').addEventListener('click', async () => {
+    const cfg = collectMcpForm();
+    const status = $m('mcp-test-status');
+    if (!cfg.name) { status.textContent = '请填写服务器名称'; status.className = 'fetch-status err'; return; }
+    if (!cfg.command) { status.textContent = '请填写启动命令'; status.className = 'fetch-status err'; return; }
+    status.textContent = '保存并连接中…';
+    status.className = 'fetch-status';
+    const r = await window.api.mcpSave(cfg);
+    if (r.ok) {
+      await refreshMcpState();
+      $m('mcp-editor').classList.add('hidden');
+    } else {
+      status.className = 'fetch-status err';
+      status.textContent = '保存失败：' + r.error;
+    }
+  });
+
+  // JSON 导入
+  $m('btn-mcp-json').addEventListener('click', () => {
+    $m('mcp-editor').classList.add('hidden');
+    $m('mcp-json-editor').classList.remove('hidden');
+    $m('mcp-json-status').textContent = '';
+  });
+  $m('btn-mcp-json-cancel').addEventListener('click', () => $m('mcp-json-editor').classList.add('hidden'));
+  $m('btn-mcp-json-save').addEventListener('click', async () => {
+    const status = $m('mcp-json-status');
+    let data;
+    try { data = JSON.parse($m('m-json').value); }
+    catch (e) { status.className = 'fetch-status err'; status.textContent = 'JSON 解析失败：' + e.message; return; }
+    const map = data.mcpServers || data;
+    const entries = Object.entries(map).filter(([, v]) => v && typeof v === 'object');
+    if (!entries.length) { status.className = 'fetch-status err'; status.textContent = '未找到有效的服务器配置'; return; }
+    status.className = 'fetch-status';
+    status.textContent = '导入中…';
+    let ok = 0;
+    for (const [name, v] of entries) {
+      const exist = mcpState.servers.find((s) => s.name === name);
+      const r = await window.api.mcpSave({
+        id: exist ? exist.id : undefined,
+        name,
+        command: v.command || '',
+        args: v.args || [],
+        env: v.env || {},
+        cwd: v.cwd || '',
+        enabled: v.disabled ? false : true,
+        transport: 'stdio',
+      });
+      if (r.ok) ok++;
+    }
+    await refreshMcpState();
+    status.className = 'fetch-status ok';
+    status.textContent = `已导入 ${ok}/${entries.length} 个服务器`;
+    if (ok === entries.length) $m('mcp-json-editor').classList.add('hidden');
+  });
+
+  if (window.api.onMcpStatusChanged) {
+    window.api.onMcpStatusChanged((s) => { mcpState.status = s || []; renderMcpList(); });
+  }
 }
 
 // 左下角版本号动态同步（从主进程读 package.json）
@@ -1408,7 +1619,7 @@ window.api.onAiToolEnd(({ name, result }) => {
   addToolLine(name + ' ✓', result.slice(0, 200) + (result.length > 200 ? '…' : ''));
 });
 
-const CONFIRM_ICONS = { 'write': '✍️', 'edit': '✏️', 'batch': '🔁', 'open-file': '📂', 'open-url': '🌐' };
+const CONFIRM_ICONS = { 'write': '✍️', 'edit': '✏️', 'batch': '🔁', 'open-file': '📂', 'open-url': '🌐', 'mcp': '🔌' };
 window.api.onAiConfirm((payload) => {
   const type = payload && typeof payload === 'object' ? payload.type : null;
   const title = (payload && payload.title) || '需要授权';

@@ -880,6 +880,94 @@
           </div>
         </div>
 
+        <!-- MCP 服务器 -->
+        <div class="card">
+          <div class="card-title-row">
+            <h2>MCP 服务器 <span id="mcp-count" class="count">0</span></h2>
+            <button id="btn-mcp-refresh" class="btn ghost small">↻ 重新连接</button>
+          </div>
+          <p class="hint" style="margin-bottom:14px">
+            接入 MCP（Model Context Protocol）服务器后，其提供的工具会自动出现在 AI 助手的工具集中，调用前仍会请求你的授权。
+          </p>
+
+          <ul id="mcp-list" class="mcp-list"></ul>
+          <p id="mcp-empty" class="empty">还没有 MCP 服务器，点击下方「新增服务器」接入。</p>
+
+          <div class="btn-group" style="margin-top:6px">
+            <button id="btn-new-mcp" class="btn primary">＋ 新增服务器</button>
+            <button id="btn-mcp-json" class="btn ghost">从 JSON 导入</button>
+          </div>
+        </div>
+
+        <!-- MCP 编辑器 -->
+        <div id="mcp-editor" class="card hidden">
+          <div class="card-title-row">
+            <h2 id="mcp-editor-title">新增 MCP 服务器</h2>
+            <span class="hint">目前支持 stdio 方式启动的本地 MCP 服务</span>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-cell">
+              <label>服务器名称</label>
+              <input id="m-name" type="text" placeholder="filesystem（仅字母数字下划线）" />
+              <div class="field-hint">用作工具名前缀：mcp__名称__工具名</div>
+            </div>
+            <div class="form-cell">
+              <label>启动命令</label>
+              <input id="m-command" type="text" placeholder="npx" />
+              <div class="field-hint">如 npx / uvx / node / python3</div>
+            </div>
+          </div>
+
+          <div class="form-cell" style="margin-top:14px">
+            <label>启动参数（每行一个）</label>
+            <textarea id="m-args" rows="4" placeholder="-y&#10;@modelcontextprotocol/server-filesystem&#10;/Users/你的用户名/Documents"></textarea>
+          </div>
+
+          <div class="form-grid" style="margin-top:14px">
+            <div class="form-cell">
+              <label>环境变量（每行 KEY=VALUE）</label>
+              <textarea id="m-env" rows="3" placeholder="API_TOKEN=xxxx"></textarea>
+            </div>
+            <div class="form-cell">
+              <label>工作目录（可选）</label>
+              <input id="m-cwd" type="text" placeholder="留空则使用用户主目录" />
+              <label style="margin-top:12px;display:flex;align-items:center;gap:8px;font-weight:400">
+                <input id="m-enabled" type="checkbox" checked style="width:auto" /> 启用该服务器
+              </label>
+            </div>
+          </div>
+
+          <div id="mcp-test-status" class="fetch-status"></div>
+
+          <div class="btn-group" style="margin-top:18px">
+            <button id="btn-mcp-test" class="btn">测试连接</button>
+            <button id="btn-mcp-save" class="btn primary">保存并连接</button>
+            <button id="btn-mcp-cancel" class="btn ghost">取消</button>
+          </div>
+        </div>
+
+        <!-- MCP JSON 导入 -->
+        <div id="mcp-json-editor" class="card hidden">
+          <div class="card-title-row">
+            <h2>从 JSON 导入</h2>
+            <span class="hint">兼容 Claude Desktop 的 mcpServers 配置格式</span>
+          </div>
+          <textarea id="m-json" rows="10" placeholder='{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/me/Documents"]
+    }
+  }
+}'></textarea>
+          <div id="mcp-json-status" class="fetch-status"></div>
+          <div class="btn-group" style="margin-top:14px">
+            <button id="btn-mcp-json-save" class="btn primary">导入并连接</button>
+            <button id="btn-mcp-json-cancel" class="btn ghost">取消</button>
+          </div>
+        </div>
+
         <!-- 智能体技能 -->
         <div class="card">
           <h2>智能体技能 <span id="skill-count" class="count">0</span></h2>

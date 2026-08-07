@@ -1,10 +1,10 @@
 {
-  "version": "0.6.9",
-  "notes": "- **更新检查更主动（后台静默）**：新增「文件打开即检查」——每当在任意模块选中文件/文件夹（按规则替换、AI 附件、重命名、格式转换、PDF去水印等），后台静默同步一次更新情况，有更新就弹出左侧栏提示，不打扰操作；同时把空闲轮询间隔从 20 分钟缩短为 10 分钟（带 60 秒去抖，避免高频触发反复请求 GitHub）。",
-  "pubDate": "2026-08-05T17:57:58+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.9/AI.Copilot-0.6.9-arm64.dmg",
-  "sha256": "785715f8c98e2200bb66a126cefe27031ec461f8c27c47c02ba65de79ea342f0",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.6.9/delta-0.6.9.zip",
-  "deltaSha256": "f1b8e405814c509ee8b4de940afe833a0b2e02a59e33b90fb8b602130d8fc5c6",
-  "deltaFromVersion": "0.6.8"
+  "version": "0.7.0",
+  "notes": "- **新增 MCP 服务器接入（AI 设置 → MCP 服务器）**：填好连接信息，AI 助手即可直接使用该服务器提供的全部工具。\n  - 支持 stdio 方式启动的本地 MCP 服务（npx / uvx / node / python3 等），可配置**启动命令、参数、环境变量、工作目录**，并可单独启用/禁用。\n  - **测试连接**按钮：先握手试跑一遍，直接列出发现的工具，确认可用再保存。\n  - **从 JSON 导入**：兼容 Claude Desktop 的 `mcpServers` 配置，粘贴即可批量接入。\n  - 卡片实时显示每个服务器的连接状态（已连接 / 连接失败 / 未连接）、工具数量与工具名；失败时给出具体原因（找不到命令会提示填写完整路径）。\n  - MCP 工具以 `mcp__<服务器名>__<工具名>` 形式加入智能体工具集，并写进系统提示词；**每次调用前仍会弹出授权确认**，与本地工具一致的安全策略。\n  - 自研 stdio JSON-RPC 客户端（零外部依赖），自动补全 Homebrew / nvm / uv 等常见可执行路径，避免从 Finder 启动时找不到命令；应用退出时自动清理子进程。",
+  "pubDate": "2026-08-07T10:20:26+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.0/AI.Copilot-0.7.0-arm64.dmg",
+  "sha256": "2529a434cc6934d3d63d3384d0b5bfef23a0861f5f6c22746a88b5e691b81bcc",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.0/delta-0.7.0.zip",
+  "deltaSha256": "83b49c23d19e53d3ff369c6a529921c3fddcfd3f9d63cc423ef95a8b19b0704e",
+  "deltaFromVersion": "0.6.9"
 }
