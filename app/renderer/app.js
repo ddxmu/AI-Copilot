@@ -697,7 +697,7 @@ const MCP_MARKET_TEMPLATES = [
     args: ['-y', '@modelcontextprotocol/server-filesystem', '{{path}}'],
     env: {},
     params: [
-      { key: 'path', label: '允许访问的目录', placeholder: '/Users/你的用户名/Documents', required: true }
+      { key: 'path', label: '允许访问的目录', placeholder: '/Users/你的用户名/Documents', required: true, type: 'dir' }
     ]
   },
   {
@@ -940,7 +940,7 @@ function renderMcpMarketList(filter = '', category = '') {
         </div>
       </div>
       <div class="mcp-market-desc">${t.desc}</div>
-      <div class="mcp-market-cmd">${t.transport === 'sse' ? '🌐 远程 SSE：' + (t.baseUrl || '') : t.command + ' ' + t.args.join(' ')}</div>
+      <div class="mcp-market-cmd">${t.transport === 'sse' ? '🌐 远程 SSE：' + (t.baseUrl || '') : t.command + ' ' + t.args.join(' ').replace(/\{\{([^}]+)\}\}/g, '<$1>')}</div>
       <button class="btn small mcp-market-add" data-id="${t.id}">配置并添加</button>
     `;
     card.querySelector('.mcp-market-add').addEventListener('click', () => selectMcpMarketTemplate(t));
@@ -966,11 +966,27 @@ function selectMcpMarketTemplate(template) {
       const row = document.createElement('div');
       row.className = 'form-cell';
       row.style.marginBottom = '12px';
+      const isDir = p.type === 'dir';
+      const inputType = p.type === 'password' ? 'password' : 'text';
       row.innerHTML = `
         <label>${p.label}${p.required ? ' <span style="color:#e74c3c">*</span>' : ''}</label>
-        <input id="mcp-market-param-${p.key}" type="${p.type === 'password' ? 'password' : 'text'}" placeholder="${p.placeholder || ''}" />
+        <div class="param-input-row">
+          <input id="mcp-market-param-${p.key}" type="${inputType}" placeholder="${p.placeholder || ''}" />
+          ${isDir ? '<button type="button" class="btn small mcp-browse-dir" data-key="' + p.key + '">浏览…</button>' : ''}
+        </div>
       `;
       body.appendChild(row);
+    });
+    // 绑定目录浏览按钮
+    body.querySelectorAll('.mcp-browse-dir').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const key = btn.getAttribute('data-key');
+        const picked = await window.api.selectFolder();
+        if (picked) {
+          const el = $m(`mcp-market-param-${key}`);
+          if (el) el.value = picked;
+        }
+      });
     });
   }
   paramsBox.classList.remove('hidden');
@@ -1057,6 +1073,10 @@ function initMcpSettings() {
 
   $m('btn-new-mcp').addEventListener('click', () => openMcpEditor(null));
   $m('btn-mcp-cancel').addEventListener('click', () => $m('mcp-editor').classList.add('hidden'));
+  $m('btn-mcp-browse-cwd').addEventListener('click', async () => {
+    const picked = await window.api.selectFolder();
+    if (picked) $m('m-cwd').value = picked;
+  });
   $m('m-transport').addEventListener('change', toggleMcpTransport);
 
   // MCP 市场
