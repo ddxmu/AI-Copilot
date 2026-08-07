@@ -1,10 +1,10 @@
 {
-  "version": "0.7.8",
-  "notes": "- **AI 助手 MCP 开关默认改为「关」**：之前默认开启会让模型自动调用所有已连接的 MCP 服务器，现在默认关闭，避免不必要的工具注入；需要时点一下开关即可开启。\n- **开启 MCP 后可单选一个服务器使用**：开关旁边新增一个下拉，列出当前已连接（ready）的 MCP 服务器，单选其一后本次会话只把该服务器的工具注入给模型（工具列表 + 系统提示词都按选中的服务器过滤）。服务器连接状态变化时下拉自动刷新；无已连接服务器时显示占位并禁用。",
-  "pubDate": "2026-08-07T14:26:34+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.8/AI.Copilot-0.7.8-arm64.dmg",
-  "sha256": "5b05a1532b0d6751b928c9b1b3538680f170d21fbc67d70676828dd44fb6e5a2",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.8/delta-0.7.8.zip",
-  "deltaSha256": "e5f9cb10923514a30f78ebcbb2a3574a5ef8cfa2f9d3aaaa623508f7954e4468",
-  "deltaFromVersion": "0.7.7"
+  "version": "0.7.9",
+  "notes": "- **修复 MCP 市场「Fetch」模板包名错误**：之前模板使用 `@modelcontextprotocol/server-fetch`，但该包在 npm 上不存在（404），导致添加后连接失败。改为真实存在的社区 Node 包 `mcp-fetch`（`npx -y mcp-fetch`），无需 API Key，首次运行会自动下载依赖。",
+  "pubDate": "2026-08-07T14:56:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.9/AI.Copilot-0.7.9-arm64.dmg",
+  "sha256": "2669345bf08d69cce93678ee5238e1a3252c837c2aefb94e1adb4f57de3fb105",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.9/delta-0.7.9.zip",
+  "deltaSha256": "6f01d28f6390d01684c341fb614d12cc1cda52c956a858fb707ce7fd9563df17",
+  "deltaFromVersion": "0.7.8"
 }

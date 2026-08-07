@@ -681,9 +681,9 @@ const MCP_MARKET_TEMPLATES = [
     name: 'Fetch',
     category: '常用',
     icon: '🌐',
-    desc: '让 AI 助手获取任意网页内容，并转换为 Markdown。无需 API Key。',
+    desc: '让 AI 助手获取任意网页内容（社区 Node 实现 mcp-fetch）。无需 API Key，首次运行会自动下载依赖。',
     command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-fetch'],
+    args: ['-y', 'mcp-fetch'],
     env: {},
     params: []
   },
