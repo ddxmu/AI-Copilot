@@ -1220,6 +1220,12 @@ body {
   padding: 0 4px;
 }
 
+.composer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* 权限下拉 */
 .perm {
   position: relative;
