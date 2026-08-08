@@ -3469,7 +3469,7 @@ async function renderRecommendedSkills() {
     }
     skillRecommendedListEl.appendChild(makeSkillItem({
       badge: skillBadge(s.name), name: s.name, desc: s.description,
-      tag: s.installed ? null : s.category, tagClass: 'cat', actions,
+      tag: s.installed ? null : (s.repo ? 'GitHub' : s.category), tagClass: 'cat', actions,
     }));
   });
   if (!items.length) {
