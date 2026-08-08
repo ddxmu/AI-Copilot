@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('api', {
   skillsInstallGithub: (fullName, defaultBranch) => ipcRenderer.invoke('skills-install-github', { fullName, defaultBranch }),
   skillsListRecommended: () => ipcRenderer.invoke('skills-list-recommended'),
   skillsInstallRecommended: (name) => ipcRenderer.invoke('skills-install-recommended', name),
+  onSkillInstallProgress: (cb) => ipcRenderer.on('skill-install-progress', (_e, info) => cb(info)),
   pdfAnalyzeWatermark: (files) => ipcRenderer.invoke('pdf-analyze-watermark', files),
   pdfRemoveWatermark: (files, watermarks, outputDir) =>
     ipcRenderer.invoke('pdf-remove-watermark', { files, watermarks, outputDir }),
