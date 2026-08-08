@@ -927,7 +927,7 @@ const tools = {
           // 仓库型技能：从 GitHub 下载（需主进程支持 installSkillFromUrl）
           if (ctx.installSkillFromUrl) {
             try {
-              const r = await ctx.installSkillFromUrl(def.repo, def.branch || 'main');
+              const r = await ctx.installSkillFromUrl(def.repo, def.branch || 'main', skill);
               if (r && r.ok) ok = true; else errMsg = (r && r.error) || '安装失败（未知原因）';
             } catch (e) { errMsg = e.message; }
           } else {

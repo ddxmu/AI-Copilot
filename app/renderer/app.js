@@ -3441,6 +3441,15 @@ async function renderSkills() {
   }
 }
 
+// 当前正在安装的按钮（用于接收进度推送）
+let currentSkillInstallBtn = null;
+let currentSkillInstallName = null;
+window.api.onSkillInstallProgress((info) => {
+  if (!currentSkillInstallBtn || currentSkillInstallName !== info.name) return;
+  const mb = (info.bytes / 1024 / 1024).toFixed(1);
+  currentSkillInstallBtn.textContent = info.retry ? '重试中…' : `下载中 ${mb}MB…`;
+});
+
 /* ---- 推荐技能（一键安装） ---- */
 const skillRecommendedListEl = document.getElementById('skill-recommended-list');
 async function renderRecommendedSkills() {
@@ -3454,15 +3463,25 @@ async function renderRecommendedSkills() {
       const btn = document.createElement('button');
       btn.className = 'btn small primary'; btn.textContent = '安装';
       btn.addEventListener('click', async () => {
-        btn.disabled = true; btn.textContent = '安装中…';
-        const res = await window.api.skillsInstallRecommended(s.name);
-        if (res.ok) {
-          btn.textContent = '✓ 已安装';
-          renderSkills();
-          renderRecommendedSkills();
-        } else {
+        btn.disabled = true; btn.textContent = '准备下载…';
+        currentSkillInstallBtn = btn;
+        currentSkillInstallName = s.name;
+        try {
+          const res = await window.api.skillsInstallRecommended(s.name);
+          if (res.ok) {
+            btn.textContent = '✓ 已安装';
+            renderSkills();
+            renderRecommendedSkills();
+          } else {
+            btn.disabled = false; btn.textContent = '安装';
+            alert('安装失败：' + res.error);
+          }
+        } catch (e) {
           btn.disabled = false; btn.textContent = '安装';
-          alert('安装失败：' + res.error);
+          alert('安装异常：' + e.message);
+        } finally {
+          currentSkillInstallBtn = null;
+          currentSkillInstallName = null;
         }
       });
       actions.push(btn);
@@ -3492,15 +3511,25 @@ document.getElementById('skill-search-btn').addEventListener('click', async () =
     const btn = document.createElement('button');
     btn.className = 'btn small primary'; btn.textContent = '下载并安装';
     btn.addEventListener('click', async () => {
-      btn.disabled = true; btn.textContent = '安装中…';
-      const res = await window.api.skillsInstallGithub(it.fullName, it.defaultBranch);
-      if (res.ok) {
-        btn.textContent = '✓ 已安装';
-        skillSearchStatusEl.textContent = `已安装技能：${res.installed.join('、')}`;
-        renderSkills();
-      } else {
+      btn.disabled = true; btn.textContent = '准备下载…';
+      currentSkillInstallBtn = btn;
+      currentSkillInstallName = it.fullName;
+      try {
+        const res = await window.api.skillsInstallGithub(it.fullName, it.defaultBranch);
+        if (res.ok) {
+          btn.textContent = '✓ 已安装';
+          skillSearchStatusEl.textContent = `已安装技能：${res.installed.join('、')}`;
+          renderSkills();
+        } else {
+          btn.disabled = false; btn.textContent = '下载并安装';
+          skillSearchStatusEl.textContent = '安装失败：' + res.error;
+        }
+      } catch (e) {
         btn.disabled = false; btn.textContent = '下载并安装';
-        skillSearchStatusEl.textContent = '安装失败：' + res.error;
+        skillSearchStatusEl.textContent = '安装异常：' + e.message;
+      } finally {
+        currentSkillInstallBtn = null;
+        currentSkillInstallName = null;
       }
     });
     skillSearchListEl.appendChild(makeSkillItem({

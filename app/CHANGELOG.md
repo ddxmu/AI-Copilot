@@ -1,3 +1,6 @@
+## v0.8.1 — 2026-08-08
+- **修复推荐技能从 GitHub 安装时一直显示「安装中」**：`open-kimi-ppt` 等仓库型推荐技能点击安装后，因为 `codeload.github.com` 下载较慢（约 2.6MB 需 60-90 秒）且 UI 没有进度反馈，用户会以为卡死。修复：① `httpsDownload` 超时从 120s 延长到 300s；② 主进程在下载过程中通过 `skill-install-progress` 推送已下载字节数；③ 渲染层按钮实时显示「下载中 X.XMB…」；④ 安装按钮逻辑加 try/catch，异常或失败时恢复「安装」状态并弹窗提示。
+
 ## v0.8.0 — 2026-08-08
 - **推荐技能支持直接从 GitHub 仓库安装**：新增「open-kimi-ppt」推荐技能（Kimi PPT 幻灯片技能，仓库 `ddxmu/open-kimi-ppt-skill`），点击「安装」即从 GitHub 下载并解压 `SKILL.md` 及其引用文件，无需手动复制。推荐技能入口项新增 `repo`/`branch` 字段；主进程 `skills-install-recommended` 在含 `repo` 时走仓库下载安装（复用 `installSkillFromGithub`）；`agent.js` 的 `install_skill` 工具也支持仓库型技能（`ctx.installSkillFromUrl`）。推荐列表对仓库型技能显示「GitHub」徽标。
 

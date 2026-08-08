@@ -721,36 +721,47 @@ ipcMain.handle('skills-search-github', async (_e, keyword) => {
   }
 });
 
-// 下载 zipball（跟随重定向，返回 Buffer）
-function httpsDownload(urlStr, redirects = 5) {
+// 下载 zipball（跟随重定向，返回 Buffer）。onProgress 接收已下载字节数。
+function httpsDownload(urlStr, redirects = 5, onProgress) {
   return new Promise((resolve, reject) => {
     const url = new URL(urlStr);
     const req = https.request({
       method: 'GET', hostname: url.hostname, path: url.pathname + url.search,
-      headers: { 'User-Agent': 'AI-Copilot-Skill-Installer' }, timeout: 120000,
+      headers: { 'User-Agent': 'AI-Copilot-Skill-Installer' }, timeout: 300000,
     }, (res) => {
       if ([301, 302, 307, 308].includes(res.statusCode) && redirects > 0 && res.headers.location) {
         res.resume();
-        return resolve(httpsDownload(res.headers.location, redirects - 1));
+        return resolve(httpsDownload(res.headers.location, redirects - 1, onProgress));
       }
       if (res.statusCode !== 200) { res.resume(); return reject(new Error(`HTTP ${res.statusCode}`)); }
       const chunks = [];
-      res.on('data', (c) => chunks.push(c));
+      res.on('data', (c) => {
+        chunks.push(c);
+        if (onProgress) onProgress(Buffer.concat(chunks).length);
+      });
       res.on('end', () => resolve(Buffer.concat(chunks)));
     });
     req.on('error', reject);
-    req.on('timeout', () => { req.destroy(new Error('下载超时')); });
+    req.on('timeout', () => { req.destroy(); reject(new Error('下载超时（300s）')); });
     req.end();
   });
 }
 
 // 从 GitHub 仓库下载并安装技能：找仓库内的 SKILL.md
-async function installSkillFromGithub(fullName, defaultBranch) {
+async function installSkillFromGithub(fullName, defaultBranch, progressName) {
   const zipUrl = `https://codeload.github.com/${fullName}/zip/refs/heads/${defaultBranch || 'main'}`;
   let buf;
-  try { buf = await httpsDownload(zipUrl); }
+  const sendProgress = (bytes) => {
+    if (!progressName || !mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('skill-install-progress', { name: progressName, bytes });
+  };
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('skill-install-progress', { name: progressName, bytes: 0 });
+    buf = await httpsDownload(zipUrl, 5, sendProgress);
+  }
   catch (e) { // 有些仓库默认分支是 master
-    buf = await httpsDownload(`https://codeload.github.com/${fullName}/zip/refs/heads/master`);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('skill-install-progress', { name: progressName, bytes: 0, retry: true });
+    buf = await httpsDownload(`https://codeload.github.com/${fullName}/zip/refs/heads/master`, 5, sendProgress);
   }
   const entries = readZipEntries(buf);
   // 找 SKILL.md（优先根目录 / skills 目录下）
@@ -784,7 +795,7 @@ async function installSkillFromGithub(fullName, defaultBranch) {
 
 ipcMain.handle('skills-install-github', async (_e, { fullName, defaultBranch }) => {
   try {
-    return await installSkillFromGithub(fullName, defaultBranch);
+    return await installSkillFromGithub(fullName, defaultBranch, fullName);
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -809,7 +820,7 @@ ipcMain.handle('skills-install-recommended', async (_e, name) => {
   // 仓库型技能：从 GitHub 下载安装
   if (def.repo) {
     try {
-      return await installSkillFromGithub(def.repo, def.branch || 'main');
+      return await installSkillFromGithub(def.repo, def.branch || 'main', name);
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -1374,8 +1385,8 @@ ipcMain.handle('ai-chat', async (event, { history, text }) => {
         wc.send('ai-chat-install-skill', info);
       }),
       // 仓库型推荐技能：由主进程从 GitHub 下载安装（供 install_skill 工具调用）
-      installSkillFromUrl: async (repo, branch) => {
-        try { return await installSkillFromGithub(repo, branch); }
+      installSkillFromUrl: async (repo, branch, name) => {
+        try { return await installSkillFromGithub(repo, branch, name || repo); }
         catch (e) { return { ok: false, error: e.message }; }
       },
       getRules: () => sharedRules,
