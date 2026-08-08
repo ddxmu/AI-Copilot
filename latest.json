@@ -1,10 +1,10 @@
 {
-  "version": "0.7.9",
-  "notes": "- **修复 MCP 市场「Fetch」模板包名错误**：之前模板使用 `@modelcontextprotocol/server-fetch`，但该包在 npm 上不存在（404），导致添加后连接失败。改为真实存在的社区 Node 包 `mcp-fetch`（`npx -y mcp-fetch`），无需 API Key，首次运行会自动下载依赖。",
-  "pubDate": "2026-08-07T14:56:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.9/AI.Copilot-0.7.9-arm64.dmg",
-  "sha256": "2669345bf08d69cce93678ee5238e1a3252c837c2aefb94e1adb4f57de3fb105",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.7.9/delta-0.7.9.zip",
-  "deltaSha256": "6f01d28f6390d01684c341fb614d12cc1cda52c956a858fb707ce7fd9563df17",
-  "deltaFromVersion": "0.7.8"
+  "version": "0.8.0",
+  "notes": "- **推荐技能支持直接从 GitHub 仓库安装**：新增「open-kimi-ppt」推荐技能（Kimi PPT 幻灯片技能，仓库 `ddxmu/open-kimi-ppt-skill`），点击「安装」即从 GitHub 下载并解压 `SKILL.md` 及其引用文件，无需手动复制。推荐技能入口项新增 `repo`/`branch` 字段；主进程 `skills-install-recommended` 在含 `repo` 时走仓库下载安装（复用 `installSkillFromGithub`）；`agent.js` 的 `install_skill` 工具也支持仓库型技能（`ctx.installSkillFromUrl`）。推荐列表对仓库型技能显示「GitHub」徽标。",
+  "pubDate": "2026-08-08T11:56:09+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.0/AI.Copilot-0.8.0-arm64.dmg",
+  "sha256": "60f401bb6d792c7e08dd8b6cdf37bd56fb55b6739cc3d6185120c5bb87721dee",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.0/delta-0.8.0.zip",
+  "deltaSha256": "c49369991072830f7ed298cfbe5044daa6ba9aa3ada1ae014d1cb9ca76222d40",
+  "deltaFromVersion": "0.7.9"
 }

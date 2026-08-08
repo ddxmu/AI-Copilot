@@ -379,6 +379,13 @@ const RECOMMENDED_SKILLS = {
 - 法律/合同类文档需保守翻译，不增减内容
 - 翻译完成后提示用户校对`,
   },
+  'open-kimi-ppt': {
+    description: 'Kimi PPT 幻灯片技能：创建 / 编辑 / 复刻 / 读取并导出 PPT/PPTX（基于 PPTD YAML 中间层，自动生成可编辑 PPTD 项目 + 成品 PPTX）。',
+    category: '演示文稿',
+    // 无内联 body，安装时从 GitHub 仓库下载
+    repo: 'ddxmu/open-kimi-ppt-skill',
+    branch: 'main',
+  },
 };
 
 // 运行时技能表 = 内置 + 外部安装（userData/skills/<name>/SKILL.md）
@@ -915,15 +922,29 @@ const tools = {
       }
       // 安装技能：写入 SKILL.md 并重新加载
       if (ctx.skillsDir) {
-        const dir = path.join(ctx.skillsDir, skill);
-        try {
-          fs.mkdirSync(dir, { recursive: true });
-          const md = `---\nname: ${skill}\ndescription: ${def.description}\n---\n\n${def.body}`;
-          fs.writeFileSync(path.join(dir, 'SKILL.md'), md, 'utf8');
-          loadExternalSkills(ctx.skillsDir);
-        } catch (e) {
-          return `安装技能「${skill}」失败：${e.message}`;
+        let ok = false, errMsg = '';
+        if (def.repo) {
+          // 仓库型技能：从 GitHub 下载（需主进程支持 installSkillFromUrl）
+          if (ctx.installSkillFromUrl) {
+            try {
+              const r = await ctx.installSkillFromUrl(def.repo, def.branch || 'main');
+              if (r && r.ok) ok = true; else errMsg = (r && r.error) || '安装失败（未知原因）';
+            } catch (e) { errMsg = e.message; }
+          } else {
+            errMsg = '当前运行环境不支持从仓库安装，请到「AI 设置 → 智能体技能 → 推荐技能」中点击「安装」。';
+          }
+        } else {
+          // 内联 body 写入
+          const dir = path.join(ctx.skillsDir, skill);
+          try {
+            fs.mkdirSync(dir, { recursive: true });
+            const md = `---\nname: ${skill}\ndescription: ${def.description}\n---\n\n${def.body}`;
+            fs.writeFileSync(path.join(dir, 'SKILL.md'), md, 'utf8');
+            ok = true;
+          } catch (e) { errMsg = e.message; }
         }
+        if (!ok) return `安装技能「${skill}」失败：${errMsg}`;
+        loadExternalSkills(ctx.skillsDir);
       }
       return `技能「${skill}」已安装成功！现在可以用 skill 工具调用「${skill}」获取操作指引，然后按指引执行任务。`;
     },

@@ -1,3 +1,6 @@
+## v0.8.0 — 2026-08-08
+- **推荐技能支持直接从 GitHub 仓库安装**：新增「open-kimi-ppt」推荐技能（Kimi PPT 幻灯片技能，仓库 `ddxmu/open-kimi-ppt-skill`），点击「安装」即从 GitHub 下载并解压 `SKILL.md` 及其引用文件，无需手动复制。推荐技能入口项新增 `repo`/`branch` 字段；主进程 `skills-install-recommended` 在含 `repo` 时走仓库下载安装（复用 `installSkillFromGithub`）；`agent.js` 的 `install_skill` 工具也支持仓库型技能（`ctx.installSkillFromUrl`）。推荐列表对仓库型技能显示「GitHub」徽标。
+
 ## v0.7.9 — 2026-08-07
 - **修复 MCP 市场「Fetch」模板包名错误**：之前模板使用 `@modelcontextprotocol/server-fetch`，但该包在 npm 上不存在（404），导致添加后连接失败。改为真实存在的社区 Node 包 `mcp-fetch`（`npx -y mcp-fetch`），无需 API Key，首次运行会自动下载依赖。
 

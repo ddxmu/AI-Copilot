@@ -745,42 +745,46 @@ function httpsDownload(urlStr, redirects = 5) {
 }
 
 // 从 GitHub 仓库下载并安装技能：找仓库内的 SKILL.md
+async function installSkillFromGithub(fullName, defaultBranch) {
+  const zipUrl = `https://codeload.github.com/${fullName}/zip/refs/heads/${defaultBranch || 'main'}`;
+  let buf;
+  try { buf = await httpsDownload(zipUrl); }
+  catch (e) { // 有些仓库默认分支是 master
+    buf = await httpsDownload(`https://codeload.github.com/${fullName}/zip/refs/heads/master`);
+  }
+  const entries = readZipEntries(buf);
+  // 找 SKILL.md（优先根目录 / skills 目录下）
+  const skillFiles = entries.filter((en) => /(^|\/)SKILL\.md$/i.test(en.name));
+  if (!skillFiles.length) return { ok: false, error: '该仓库中没有找到 SKILL.md' };
+  // 可能多个技能目录，全部安装
+  const installed = [];
+  for (const sf of skillFiles) {
+    const content = sf.data.toString('utf8');
+    const parsed = parseSkillMd(content, path.basename(path.dirname(sf.name)));
+    const safe = path.basename(parsed.name).replace(/[^\w一-龥-]/g, '-');
+    ensureSkillsDir();
+    const dir = path.join(SKILLS_DIR, safe);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), content, 'utf8');
+    // 同目录下的引用文件（references/ scripts/ 等）一并解压
+    const prefix = sf.name.replace(/SKILL\.md$/i, '');
+    for (const en of entries) {
+      if (en.name.startsWith(prefix) && en.name !== sf.name && !en.name.endsWith('/')) {
+        const rel = en.name.slice(prefix.length);
+        if (rel.includes('..')) continue;
+        const target = path.join(dir, rel);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, en.data);
+      }
+    }
+    installed.push(parsed.name);
+  }
+  return { ok: true, installed, all: listInstalledSkills() };
+}
+
 ipcMain.handle('skills-install-github', async (_e, { fullName, defaultBranch }) => {
   try {
-    const zipUrl = `https://codeload.github.com/${fullName}/zip/refs/heads/${defaultBranch || 'main'}`;
-    let buf;
-    try { buf = await httpsDownload(zipUrl); }
-    catch (e) { // 有些仓库默认分支是 master
-      buf = await httpsDownload(`https://codeload.github.com/${fullName}/zip/refs/heads/master`);
-    }
-    const entries = readZipEntries(buf);
-    // 找 SKILL.md（优先根目录 / skills 目录下）
-    const skillFiles = entries.filter((en) => /(^|\/)SKILL\.md$/i.test(en.name));
-    if (!skillFiles.length) return { ok: false, error: '该仓库中没有找到 SKILL.md' };
-    // 可能多个技能目录，全部安装
-    const installed = [];
-    for (const sf of skillFiles) {
-      const content = sf.data.toString('utf8');
-      const parsed = parseSkillMd(content, path.basename(path.dirname(sf.name)));
-      const safe = path.basename(parsed.name).replace(/[^\w一-龥-]/g, '-');
-      ensureSkillsDir();
-      const dir = path.join(SKILLS_DIR, safe);
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, 'SKILL.md'), content, 'utf8');
-      // 同目录下的引用文件（references/ scripts/ 等）一并解压
-      const prefix = sf.name.replace(/SKILL\.md$/i, '');
-      for (const en of entries) {
-        if (en.name.startsWith(prefix) && en.name !== sf.name && !en.name.endsWith('/')) {
-          const rel = en.name.slice(prefix.length);
-          if (rel.includes('..')) continue;
-          const target = path.join(dir, rel);
-          fs.mkdirSync(path.dirname(target), { recursive: true });
-          fs.writeFileSync(target, en.data);
-        }
-      }
-      installed.push(parsed.name);
-    }
-    return { ok: true, installed, all: listInstalledSkills() };
+    return await installSkillFromGithub(fullName, defaultBranch);
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -794,13 +798,23 @@ ipcMain.handle('skills-list-recommended', () => {
     name,
     description: v.description,
     category: v.category || '通用',
+    repo: v.repo || null,
     installed: installedNames.has(name),
   }));
 });
 
-ipcMain.handle('skills-install-recommended', (_e, name) => {
+ipcMain.handle('skills-install-recommended', async (_e, name) => {
   const def = RECOMMENDED_SKILLS[name];
   if (!def) return { ok: false, error: '未知推荐技能' };
+  // 仓库型技能：从 GitHub 下载安装
+  if (def.repo) {
+    try {
+      return await installSkillFromGithub(def.repo, def.branch || 'main');
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }
+  // 内联型技能：直接写 SKILL.md
   ensureSkillsDir();
   const dir = path.join(SKILLS_DIR, path.basename(String(name)));
   try {
@@ -1359,6 +1373,11 @@ ipcMain.handle('ai-chat', async (event, { history, text }) => {
         };
         wc.send('ai-chat-install-skill', info);
       }),
+      // 仓库型推荐技能：由主进程从 GitHub 下载安装（供 install_skill 工具调用）
+      installSkillFromUrl: async (repo, branch) => {
+        try { return await installSkillFromGithub(repo, branch); }
+        catch (e) { return { ok: false, error: e.message }; }
+      },
       getRules: () => sharedRules,
       onRulesChanged: () => wc.send('rules-changed', sharedRules),
     });
