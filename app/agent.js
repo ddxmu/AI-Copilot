@@ -402,20 +402,22 @@ const RECOMMENDED_SKILLS = {
     repo: 'ddxmu/open-kimi-ppt-skill',
     branch: 'main',
     // 环境依赖：技能执行前自检，缺失时由 AI 助手在用户授权后自动安装
+    // 默认走本地离线导出（export_pptx_local.py，仅需 python3）；Node.js 仅 Kimi 在线导出兜底才需要（optional）
     prerequisites: [
-      {
-        id: 'node18',
-        name: 'Node.js 18+',
-        desc: 'PPTX 导出（export_pptx.py）依赖 Node.js 18 及以上运行时（含 npm/npx）',
-        check: 'node -v 2>/dev/null | grep -qE "v(1[89]|[2-9][0-9])"',
-        install: 'if command -v brew >/dev/null 2>&1; then brew install node; else echo "未检测到 Homebrew，请先安装 Homebrew（https://brew.sh）或到 https://nodejs.org 手动安装 Node.js 18+ 后再试。"; exit 1; fi',
-      },
       {
         id: 'python3',
         name: 'Python 3',
-        desc: '运行 export_pptx.py / export_images.py 需要 python3',
+        desc: '默认离线导出（export_pptx_local.py）与 Kimi 在线导出兜底都需要 python3；导出脚本会按需用 pip 安装 python-pptx / PyYAML',
         check: 'command -v python3 >/dev/null 2>&1',
         install: 'if command -v brew >/dev/null 2>&1; then brew install python; else echo "请手动安装 Python 3（https://www.python.org）。"; exit 1; fi',
+      },
+      {
+        id: 'node18',
+        name: 'Node.js 18+（可选）',
+        desc: '仅在使用 Kimi 在线导出（export_pptx.py 兜底）时需要 Node.js 18 及以上；默认离线导出不需要，可跳过',
+        check: 'node -v 2>/dev/null | grep -qE "v(1[89]|[2-9][0-9])"',
+        install: 'if command -v brew >/dev/null 2>&1; then brew install node; else echo "未检测到 Homebrew，请到 https://nodejs.org 手动安装 Node.js 18+ 后再试。"; exit 1; fi',
+        optional: true,
       },
     ],
   },
@@ -1017,8 +1019,9 @@ const tools = {
         try {
           ok = await new Promise((res) => exec(p.check, { timeout: 20000, windowsHide: true }, (err) => res(!err)));
         } catch { ok = false; }
-        lines.push(`${ok ? '✅ 已满足' : '❌ 缺失'}  ${p.name}（id=${p.id}）：${p.desc}`);
-        if (!ok) missing.push(p.id);
+        const tag = ok ? '✅ 已满足' : (p.optional ? '⚪️ 可选缺失' : '❌ 缺失');
+        lines.push(`${tag}  ${p.name}（id=${p.id}）：${p.desc}`);
+        if (!ok && !p.optional) missing.push(p.id);
       }
       let out = `技能「${skill}」环境依赖自检：\n` + lines.join('\n');
       out += missing.length

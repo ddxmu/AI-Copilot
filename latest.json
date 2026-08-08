@@ -1,10 +1,10 @@
 {
-  "version": "0.8.4",
-  "notes": "- **技能缺失依赖自动检测 + 授权后自动安装**：技能可声明环境依赖（如 `open-kimi-ppt` 需要 Node.js 18+ 与 Python 3）。当模型调用 `skill` 工具加载带依赖的技能时，指引中会自动追加「环境依赖自检」步骤：先调用新增的 `check_dependencies` 工具逐项自检，若发现缺失项，再调用 `install_dependency` 工具——后者会弹出一个授权确认条（📦 图标，文案「授权安装 Node.js 18+」等），用户点击「确定」后 AI 助手自动执行安装命令（如 `brew install node`，超时 10 分钟），装完继续任务；用户拒绝则降级说明。依赖声明集中在 `agent.js` 的 `SKILL_PREREQS`（`RECOMMENDED_SKILLS` 条目带 `prerequisites`），`install_skill` 安装仓库型技能后会写入该映射，使已安装技能同样可用。",
-  "pubDate": "2026-08-08T16:32:01+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.4/AI.Copilot-0.8.4-arm64.dmg",
-  "sha256": "61ce669c164e0bf99daa32c60f17b097a7bffa056f46dd79bafc1621a26db4d7",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.4/delta-0.8.4.zip",
-  "deltaSha256": "0bb09dad52e4ea22c5c624aa160fe446e4a34e7a533701f6968196b7b76aac2a",
-  "deltaFromVersion": "0.8.3"
+  "version": "0.8.5",
+  "notes": "- **修正 `open-kimi-ppt` 技能依赖自检提示**：该技能默认走本地离线导出（纯 python-pptx，无需浏览器/联网/Node），原来的环境依赖却把 Node.js 18+ 标成必装，会导致自动安装提示多此一举地逼用户装 Node。本版将 Node.js 18+ 标记为「可选（仅 Kimi 在线导出兜底才需要）」，Python 3 仍为必装；`check_dependencies` 工具新增对 `optional` 标记的识别——可选依赖缺失时显示「⚪️ 可选缺失」且不计入缺失项、不弹安装确认。注：`open-kimi-ppt` 技能本身由 AI Copilot 从 GitHub（`ddxmu/open-kimi-ppt-skill` main 分支）按需拉取，离线优先的导出逻辑已于今日推送到该仓库，新装用户直接获得离线优先版。",
+  "pubDate": "2026-08-08T17:19:58+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.5/AI.Copilot-0.8.5-arm64.dmg",
+  "sha256": "4fede91886038dcb1943a9c2db1a8c255d509297857d6464c264b49fe1d75fa0",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.5/delta-0.8.5.zip",
+  "deltaSha256": "04fc80b14314bfb0669f9ef19e364aa2ec5ecd32e4e89e4e18db56a717056dac",
+  "deltaFromVersion": "0.8.4"
 }
