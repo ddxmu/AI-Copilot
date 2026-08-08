@@ -401,11 +401,35 @@ const RECOMMENDED_SKILLS = {
     // 无内联 body，安装时从 GitHub 仓库下载
     repo: 'ddxmu/open-kimi-ppt-skill',
     branch: 'main',
+    // 环境依赖：技能执行前自检，缺失时由 AI 助手在用户授权后自动安装
+    prerequisites: [
+      {
+        id: 'node18',
+        name: 'Node.js 18+',
+        desc: 'PPTX 导出（export_pptx.py）依赖 Node.js 18 及以上运行时（含 npm/npx）',
+        check: 'node -v 2>/dev/null | grep -qE "v(1[89]|[2-9][0-9])"',
+        install: 'if command -v brew >/dev/null 2>&1; then brew install node; else echo "未检测到 Homebrew，请先安装 Homebrew（https://brew.sh）或到 https://nodejs.org 手动安装 Node.js 18+ 后再试。"; exit 1; fi',
+      },
+      {
+        id: 'python3',
+        name: 'Python 3',
+        desc: '运行 export_pptx.py / export_images.py 需要 python3',
+        check: 'command -v python3 >/dev/null 2>&1',
+        install: 'if command -v brew >/dev/null 2>&1; then brew install python; else echo "请手动安装 Python 3（https://www.python.org）。"; exit 1; fi',
+      },
+    ],
   },
 };
 
 // 运行时技能表 = 内置 + 外部安装（userData/skills/<name>/SKILL.md）
 let SKILLS = { ...BUILTIN_SKILLS };
+
+// 技能环境依赖声明：技能名 -> 依赖数组 [{id,name,desc,check,install,optional}]
+// check：shell 命令，退出码 0 表示已满足；install：用户授权后由 AI 助手自动执行的安装命令
+const SKILL_PREREQS = {};
+for (const [name, def] of Object.entries(RECOMMENDED_SKILLS)) {
+  if (Array.isArray(def.prerequisites)) SKILL_PREREQS[name] = def.prerequisites;
+}
 
 // 解析 SKILL.md：支持 --- name/description --- 头部 + 正文；无头部则首行 # 标题作名
 function parseSkillMd(content, fallbackName) {
@@ -911,7 +935,13 @@ const tools = {
     run({ skill }) {
       const s = SKILLS[skill];
       if (!s) return `错误：未知技能「${skill}」。可用：${Object.keys(SKILLS).join(', ')}`;
-      return `<skill name="${skill}">\n${s.body}\n</skill>\n请按以上指引执行。`;
+      let body = s.body;
+      const prereqs = SKILL_PREREQS[skill] || [];
+      if (prereqs.length) {
+        const list = prereqs.map((p) => `- ${p.name}（id=${p.id}）：${p.desc}`).join('\n');
+        body += `\n\n## 环境依赖自检（执行任务前必须完成）\n本技能依赖以下本地运行环境，请在开始正式任务前先调用 check_dependencies 工具（参数 skill="${skill}"）逐项自检；若返回「缺失」项，请调用 install_dependency 工具（参数 skill="${skill}"、id=该缺失项 id）请求用户授权，用户确认后 AI 助手会自动安装，安装完成后再继续任务。不要跳过自检直接执行导出等步骤。\n依赖清单：\n${list}`;
+      }
+      return `<skill name="${skill}">\n${body}\n</skill>\n请按以上指引执行。`;
     },
   },
 
@@ -961,8 +991,71 @@ const tools = {
         }
         if (!ok) return `安装技能「${skill}」失败：${errMsg}`;
         loadExternalSkills(ctx.skillsDir);
+        if (def.prerequisites) SKILL_PREREQS[skill] = def.prerequisites;
       }
       return `技能「${skill}」已安装成功！现在可以用 skill 工具调用「${skill}」获取操作指引，然后按指引执行任务。`;
+    },
+  },
+
+  /* ---------- 技能环境依赖自检 / 自动安装 ---------- */
+  check_dependencies: {
+    description: '检查某个已安装技能所需的本地运行环境（如 Node.js 18+、Python 3）是否已具备，返回每项依赖的满足 / 缺失状态。当技能带有环境依赖、你正准备执行该技能的任务前，应先调用本工具自检。',
+    schema: {
+      type: 'object',
+      properties: { skill: { type: 'string', description: '技能名称，如 open-kimi-ppt' } },
+      required: ['skill'],
+    },
+    readOnly: true,
+    permission: 'allow',
+    async run({ skill }, ctx) {
+      const prereqs = SKILL_PREREQS[skill] || [];
+      if (!prereqs.length) return `技能「${skill}」没有声明需要自检的环境依赖。`;
+      const lines = [];
+      const missing = [];
+      for (const p of prereqs) {
+        let ok = false;
+        try {
+          ok = await new Promise((res) => exec(p.check, { timeout: 20000, windowsHide: true }, (err) => res(!err)));
+        } catch { ok = false; }
+        lines.push(`${ok ? '✅ 已满足' : '❌ 缺失'}  ${p.name}（id=${p.id}）：${p.desc}`);
+        if (!ok) missing.push(p.id);
+      }
+      let out = `技能「${skill}」环境依赖自检：\n` + lines.join('\n');
+      out += missing.length
+        ? `\n\n缺失项 id：${missing.join('、')}。请调用 install_dependency 工具（skill="${skill}"、id=对应缺失项）请求用户授权后自动安装，装完再继续。`
+        : `\n\n全部依赖已满足，可以正常执行任务。`;
+      return out;
+    },
+  },
+
+  install_dependency: {
+    description: '为某个已安装技能安装缺失的本地运行环境（如 Node.js 18+）。调用前请先用 check_dependencies 确认该依赖缺失，并把缺失项的 id 传进来。会先请求用户授权，用户确认后由 AI 助手自动执行安装命令（可能需要联网、耗时数分钟）。',
+    schema: {
+      type: 'object',
+      properties: {
+        skill: { type: 'string', description: '技能名称' },
+        id: { type: 'string', description: '依赖 id（来自 check_dependencies 返回的缺失项）' },
+      },
+      required: ['skill', 'id'],
+    },
+    readOnly: false,
+    permission: 'ask',
+    async run({ skill, id }, ctx) {
+      const prereqs = SKILL_PREREQS[skill] || [];
+      const p = prereqs.find((x) => x.id === id);
+      if (!p) return `错误：技能「${skill}」没有名为「${id}」的依赖（可用：${(prereqs.map((x) => x.id).join(', ')) || '无'}）。`;
+      const approved = await ctx.confirm({
+        type: 'install_dependency',
+        title: `授权安装 ${p.name}`,
+        desc: `「${skill}」需要 ${p.name}。\n${p.desc}\n\n点击「确定」后，AI 助手将自动安装（可能需要联网下载，耗时约数分钟，请耐心等待完成提示）。`,
+      });
+      if (!approved) return `已取消：用户未授权安装 ${p.name}。`;
+      return new Promise((resolve) => {
+        exec(p.install, { timeout: 600000, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
+          if (err) resolve(`安装 ${p.name} 失败（退出码 ${err.code ?? '?'}）：${(stderr || err.message || '').slice(0, 800)}\n${(stdout || '').slice(0, 600)}`);
+          else resolve(`✅ 已成功安装 ${p.name}。\n${(stdout || '').trim().slice(0, 1500)}`);
+        });
+      });
     },
   },
 

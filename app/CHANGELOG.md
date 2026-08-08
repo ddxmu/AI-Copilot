@@ -1,3 +1,6 @@
+## v0.8.4 — 2026-08-08
+- **技能缺失依赖自动检测 + 授权后自动安装**：技能可声明环境依赖（如 `open-kimi-ppt` 需要 Node.js 18+ 与 Python 3）。当模型调用 `skill` 工具加载带依赖的技能时，指引中会自动追加「环境依赖自检」步骤：先调用新增的 `check_dependencies` 工具逐项自检，若发现缺失项，再调用 `install_dependency` 工具——后者会弹出一个授权确认条（📦 图标，文案「授权安装 Node.js 18+」等），用户点击「确定」后 AI 助手自动执行安装命令（如 `brew install node`，超时 10 分钟），装完继续任务；用户拒绝则降级说明。依赖声明集中在 `agent.js` 的 `SKILL_PREREQS`（`RECOMMENDED_SKILLS` 条目带 `prerequisites`），`install_skill` 安装仓库型技能后会写入该映射，使已安装技能同样可用。
+
 ## v0.8.3 — 2026-08-08
 - **精简 `open-kimi-ppt-skill` 仓库并适配 AI Copilot 安装**：上游仓库 `ddxmu/open-kimi-ppt-skill` 原 codeload 打包约 87MB（含 `docs/` 82MB 图片、`example/` 41MB pptx/媒体、`editor/`+`lib/`+`bin/` 本地浏览器编辑器），导致 AI Copilot 从 GitHub 安装时下载慢、易失败。已将仓库精简为 0.52MB（仅保留自包含技能 `skills/open-kimi-ppt/` 与必要根文件），并移除 `npx open-kimi-ppt-skills serve` 本地浏览器编辑器功能、把硬编码的 `~/.agents/skills/...` 路径改为引用系统提示词「已安装技能目录」。同时本版在 `agent.js` 系统提示词的「环境」段暴露「已安装技能目录」（来自 `SKILLS_DIR`，即 `userData/skills`），使模型能以绝对路径正确运行技能内的 `scripts/export_pptx.py` 等脚本，安装后可直接在 AI 助手对话中使用。
 
