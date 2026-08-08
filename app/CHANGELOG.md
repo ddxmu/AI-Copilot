@@ -1,3 +1,6 @@
+## v0.8.2 — 2026-08-08
+- **新增内置技能 `claude-in-chrome`（浏览器自动化）**：将 `claude-in-chrome` 直接内置进 `agent.js` 的 `BUILTIN_SKILLS`，无需安装、始终可用（在 AI 设置 → 智能体技能的「内置」列表中可见，调用 `skill` 工具即可加载指引）。技能来源为社区 `terrense/LilBot-agent` 的 `claude-in-chrome` SKILL.md，内容适配本应用工具集：先检查是否已接入浏览器 / Chrome 类 MCP 服务器（「AI 设置 → MCP 服务器」配置 + 聊天栏开启 MCP 开关并选定服务器）；已接入则优先调用 `mcp__<服务器>__<工具>` 完成页面检查 / 点击 / 输入 / 截图等浏览器操作，未接入则向用户说明缺少连接器并仅用 `web_fetch` / `web_search` 处理公开页面。
+
 ## v0.8.1 — 2026-08-08
 - **修复推荐技能从 GitHub 安装时一直显示「安装中」**：`open-kimi-ppt` 等仓库型推荐技能点击安装后，因为 `codeload.github.com` 下载较慢（约 2.6MB 需 60-90 秒）且 UI 没有进度反馈，用户会以为卡死。修复：① `httpsDownload` 超时从 120s 延长到 300s；② 主进程在下载过程中通过 `skill-install-progress` 推送已下载字节数；③ 渲染层按钮实时显示「下载中 X.XMB…」；④ 安装按钮逻辑加 try/catch，异常或失败时恢复「安装」状态并弹窗提示。
 
