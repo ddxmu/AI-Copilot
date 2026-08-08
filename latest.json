@@ -1,10 +1,10 @@
 {
-  "version": "0.8.2",
-  "notes": "- **新增内置技能 `claude-in-chrome`（浏览器自动化）**：将 `claude-in-chrome` 直接内置进 `agent.js` 的 `BUILTIN_SKILLS`，无需安装、始终可用（在 AI 设置 → 智能体技能的「内置」列表中可见，调用 `skill` 工具即可加载指引）。技能来源为社区 `terrense/LilBot-agent` 的 `claude-in-chrome` SKILL.md，内容适配本应用工具集：先检查是否已接入浏览器 / Chrome 类 MCP 服务器（「AI 设置 → MCP 服务器」配置 + 聊天栏开启 MCP 开关并选定服务器）；已接入则优先调用 `mcp__<服务器>__<工具>` 完成页面检查 / 点击 / 输入 / 截图等浏览器操作，未接入则向用户说明缺少连接器并仅用 `web_fetch` / `web_search` 处理公开页面。",
-  "pubDate": "2026-08-08T12:33:48+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.2/AI.Copilot-0.8.2-arm64.dmg",
-  "sha256": "281f54937d3b640f8e1b628f6a5ca6a25547d36d2d28405690589aafc8022686",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.2/delta-0.8.2.zip",
-  "deltaSha256": "43d7fc7adb51c035abaf5bbc22d70d509dd331b3c8190f13437b434264af7e15",
-  "deltaFromVersion": "0.8.1"
+  "version": "0.8.3",
+  "notes": "- **精简 `open-kimi-ppt-skill` 仓库并适配 AI Copilot 安装**：上游仓库 `ddxmu/open-kimi-ppt-skill` 原 codeload 打包约 87MB（含 `docs/` 82MB 图片、`example/` 41MB pptx/媒体、`editor/`+`lib/`+`bin/` 本地浏览器编辑器），导致 AI Copilot 从 GitHub 安装时下载慢、易失败。已将仓库精简为 0.52MB（仅保留自包含技能 `skills/open-kimi-ppt/` 与必要根文件），并移除 `npx open-kimi-ppt-skills serve` 本地浏览器编辑器功能、把硬编码的 `~/.agents/skills/...` 路径改为引用系统提示词「已安装技能目录」。同时本版在 `agent.js` 系统提示词的「环境」段暴露「已安装技能目录」（来自 `SKILLS_DIR`，即 `userData/skills`），使模型能以绝对路径正确运行技能内的 `scripts/export_pptx.py` 等脚本，安装后可直接在 AI 助手对话中使用。",
+  "pubDate": "2026-08-08T16:15:35+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.3/AI.Copilot-0.8.3-arm64.dmg",
+  "sha256": "ae0f4e6920a45ad0e0108dcbcf34b754aee6df8ddcd6c8df5a853059ecdd2b5f",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.3/delta-0.8.3.zip",
+  "deltaSha256": "6f4f00438d7f8f5dd8d00295b82611e844ac9b29b6ec5114605630ba9befb01f",
+  "deltaFromVersion": "0.8.2"
 }
