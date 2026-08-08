@@ -2014,7 +2014,7 @@ window.api.onAiToolEnd(({ name, result }) => {
   addToolLine(name + ' ✓', result.slice(0, 200) + (result.length > 200 ? '…' : ''));
 });
 
-const CONFIRM_ICONS = { 'write': '✍️', 'edit': '✏️', 'batch': '🔁', 'open-file': '📂', 'open-url': '🌐', 'mcp': '🔌' };
+const CONFIRM_ICONS = { 'write': '✍️', 'edit': '✏️', 'batch': '🔁', 'open-file': '📂', 'open-url': '🌐', 'mcp': '🔌', 'install_dependency': '📦' };
 window.api.onAiConfirm((payload) => {
   const type = payload && typeof payload === 'object' ? payload.type : null;
   const title = (payload && payload.title) || '需要授权';
