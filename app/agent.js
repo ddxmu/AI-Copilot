@@ -143,6 +143,8 @@ function scanDir(dirPath, allowedExts, results = []) {
 }
 
 /* ================= 技能包系统（内置 + 动态加载 userData/skills 下各 SKILL.md） ================= */
+// 当前会话已安装技能的根目录（运行时由 runAgent 写入），用于系统提示词告知模型技能脚本的绝对路径
+let CURRENT_SKILLS_DIR = null;
 const BUILTIN_SKILLS = {
   'batch-rename-company': {
     description: '批量替换文件中的公司名/人名等实体，适用于成批文档的统一更名',
@@ -1318,6 +1320,7 @@ function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null) {
 ## 环境
 - 用户主目录：${home}
 - 桌面：${home}/Desktop，文稿：${home}/Documents，下载：${home}/Downloads
+- 已安装技能目录：${CURRENT_SKILLS_DIR || '（暂无，技能安装后位于用户数据目录下的 skills/）'}（每个技能一个子目录，内含 SKILL.md 与 scripts/ 等；运行技能里的脚本时用此目录的绝对路径，例如 <已安装技能目录>/<技能名>/scripts/xxx.py）
 
 ## 可用工具
 读取(read_file)、编写(write_file)、局部修改(edit_file)、扫描文件夹(glob_files)、搜索内容(grep_files)、列目录(list_dir)、添加替换规则(add_replace_rule)、批量替换(batch_replace)、打开文件(open_file)、打开网页(open_url)、格式转换(convert_file)、查看图片(view_image)、终端命令(run_command)、任务清单(todo_write)、子代理(agent)、技能包(skill)${webToolsLine}。
@@ -1538,7 +1541,10 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
 // callbacks: { onText, onToolStart, onToolEnd, onConfirm, onTodo, onSubagentStart, onSubagentEnd, onCompact, getRules, onRulesChanged }
 async function runAgent(profile, chatHistory, userText, callbacks) {
   // 动态加载外部技能（userData/skills/*/SKILL.md），合并进技能表
-  if (callbacks.skillsDir) loadExternalSkills(callbacks.skillsDir);
+  if (callbacks.skillsDir) {
+    CURRENT_SKILLS_DIR = callbacks.skillsDir;
+    loadExternalSkills(callbacks.skillsDir);
+  }
   const ctx = {
     profile,
     rules: callbacks.getRules ? callbacks.getRules() : [],

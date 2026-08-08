@@ -3,7 +3,7 @@
 # 流程：同步源码 → 打包 DMG → 建 GitHub Release 并上传 DMG →
 #       git 提交+打 tag → 构建增量 delta zip → 上传 delta → 写 latest.json → push
 # 用法：GITHUB_TOKEN=xxx python3 publish_release.py
-import os, sys, json, shutil, subprocess, urllib.request, urllib.error, urllib.parse, hashlib, datetime, zipfile, io
+import os, sys, json, shutil, subprocess, urllib.request, urllib.error, urllib.parse, hashlib, datetime, zipfile, io, socket, time
 
 REPO = 'ddxmu/AI-Copilot'
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -35,12 +35,23 @@ def api(method, url, token, data=None, upload=False):
         else:
             headers['Content-Type'] = 'application/json'
             body = json.dumps(data).encode('utf-8')
-    req = urllib.request.Request(url, data=body, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read().decode('utf-8') or '{}')
-    except urllib.error.HTTPError as e:
-        print('HTTP', e.code, e.read().decode('utf-8')); sys.exit(1)
+    last_err = None
+    for attempt in range(5):
+        req = urllib.request.Request(url, data=body, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return json.loads(resp.read().decode('utf-8') or '{}')
+        except urllib.error.HTTPError as e:
+            # 409/422 等语义错误直接抛出由调用方处理；5xx/网络错误重试
+            if e.code < 500:
+                print('HTTP', e.code, e.read().decode('utf-8')); sys.exit(1)
+            last_err = e
+        except (urllib.error.URLError, TimeoutError, ConnectionError, socket.timeout) as e:
+            last_err = e
+        import time as _t
+        print(f'  api 重试 ({attempt+1}/5): {last_err}')
+        _t.sleep(8 * (attempt + 1))
+    print('api 最终失败:', last_err); sys.exit(1)
 
 
 def extract_notes(version):
@@ -75,7 +86,8 @@ def upload_asset(token, rel_id, name, filepath=None, data=None):
            '-H', f'Authorization: Bearer {token}',
            '-H', 'Content-Type: application/octet-stream',
            '-H', 'User-Agent: ai-copilot-publish',
-           '--max-time', '1800',
+           '--max-time', '3600',
+           '--retry', '5', '--retry-delay', '10', '--retry-all-errors',
            upload_url]
     if filepath:
         cmd += ['--data-binary', f'@{filepath}']
