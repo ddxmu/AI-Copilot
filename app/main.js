@@ -236,6 +236,48 @@ ipcMain.handle('get-changelog', () => {
   catch (e) { return ''; }
 });
 
+// ===== 升级成功提示 =====
+// 记录上次运行的版本号，本次启动若版本变高，说明升级真正生效，通知界面显示提示条。
+const lastRunVersionPath = () => path.join(app.getPath('userData'), 'last-run-version.json');
+function cmpSemver(a, b) {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+  }
+  return 0;
+}
+// 判断是否为「老用户」（userData 里已有历史配置），用于首次引入本功能时的兜底提示
+function hasExistingUserData() {
+  const ud = app.getPath('userData');
+  for (const f of ['ai-config.json', 'chat-history.json', 'automation-presets.json', 'skills']) {
+    try { if (fs.existsSync(path.join(ud, f))) return true; } catch (e) { /* ignore */ }
+  }
+  return false;
+}
+let _upgradeFlag = null;
+function computeUpgradeFlag() {
+  if (_upgradeFlag) return _upgradeFlag;
+  let cur = '0.0.0';
+  try { cur = require('./package.json').version; } catch (e) { /* ignore */ }
+  let prev = null;
+  try { prev = (JSON.parse(fs.readFileSync(lastRunVersionPath(), 'utf8')) || {}).version || null; } catch (e) { /* 首次运行 */ }
+  if (prev && cmpSemver(cur, prev) > 0) {
+    _upgradeFlag = { upgraded: true, from: prev, to: cur };
+  } else if (!prev && hasExistingUserData()) {
+    // 老用户首次运行带此功能的版本（如 0.8.16 → 0.8.17）：无历史记录，但确实是升级上来的
+    _upgradeFlag = { upgraded: true, from: null, to: cur };
+  } else {
+    _upgradeFlag = { upgraded: false, from: prev, to: cur };
+  }
+  try {
+    fs.writeFileSync(lastRunVersionPath(), JSON.stringify({ version: cur, at: new Date().toISOString() }, null, 2));
+  } catch (e) { /* ignore */ }
+  return _upgradeFlag;
+}
+ipcMain.handle('get-upgrade-flag', () => computeUpgradeFlag());
+
 // ===== 自动更新 =====
 ipcMain.handle('check-update', async () => updater.checkForUpdates());
 

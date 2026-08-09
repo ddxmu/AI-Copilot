@@ -3852,6 +3852,27 @@ renderCvFiles();
 renderWmFiles();
 renderWmCandidates();
 renderChangelog();
+showUpgradeToast();
+
+// 升级成功提示条：本次启动的版本高于上次运行版本时显示，用于确认升级真正生效
+async function showUpgradeToast() {
+  let flag = null;
+  try { flag = await window.api.getUpgradeFlag(); } catch (e) { return; }
+  if (!flag || !flag.upgraded) return;
+  const el = document.getElementById('upgrade-toast');
+  if (!el) return;
+  const fromTxt = flag.from ? '（原 v' + flag.from + '）' : '';
+  el.innerHTML =
+    '<span class="ut-ico">✓</span>' +
+    '<span class="ut-text">已升级到 <b>v' + flag.to + '</b>' + fromTxt + '</span>' +
+    '<button class="ut-close" id="upgrade-toast-close" title="关闭">×</button>';
+  el.classList.remove('hidden');
+  const close = () => el.classList.add('hidden');
+  const btn = document.getElementById('upgrade-toast-close');
+  if (btn) btn.onclick = close;
+  setTimeout(close, 10000);
+}
+
 // 加载对话历史
 
 // 渲染「更新日志」卡片：读取本机 CHANGELOG.md，展示近期版本（倒序）
