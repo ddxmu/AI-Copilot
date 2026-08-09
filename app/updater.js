@@ -6,7 +6,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { execFile, spawn } = require('child_process');
+const { execFile, spawn, execFileSync } = require('child_process');
 const { app } = require('electron');
 const { readZipEntries } = require('./office-replace');
 
@@ -199,7 +199,9 @@ function relaunchAndApply(staging) {
     const target = currentAppPath();
     const updateRoot = path.dirname(staging);
     const script = `#!/bin/bash
-sleep 2
+# 等待 app 退出后再替换（避免 rm 运行中的 app 导致崩溃）
+while pgrep -f "${target}/Contents/MacOS" >/dev/null 2>&1; do sleep 0.3; done
+sleep 1
 rm -rf "${target}"
 cp -R "${staging}" "${target}"
 xattr -dr com.apple.quarantine "${target}" 2>/dev/null
@@ -239,7 +241,9 @@ async function checkForUpdates() {
   }
 }
 
-// 增量应用：解压 delta zip 到 staging，写 bash 脚本在退出后覆盖 Resources/app
+// 增量应用：解压 delta zip 到 staging，同步覆盖 Resources/app 后重启
+// 关键修复：不再依赖 detached bash（app.quit() 后子进程会被杀，apply.sh 从未执行），
+// 改为在 app 退出前同步 cp 覆盖文件，然后 app.relaunch() + app.exit(0) 重启
 function applyDeltaAndRelaunch(deltaZipPath, cb) {
   const stagingDir = path.join(updateDir(), 'staging');
   fs.rmSync(stagingDir, { recursive: true, force: true });
@@ -262,13 +266,36 @@ function applyDeltaAndRelaunch(deltaZipPath, cb) {
   const target = currentAppPath();
   const appResDir = path.join(target, 'Contents', 'Resources', 'app');
   const updateRoot = updateDir();
-  // 生成删除命令
+
+  // 同步覆盖变更文件（app 仍在运行，macOS 允许覆盖；下次启动加载新文件）
+  let cpOk = false;
+  try {
+    execFileSync('cp', ['-Rf', stagingDir + '/.', appResDir + '/']);
+    cpOk = true;
+  } catch (e) { /* 同步 cp 失败则回退到 detached bash */ }
+
+  if (cpOk) {
+    // 同步删除已移除文件
+    for (const f of deletedFiles) {
+      try { fs.unlinkSync(path.join(appResDir, f)); } catch (e) { /* ignore */ }
+    }
+    // 清理 quarantine 属性
+    try { execFileSync('xattr', ['-dr', 'com.apple.quarantine', target]); } catch (e) { /* ignore */ }
+    // 清理更新目录
+    try { fs.rmSync(updateRoot, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+    // 重启 app（relaunch + exit，不依赖 detached bash）
+    app.relaunch();
+    app.exit(0);
+    return;
+  }
+
+  // 回退方案：detached bash（旧机制，仅在同步 cp 失败时使用）
   const deleteCmds = deletedFiles.map((f) => `rm -f "${appResDir}/${f}" 2>/dev/null`).join('\n');
   const script = `#!/bin/bash
-sleep 2
-# 覆盖变更文件
+# 等待 app 退出后再执行
+while pgrep -f "${target}/Contents/MacOS" >/dev/null 2>&1; do sleep 0.3; done
+sleep 1
 cp -Rf "${stagingDir}/." "${appResDir}/"
-# 删除已移除文件
 ${deleteCmds}
 xattr -dr com.apple.quarantine "${target}" 2>/dev/null
 rm -rf "${updateRoot}"

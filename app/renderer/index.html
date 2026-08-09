@@ -576,6 +576,17 @@
             </div>
           </div>
 
+          <div class="card">
+            <h2>③ 使用技能（可选）</h2>
+            <div class="form-row">
+              <label>AI 编写所用技能</label>
+              <select id="ppt-new-skill" class="auto-select">
+                <option value="">（不指定技能，按默认流程）</option>
+              </select>
+            </div>
+            <p class="hint" style="font-size:12px;margin-top:6px;">自动列出智能体技能里「已安装」与「PPT 相关内置技能」。选好后点「开始编写」会先调用 skill 工具加载该技能、按其指引编写。</p>
+          </div>
+
           <div class="wizard-nav">
             <span id="ppt-new-msg" class="wizard-msg"></span>
             <button class="btn primary large has-tip" id="ppt-new-start" data-tip="跳转到 AI 助手，描述你要编写的 PPT 内容，AI 按模版风格开始编写" title="跳转到 AI 助手，描述你要编写的 PPT 内容，AI 按模版风格开始编写">✦ 开始编写</button>
@@ -664,6 +675,17 @@
           </div>
 
           <!-- 执行 -->
+          <div class="card">
+            <h2>⑥ 使用技能（可选）</h2>
+            <div class="form-row">
+              <label>AI 编辑所用技能</label>
+              <select id="ppt-edit-skill" class="auto-select">
+                <option value="">（不指定技能，按默认流程）</option>
+              </select>
+            </div>
+            <p class="hint" style="font-size:12px;margin-top:6px;">自动列出智能体技能里「已安装」与「PPT 相关内置技能」。选好后点「AI 助手编辑保存」会先调用 skill 工具加载该技能、按其指引编辑。</p>
+          </div>
+
           <div class="wizard-nav">
             <span id="ppt-msg" class="wizard-msg"></span>
             <button class="btn primary large has-tip" id="ppt-ai-save" data-tip="由 AI 依据模版与规范编写 PPT：会先在聊天界面详细询问修改内容、方向、风格，确认后执行并保存" title="由 AI 依据模版与规范编写 PPT：会先在聊天界面详细询问修改内容、方向、风格，确认后执行并保存">✦ AI 助手编辑保存</button>
