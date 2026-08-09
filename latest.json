@@ -1,10 +1,57 @@
 {
-  "version": "0.8.8",
-  "notes": "- **「PDF 去水印」新增技能选项与「AI 去水印」按钮**：在执行区（「去除水印」左侧）新增「✦ AI 去水印」按钮；在该按钮左侧新增「技能」下拉，自动列出与 PDF 去水印相关的技能（默认选中内置技能 `pdf-watermark-remover`）。点击「AI 去水印」会先调用 skill 工具加载所选技能、由 AI 代理按其指引移除 PDF 水印（输出到指定文件夹）；不指定技能则走默认流程。原「去除水印」（本地引擎）按钮保持不动。\n- **新增内置技能 `pdf-watermark-remover`**：作为智能体默认内置技能（始终可用），指引用 pypdf 识别并移除 PDF 文本类水印（机密/内部/样品/draft 等），输出无标记副本。",
-  "pubDate": "2026-08-09T09:28:08+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.8/AI.Copilot-0.8.8-arm64.dmg",
-  "sha256": "93e118c746dbe6a43498c6a43964d81c783f918b3daf32a5c1094512403c8e4a",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.8/delta-0.8.8.zip",
-  "deltaSha256": "743c496918cf4438b95daef56a9374b59d284321e07d847c64faaccc838e516e",
-  "deltaFromVersion": "0.8.7"
+  "version": "0.8.9",
+  "notes": "- **修复自动更新「跳版必走完整 342MB 包」问题**：更新器现在支持 `latest.json` 中的 `deltas` 数组，会选「`from` 等于当前运行版本」的那个增量包下载应用（并重做 sha256 校验）。发布脚本改为为每个历史版本都生成到最新版的独立增量包（如 `delta-0.8.9-from-0.8.0.zip` … `delta-0.8.9-from-0.8.8.zip`），写入 `latest.json.deltas`。无论你当前停在哪个旧版，在线升级都只会下载几十~几百 KB 的 tiny delta，不再被迫下载 340MB 完整 DMG。仍兼容旧版更新器的单一 `deltaUrl`。",
+  "pubDate": "2026-08-09T09:40:24+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.9/AI.Copilot-0.8.9-arm64.dmg",
+  "sha256": "ff2d7c418ec5852e855a5175156a41f1dcf8dc6d478a7be2df7f0ff6ccdd1c95",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.9/delta-0.8.9-from-0.8.8.zip",
+  "deltaSha256": "e6a047102d149be2d44affcce2d92a197e53f78e9fcb1677e9cdaf4f7323d6e3",
+  "deltaFromVersion": "0.8.8",
+  "deltas": [
+    {
+      "from": "0.8.0",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.9/delta-0.8.9-from-0.8.0.zip",
+      "sha256": "031ca03f38a152a33897f199504d03a0359394a2b39af17763201dd101b5e40d"
+    },
+    {
+      "from": "0.8.1",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.9/delta-0.8.9-from-0.8.1.zip",
+      "sha256": "1903b3ab8dbc370dd9479b14385c197503d59cdb329d703284d1eead13a1ad40"
+    },
+    {
+      "from": "0.8.2",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.9/delta-0.8.9-from-0.8.2.zip",
+      "sha256": "c04907d00514bc2a1ccb00072f6ee343a022f8b6ee35df53bceefb2e7b62b3ba"
+    },
+    {
+      "from": "0.8.3",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.9/delta-0.8.9-from-0.8.3.zip",
+      "sha256": "278f6012fa21abb646b79d58002dc843dfe32182e38ffb479667b06c78f8e32a"
+    },
+    {
+      "from": "0.8.4",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.9/delta-0.8.9-from-0.8.4.zip",
+      "sha256": "35ca8b5aae3cb31ecd7cb500263334fabaa2e5d3ef7f65c1c3165c9e97d42ca0"
+    },
+    {
+      "from": "0.8.5",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.9/delta-0.8.9-from-0.8.5.zip",
+      "sha256": "90226ec1ea18f2f4ecff0f0d21ddfa42a32882e5c6376fd7322fe2f8025c8c0c"
+    },
+    {
+      "from": "0.8.6",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.9/delta-0.8.9-from-0.8.6.zip",
+      "sha256": "8c73db17734c758a9c7326573cccb82d1536418a0bfe37e007165c1127f5f53a"
+    },
+    {
+      "from": "0.8.7",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.9/delta-0.8.9-from-0.8.7.zip",
+      "sha256": "7502f0c0857b2d9b2a8be3e6611288189c66d32373a9146969deb91389ffc046"
+    },
+    {
+      "from": "0.8.8",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.9/delta-0.8.9-from-0.8.8.zip",
+      "sha256": "e6a047102d149be2d44affcce2d92a197e53f78e9fcb1677e9cdaf4f7323d6e3"
+    }
+  ]
 }

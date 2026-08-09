@@ -114,6 +114,30 @@ def git_tag_exists(tag):
     return r.stdout.strip() == tag
 
 
+def list_version_tags():
+    tags = subprocess.run(['git', '-C', ROOT, 'tag', '--list', 'v[0-9]*.*[0-9]'],
+                         capture_output=True, text=True).stdout.split()
+    out = []
+    for t in tags:
+        if t.startswith('v') and t[1:].count('.') == 2:
+            try:
+                out.append(t)
+            except Exception:
+                pass
+    return out
+
+
+def ver_tuple(v):
+    v = v[1:] if v.startswith('v') else v
+    parts = v.split('.')
+    return tuple(int(x) for x in parts[:3]) + (0,) * (3 - min(len(parts), 3))
+
+
+def cmp_ver(a, b):
+    ta, tb = ver_tuple(a), ver_tuple(b)
+    return (ta > tb) - (ta < tb)
+
+
 def build_delta(prev_tag, version):
     """基于 git diff 构建增量 zip，返回 (bytes, sha256) 或 None"""
     cur_tag = 'v' + version
@@ -230,27 +254,45 @@ def main():
     if not git_tag_exists(tag):
         run(['git', '-C', ROOT, 'tag', tag])
 
-    # 6. 构建增量包（如果上一版本有 tag）
+    # 6. 构建增量包：为每个历史版本都生成「到当前版本」的独立 delta，
+    #    写入 latest.json 的 deltas 数组；同时保留「上一版本」的单 deltaUrl 以兼容旧版更新器
     delta_url = None
     delta_sha = None
     delta_from = None
+    deltas = []
     if prev_version and prev_version != version:
         prev_tag = 'v' + prev_version
-        if git_tag_exists(prev_tag):
-            print(f'== 构建增量 {prev_tag} → {tag} ==')
-            result = build_delta(prev_tag, version)
-            if result:
-                delta_data, delta_sha = result
-                delta_path = os.path.join(DELTA_DIR, delta_name)
-                with open(delta_path, 'wb') as f:
-                    f.write(delta_data)
-                print('== 上传 delta ==')
-                delete_existing_asset(token, rel, delta_name)
-                delta_url = upload_asset(token, rel_id, delta_name, filepath=delta_path)
-                delta_from = prev_version
-                print('delta url:', delta_url, f'({len(delta_data)} bytes)')
-        else:
-            print(f'上一版本 tag {prev_tag} 不存在，跳过 delta')
+        # 收集历史 tag（< 当前版本，且 >= v0.8.0 以保证叠加安全），逐个生成 delta
+        hist_tags = [t for t in list_version_tags()
+                     if cmp_ver(t, tag) < 0 and cmp_ver(t, 'v0.8.0') >= 0]
+        # 确保紧邻上一版本也在列表内
+        if prev_tag not in hist_tags:
+            hist_tags.append(prev_tag)
+        hist_tags.sort(key=ver_tuple)
+        print(f'== 历史版本数：{len(hist_tags)}，逐个构建增量 ==')
+        for ht in hist_tags:
+            ht_v = ht[1:]  # 去掉 v 前缀
+            if not git_tag_exists(ht):
+                print(f'  跳过 {ht}（tag 不存在）'); continue
+            print(f'== 构建增量 {ht} → {tag} ==')
+            result = build_delta(ht, version)
+            if not result:
+                print(f'  {ht} 无变更，跳过'); continue
+            delta_data, delta_sha_i = result
+            dname = f'delta-{version}-from-{ht_v}.zip'
+            dpath = os.path.join(DELTA_DIR, dname)
+            with open(dpath, 'wb') as f:
+                f.write(delta_data)
+            print('== 上传 delta ==')
+            delete_existing_asset(token, rel, dname)
+            durl = upload_asset(token, rel_id, dname, filepath=dpath)
+            deltas.append({'from': ht_v, 'url': durl, 'sha256': delta_sha_i})
+            # 紧邻上一版本：同时作为单 deltaUrl（兼容旧更新器）
+            if ht_v == prev_version:
+                delta_url = durl
+                delta_sha = delta_sha_i
+                delta_from = ht_v
+            print('delta url:', durl, f'({len(delta_data)} bytes)')
     else:
         print('无上一版本或同版本，跳过 delta')
 
@@ -268,6 +310,8 @@ def main():
         latest['deltaUrl'] = delta_url
         latest['deltaSha256'] = delta_sha
         latest['deltaFromVersion'] = delta_from
+    if deltas:
+        latest['deltas'] = deltas
     json.dump(latest, open(latest_path, 'w', encoding='utf-8'),
               ensure_ascii=False, indent=2)
 
