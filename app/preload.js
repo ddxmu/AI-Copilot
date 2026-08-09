@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   getSupportedExts: () => ipcRenderer.invoke('get-supported-exts'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  getChangelog: () => ipcRenderer.invoke('get-changelog'),
   selectFiles: (exts) => ipcRenderer.invoke('select-files', exts),
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   scanFolder: (folderPath, exts) => ipcRenderer.invoke('scan-folder', { folderPath, exts }),

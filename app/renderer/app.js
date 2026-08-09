@@ -3851,7 +3851,41 @@ populatePptSkill();
 renderCvFiles();
 renderWmFiles();
 renderWmCandidates();
+renderChangelog();
 // 加载对话历史
+
+// 渲染「更新日志」卡片：读取本机 CHANGELOG.md，展示近期版本（倒序）
+async function renderChangelog() {
+  const box = document.getElementById('changelog-list');
+  if (!box) return;
+  let md = '';
+  try { md = await window.api.getChangelog() || ''; } catch (e) { md = ''; }
+  if (!md.trim()) { box.innerHTML = '<p class="hint">暂无更新日志。</p>'; return; }
+  // 按版本标题（## vX.Y.Z）切分
+  const lines = md.split('\n');
+  const versions = [];
+  let cur = null;
+  for (const line of lines) {
+    const m = line.match(/^##\s+(v[\d.]+)\s*[—-]\s*(\S+)?/);
+    if (m) {
+      if (cur) versions.push(cur);
+      cur = { version: m[1], date: m[2] || '', notes: [] };
+    } else if (cur && line.trim().startsWith('-')) {
+      cur.notes.push(line.trim().replace(/^-\s*/, ''));
+    }
+  }
+  if (cur) versions.push(cur);
+  const recent = versions.slice(0, 6);
+  if (!recent.length) { box.innerHTML = '<p class="hint">暂无更新日志。</p>'; return; }
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  box.innerHTML = recent.map((v) => {
+    const items = v.notes.map((n) => `<li>${esc(n)}</li>`).join('');
+    return `<div class="changelog-item">
+      <div class="changelog-head"><span class="changelog-ver">${esc(v.version)}</span>${v.date ? `<span class="changelog-date">${esc(v.date)}</span>` : ''}</div>
+      <ul class="changelog-notes">${items}</ul>
+    </div>`;
+  }).join('');
+}
 if (btnNewChat) btnNewChat.addEventListener('click', () => createNewChat());
 loadChats();
 // 规则状态同步给主进程（供智能体使用）

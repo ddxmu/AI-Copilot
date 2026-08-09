@@ -3002,6 +3002,24 @@ body {
   50% { box-shadow: 0 0 0 4px rgba(47,111,237,0.4); }
 }
 
+/* 更新日志卡片 */
+.changelog-list {
+  display: flex; flex-direction: column; gap: 14px;
+  max-height: 420px; overflow-y: auto; padding-right: 4px;
+}
+.changelog-item { padding-bottom: 12px; border-bottom: 1px dashed #e6e9ee; }
+.changelog-item:last-child { border-bottom: none; padding-bottom: 0; }
+.changelog-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.changelog-ver { font-weight: 700; font-size: 14px; color: var(--primary, #2f6fed); }
+.changelog-date { font-size: 12px; color: var(--text-3, #8a909a); }
+.changelog-notes { margin: 0; padding-left: 18px; }
+.changelog-notes li {
+  font-size: 13px; color: var(--text, #2b2f36); line-height: 1.65; margin-bottom: 4px;
+  list-style: disc;
+}
+:root.dark .changelog-item { border-bottom-color: #313847; }
+:root.dark .changelog-notes li { color: var(--text, #d4d9e2); }
+
 /* 深色模式下的更新 UI */
 :root.dark .sidebar-update-box {
   background: #20283a;
