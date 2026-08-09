@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -50,6 +50,28 @@ function createWindow() {
 // 后台静默检查更新：仅在发现新版本时通知渲染进程，不自动下载。
 // 带 60 秒去抖，避免文件选择等高频事件反复查询 GitHub。
 let lastBgUpdateCheck = 0;
+let lastNotifiedVersion = null; // 同版本系统通知只弹一次
+
+// 闲置后台（app 未聚焦/最小化/隐藏）且发现新版本时，弹 macOS 系统通知提示升级
+function notifyUpdateAvailable(res) {
+  if (!res || !res.version) return;
+  if (res.version === lastNotifiedVersion) return; // 同版本只提示一次
+  lastNotifiedVersion = res.version;
+  try {
+    if (!Notification.isSupported || Notification.isSupported()) {
+      const n = new Notification({
+        title: `AI Copilot 新版本 v${res.version} 可用`,
+        body: '发现新版本，点击查看并升级。',
+        silent: false,
+      });
+      n.on('click', () => {
+        if (mainWindow) { try { mainWindow.show(); mainWindow.focus(); } catch (e) {} }
+      });
+      n.show();
+    }
+  } catch (e) { /* 通知不可用不影响更新流程 */ }
+}
+
 function checkUpdatesInBackground(force = false) {
   const now = Date.now();
   if (!force && now - lastBgUpdateCheck < 60 * 1000) return;
@@ -57,6 +79,9 @@ function checkUpdatesInBackground(force = false) {
   updater.checkForUpdates().then((res) => {
     if (res && res.updateAvailable && mainWindow) {
       mainWindow.webContents.send('update-available', res);
+      // 程序闲置在后台时，弹系统通知自动提示有升级
+      const idle = !mainWindow.isFocused() || mainWindow.isMinimized() || !mainWindow.isVisible();
+      if (idle) notifyUpdateAvailable(res);
     }
   }).catch(() => {});
 }
