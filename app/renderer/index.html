@@ -54,7 +54,11 @@
       </nav>
 
       <div class="sidebar-footer" id="sidebar-footer">
-        <span id="footer-version">AI Copilot · v…</span>
+        <span class="footer-version-wrap">
+          <span id="footer-version">AI Copilot · v…</span>
+          <!-- 发现新版本时，版本号右上角显示黄色提示点 -->
+          <span id="version-update-dot" class="version-update-dot hidden" title="发现新版本，可升级"></span>
+        </span>
         <!-- 侧边栏更新信息框（发现新版本时出现，宽度贴合功能栏，不挤压导航） -->
         <div id="sidebar-update-box" class="sidebar-update-box hidden">
           <button id="sidebar-update-close" class="sidebar-update-close" title="关闭提示" aria-label="关闭">✕</button>

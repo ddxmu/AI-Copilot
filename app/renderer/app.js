@@ -1197,6 +1197,13 @@ async function initAppVersion() {
 /* ================= 自动更新 ================= */
 let pendingUpdate = null; // { version, notes, dmgUrl, ... }
 
+// 版本号右上角黄色更新提示点：发现更新显示，升级中/已最新隐藏
+function setVersionUpdateDot(show) {
+  const dot = document.getElementById('version-update-dot');
+  if (!dot) return;
+  if (show) dot.classList.remove('hidden'); else dot.classList.add('hidden');
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 }
@@ -1271,6 +1278,7 @@ async function initUpdater() {
   window.api.onUpdateAvailable((res) => {
     if (pendingUpdate && pendingUpdate.version === res.version) return; // 同版本已提示过，避免重复打扰
     showSidebarUpdateBox(res); revealInstall(res);
+    setVersionUpdateDot(true); // 版本号右上角黄色点
   });
   window.api.onUpdateProgress((info) => {
     const wrap = document.getElementById('update-progress-wrap');
@@ -1325,6 +1333,7 @@ async function initUpdater() {
       status.textContent = '已是最新版本（v' + res.currentVersion + '）';
       status.className = 'update-status ok';
       hideSidebarUpdateBox();
+      setVersionUpdateDot(false); // 已最新，隐藏黄色点
     }
   });
 
@@ -1349,6 +1358,7 @@ async function initUpdater() {
     if (installBtn) installBtn.disabled = true;
     const sbtn = document.getElementById('sidebar-update-now');
     if (sbtn) { sbtn.disabled = true; sbtn.textContent = '升级中…'; }
+    setVersionUpdateDot(false); // 升级进行中，隐藏黄色点
     await window.api.downloadUpdate(pendingUpdate);
     if (status) status.textContent = '正在安装并重启…';
   }

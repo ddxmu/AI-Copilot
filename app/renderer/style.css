@@ -2904,6 +2904,25 @@ body {
   animation: sideBoxIn .22s ease;
 }
 .sidebar-update-box.hidden { display: none; }
+/* 版本号右上角黄色更新提示点 */
+.footer-version-wrap { position: relative; display: inline-flex; align-items: center; }
+.version-update-dot {
+  position: absolute;
+  top: -3px;
+  right: -11px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f5b301;
+  box-shadow: 0 0 0 2px rgba(245, 179, 1, 0.25);
+  cursor: pointer;
+  animation: dotPulse 1.6s ease-in-out infinite;
+}
+@keyframes dotPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(245, 179, 1, 0.25); }
+  50% { box-shadow: 0 0 0 4px rgba(245, 179, 1, 0.12); }
+}
+:root.dark .version-update-dot { background: #ffc107; box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.25); }
 @keyframes sideBoxIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
