@@ -2784,9 +2784,10 @@ document.getElementById('ppt-new-start').addEventListener('click', async () => {
   lines.push('');
   lines.push('请先告诉我：你想编写什么主题的 PPT？大概需要多少页？包含哪些章节或内容要点？');
 
+  const prompt = withPptSkill(lines.join('\n'), getPptNewSkillName());
   switchPanel('ai');
   addBubble('user', '【新编写 PPT】选择模版，AI 按模版风格从零编写新 PPT');
-  addBubble('assistant', lines.join('\n'));
+  addBubble('assistant', prompt);
   currentAssistantBubble = null;
   setSending(false);
   persistCurrentChat();
@@ -2955,7 +2956,7 @@ document.getElementById('ppt-ai-save').addEventListener('click', async () => {
   if (getPptSaveMode() === 'output' && !pptOutputDir) { setPptMsg('请先选择输出文件夹'); return; }
   if (!(aiState.profiles.length && aiState.activeId)) { setPptMsg('请先在「AI 设置」中配置并启用一个模型'); return; }
 
-  const prompt = buildPptPrompt();
+  const prompt = withPptSkill(buildPptPrompt(), getPptEditSkillName());
   switchPanel('ai');
   setSending(true);
   ensureActiveChat();
@@ -3402,6 +3403,43 @@ function withWmSkill(prompt, skillName) {
   return `请先调用 skill 工具加载「${skillName}」技能，获取其详细操作指引，并严格按指引执行本「PDF 去水印」任务。\n\n` + prompt;
 }
 
+// PPT 写手：新编写 / 修改 两个子面板共用的「PPT 相关技能」下拉
+const PPT_SKILL_KEYWORDS = ['ppt', 'pptx', 'kimi', 'presentation', '演示', '幻灯片', 'open-kimi'];
+async function populatePptSkill() {
+  const sels = ['ppt-new-skill', 'ppt-edit-skill'].map((id) => document.getElementById(id)).filter(Boolean);
+  if (!sels.length) return;
+  const map = new Map();
+  try {
+    const { builtin = [], installed = [] } = await window.api.skillsList();
+    const match = (s) => PPT_SKILL_KEYWORDS.some((k) => (s.name + ' ' + (s.description || '')).toLowerCase().includes(k));
+    for (const b of builtin) if (match(b)) map.set(b.name, { name: b.name, source: 'builtin' });
+    for (const i of installed) if (match(i)) map.set(i.name, { name: i.name, source: 'installed' });
+  } catch (e) { /* 拉取失败则只保留默认项 */ }
+  for (const sel of sels) {
+    sel.innerHTML = '<option value="">（不指定技能，按默认流程）</option>';
+    const list = [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+    for (const s of list) {
+      const o = document.createElement('option');
+      o.value = s.name;
+      o.textContent = s.name + (s.source === 'installed' ? '（已安装）' : '（内置）');
+      sel.appendChild(o);
+    }
+    if (map.has('open-kimi-ppt')) sel.value = 'open-kimi-ppt';
+  }
+}
+function getPptNewSkillName() {
+  const sel = document.getElementById('ppt-new-skill');
+  return sel ? sel.value : '';
+}
+function getPptEditSkillName() {
+  const sel = document.getElementById('ppt-edit-skill');
+  return sel ? sel.value : '';
+}
+function withPptSkill(prompt, skillName) {
+  if (!skillName) return prompt;
+  return `请先调用 skill 工具加载「${skillName}」技能，获取其详细操作指引，并严格按指引执行本 PPT 任务。\n\n` + prompt;
+}
+
 function renderWmFiles() {
   wmFileListEl.innerHTML = '';
   wmFileEmptyEl.style.display = wm.files.length ? 'none' : 'block';
@@ -3795,6 +3833,7 @@ renderRnRules();
 populateConvFormats();
 populateAutoSkill();
 populateWmSkill();
+populatePptSkill();
 renderCvFiles();
 renderWmFiles();
 renderWmCandidates();
