@@ -6,54 +6,6 @@ const { execFile } = require('child_process');
 const { ALL_EXTS, PLAIN_TEXT_SAFE, ZIP_BASED_OFFICE } = require('./filetypes');
 const { processOfficeFile, readZipEntries } = require('./office-replace');
 const { BUILTIN_SKILLS, RECOMMENDED_SKILLS, parseSkillMd } = require('./agent');
-// ===== 升级：退出后替换（macOS 禁止运行时覆盖 app 自身文件）=====
-// updater.stageUpdate 在退出前把待更新文件暂存到 userData/pending-update，
-// 这里在新进程启动最早期、任何业务模块加载前执行真正的覆盖。
-// ⚠️ 铁律：此逻辑必须永久保留，一旦丢失后续增量升级将无法应用。
-function copyDirSync(src, dst) {
-  fs.mkdirSync(dst, { recursive: true });
-  for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
-    const s = path.join(src, ent.name);
-    const d = path.join(dst, ent.name);
-    if (ent.isDirectory()) copyDirSync(s, d);
-    else fs.copyFileSync(s, d);
-  }
-}
-(function applyPendingUpdate() {
-  try {
-    const exeDir = app.getPath('exe'); // .../Contents/MacOS
-    const appRoot = path.resolve(exeDir, '..', '..', '..'); // .../AI Copilot.app
-    const resApp = path.join(appRoot, 'Contents', 'Resources', 'app');
-    const pd = path.join(app.getPath('userData'), 'pending-update');
-    const metaPath = path.join(pd, 'meta.json');
-    if (!fs.existsSync(metaPath)) return;
-    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-    const srcApp = path.join(pd, 'app');
-    if (fs.existsSync(srcApp)) {
-      copyDirSync(srcApp, resApp);
-      for (const f of (meta.deletedFiles || [])) {
-        try { fs.unlinkSync(path.join(resApp, f)); } catch (e) { /* ignore */ }
-      }
-      const srcPlist = path.join(pd, 'Contents', 'Info.plist');
-      if (fs.existsSync(srcPlist)) {
-        try { fs.copyFileSync(srcPlist, path.join(appRoot, 'Contents', 'Info.plist')); } catch (e) { /* ignore */ }
-      }
-      // 用 plutil 刷新 Info.plist 版本字段，避免系统「关于」显示错乱
-      try {
-        const newVer = JSON.parse(fs.readFileSync(path.join(resApp, 'package.json'), 'utf8')).version;
-        const plist = path.join(appRoot, 'Contents', 'Info.plist');
-        for (const k of ['CFBundleShortVersionString', 'CFBundleVersion']) {
-          try { require('child_process').execFileSync('plutil', ['-replace', k, '-string', newVer, plist]); } catch (e) { /* ignore */ }
-        }
-      } catch (e) { /* ignore */ }
-    }
-    fs.rmSync(pd, { recursive: true, force: true });
-  } catch (e) {
-    console.error('applyPendingUpdate failed:', e && e.message);
-    // 替换失败：保留 pending 供下次启动重试，绝不阻断正常启动
-  }
-})();
-
 const updater = require('./updater');
 const https = require('https');
 const pdfwm = require('./pdf-watermark');

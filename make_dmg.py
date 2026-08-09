@@ -1,71 +1,159 @@
 #!/usr/bin/env python3
-# 打品牌化 DMG：hdiutil UDRW -> 挂载可写卷 -> 排布文件 -> Python 写 .DS_Store -> 转 UDZO
-import os, shutil, subprocess, sys, time, json
+"""Build and verify a branded, ad-hoc-signed AI Copilot DMG.
 
-APP = "/tmp/AIReplace/appbuild/AI Copilot.app"
-ASSETS = "/tmp/AIReplace/dmg-assets"
-PKG = json.load(open(os.path.join(APP, "Contents", "Resources", "app", "package.json"), encoding="utf-8"))
-VERSION = PKG["version"]
-OUT_DIR = "/tmp/AIReplace/release"
-OUT = os.path.join(OUT_DIR, f"AI Copilot-{VERSION}-arm64.dmg")
-VOL = "AI Copilot"
-TMP_DMG = "/tmp/AIReplace/_tmp_aicopilot.dmg"
-MOUNT = "/Volumes/" + VOL
+The app bundle is supplied explicitly so a release cannot accidentally package
+an old bundle from a developer-specific temporary directory.
+"""
+import argparse
+import json
+import plistlib
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
 
-def run(cmd, check=True):
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if check and r.returncode != 0:
-        print("FAIL:", " ".join(cmd)); print(r.stdout); print(r.stderr); sys.exit(1)
-    return r
+ROOT = Path(__file__).resolve().parent
 
-def detach_all():
-    for _ in range(3):
-        r = subprocess.run(["hdiutil", "info"], capture_output=True, text=True)
-        for line in r.stdout.splitlines():
-            line = line.strip()
-            if line.startswith("/dev/disk"):
-                subprocess.run(["hdiutil", "detach", "-force", line.split()[0]],
-                               capture_output=True)
-        time.sleep(1)
 
-# 0. 清理
-os.makedirs(OUT_DIR, exist_ok=True)
-detach_all()
-for p in (TMP_DMG, OUT):
-    if os.path.exists(p): os.remove(p)
+def run(args, *, text=True):
+    result = subprocess.run(args, capture_output=True, text=text)
+    if result.returncode:
+        if text:
+            print(result.stdout, file=sys.stderr)
+            print(result.stderr, file=sys.stderr)
+        raise RuntimeError('command failed: ' + ' '.join(map(str, args)))
+    return result
 
-# 1. 计算 app 大小，建足够大的可写 dmg
-size_mb = int(run(["du", "-sm", APP]).stdout.split()[0]) + 60
-print(f"app 大小 ~{size_mb-60}MB, dmg 分配 {size_mb}MB")
-run(["hdiutil", "create", "-size", f"{size_mb}m", "-fs", "HFS+",
-     "-volname", VOL, "-ov", TMP_DMG])
 
-# 2. 挂载可写卷
-run(["hdiutil", "attach", "-nobrowse", "-readwrite", TMP_DMG])
-if not os.path.isdir(MOUNT):
-    print("挂载失败"); sys.exit(1)
+def attach_dmg(image, readwrite=False):
+    args = ['hdiutil', 'attach', '-nobrowse', '-plist']
+    args.append('-readwrite' if readwrite else '-readonly')
+    args.append(str(image))
+    result = run(args, text=False)
+    info = plistlib.loads(result.stdout)
+    for entity in info.get('system-entities', []):
+        mount = entity.get('mount-point')
+        device = entity.get('dev-entry')
+        if mount and device:
+            return device, Path(mount)
+    raise RuntimeError('hdiutil did not return a mounted volume')
 
-try:
-    # 3. 拷贝 app / 使用说明 / Applications 软链
-    shutil.copytree(APP, os.path.join(MOUNT, "AI Copilot.app"), symlinks=True)
-    shutil.copy(os.path.join(ASSETS, "使用说明.html"), os.path.join(MOUNT, "使用说明.html"))
-    os.symlink("/Applications", os.path.join(MOUNT, "Applications"))
 
-    # 4. 背景图 + 卷标图标
-    os.makedirs(os.path.join(MOUNT, ".background"), exist_ok=True)
-    shutil.copy(os.path.join(ASSETS, "background.png"), os.path.join(MOUNT, ".background", "background.png"))
-    shutil.copy(os.path.join(ASSETS, ".VolumeIcon.icns"), os.path.join(MOUNT, ".VolumeIcon.icns"))
-    subprocess.run(["SetFile", "-a", "C", MOUNT], capture_output=True)
+def detach_dmg(device):
+    subprocess.run(['hdiutil', 'detach', '-force', device], capture_output=True, text=True)
 
-    # 5. 复用旧版正确的 .DS_Store（窗口/图标位置/背景布局完全一致）
-    shutil.copy(os.path.join(ASSETS, "DS_Store.reference"), os.path.join(MOUNT, ".DS_Store"))
-    print(".DS_Store 复用完成")
-finally:
-    run(["hdiutil", "detach", MOUNT], check=False)
-    time.sleep(1)
 
-# 6. 转 UDZO 压缩只读
-run(["hdiutil", "convert", TMP_DMG, "-format", "UDZO", "-imagekey", "zlib-level=9", "-o", OUT])
-os.remove(TMP_DMG)
-print("完成:", OUT)
-print("大小: %.1f MB" % (os.path.getsize(OUT) / 1024 / 1024))
+def app_version(app_path):
+    package = app_path / 'Contents' / 'Resources' / 'app' / 'package.json'
+    if not package.is_file():
+        raise RuntimeError('missing app package.json: ' + str(package))
+    version = json.loads(package.read_text(encoding='utf-8')).get('version')
+    if not version:
+        raise RuntimeError('package.json has no version')
+    return str(version)
+
+
+def sync_and_sign_app(app_path, version):
+    plist_path = app_path / 'Contents' / 'Info.plist'
+    if not plist_path.is_file():
+        raise RuntimeError('missing Info.plist: ' + str(plist_path))
+    with plist_path.open('rb') as handle:
+        info = plistlib.load(handle)
+    info['CFBundleShortVersionString'] = version
+    info['CFBundleVersion'] = version
+    with plist_path.open('wb') as handle:
+        plistlib.dump(info, handle, sort_keys=False)
+    run(['codesign', '--force', '--deep', '--sign', '-', str(app_path)])
+    run(['codesign', '--verify', '--deep', '--strict', str(app_path)])
+
+
+def verify_dmg(dmg_path, expected_version):
+    run(['hdiutil', 'verify', str(dmg_path)])
+    device = None
+    try:
+        device, mount = attach_dmg(dmg_path)
+        bundle = mount / 'AI Copilot.app'
+        actual_version = app_version(bundle)
+        if actual_version != expected_version:
+            raise RuntimeError('DMG version mismatch: ' + actual_version + ' != ' + expected_version)
+        with (bundle / 'Contents' / 'Info.plist').open('rb') as handle:
+            info = plistlib.load(handle)
+        for key in ('CFBundleShortVersionString', 'CFBundleVersion'):
+            if str(info.get(key, '')) != expected_version:
+                raise RuntimeError('DMG Info.plist ' + key + ' mismatch')
+        run(['codesign', '--verify', '--deep', '--strict', str(bundle)])
+    finally:
+        if device:
+            detach_dmg(device)
+
+
+def build_dmg(app_path, assets, output, overwrite):
+    if not app_path.is_dir():
+        raise RuntimeError('app bundle does not exist: ' + str(app_path))
+    if not assets.is_dir():
+        raise RuntimeError('DMG assets do not exist: ' + str(assets))
+    version = app_version(app_path)
+    sync_and_sign_app(app_path, version)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if output.exists():
+        if not overwrite:
+            raise RuntimeError('output already exists (use --overwrite): ' + str(output))
+        output.unlink()
+
+    app_size_mb = int(run(['du', '-sm', str(app_path)]).stdout.split()[0])
+    with tempfile.TemporaryDirectory(prefix='ai-copilot-dmg-') as temp:
+        temp_dmg = Path(temp) / 'rw.dmg'
+        run([
+            'hdiutil', 'create', '-size', str(app_size_mb + 60) + 'm',
+            '-fs', 'HFS+', '-volname', 'AI Copilot', '-ov', str(temp_dmg),
+        ])
+        device = None
+        try:
+            device, mount = attach_dmg(temp_dmg, readwrite=True)
+            shutil.copytree(app_path, mount / 'AI Copilot.app', symlinks=True)
+            shutil.copy2(assets / '使用说明.html', mount / '使用说明.html')
+            (mount / 'Applications').symlink_to('/Applications')
+            background = mount / '.background'
+            background.mkdir(exist_ok=True)
+            shutil.copy2(assets / 'background.png', background / 'background.png')
+            shutil.copy2(assets / '.VolumeIcon.icns', mount / '.VolumeIcon.icns')
+            ds_store = assets / 'DS_Store.reference'
+            if ds_store.is_file():
+                shutil.copy2(ds_store, mount / '.DS_Store')
+            setfile = shutil.which('SetFile')
+            if setfile:
+                subprocess.run([setfile, '-a', 'C', str(mount)], capture_output=True, text=True)
+        finally:
+            if device:
+                detach_dmg(device)
+        run([
+            'hdiutil', 'convert', str(temp_dmg), '-format', 'UDZO',
+            '-imagekey', 'zlib-level=9', '-o', str(output),
+        ])
+
+    verify_dmg(output, version)
+    return version
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Build a verified AI Copilot DMG')
+    parser.add_argument('--app', required=True, type=Path, help='path to AI Copilot.app')
+    parser.add_argument('--assets', type=Path, default=ROOT / 'dmg-assets')
+    parser.add_argument('--output-dir', type=Path, default=ROOT / 'release')
+    parser.add_argument('--output', type=Path, help='explicit DMG output path')
+    parser.add_argument('--overwrite', action='store_true')
+    args = parser.parse_args()
+    version = app_version(args.app)
+    output = args.output or args.output_dir / ('AI.Copilot-' + version + '-arm64.dmg')
+    built_version = build_dmg(args.app, args.assets, output, args.overwrite)
+    print('built and verified:', output)
+    print('version:', built_version)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as exc:
+        print('ERROR:', exc, file=sys.stderr)
+        sys.exit(1)

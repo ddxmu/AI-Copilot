@@ -1,7 +1,7 @@
 {
   "name": "ai-copilot",
   "productName": "AI Copilot",
-  "version": "0.8.20",
+  "version": "0.8.21",
   "description": "选择文件或文件夹，按规则批量替换文件内容",
   "main": "main.js",
   "license": "MIT",
@@ -9,7 +9,8 @@
     "start": "electron .",
     "dist": "electron-builder --mac dmg",
     "dist:arm": "electron-builder --mac dmg --arm64",
-    "dist:intel": "electron-builder --mac dmg --x64"
+    "dist:intel": "electron-builder --mac dmg --x64",
+    "test:updater": "node ../test/updater.test.js"
   },
   "devDependencies": {
     "electron": "^31.0.0",
@@ -18,6 +19,7 @@
   "build": {
     "appId": "com.app.aifilereplacer",
     "productName": "AI Copilot",
+    "asar": false,
     "directories": {
       "output": "release"
     },

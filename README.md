@@ -22,7 +22,7 @@ AI-Copilot/
 │   ├── preload.js        # contextBridge 桥接
 │   ├── agent.js          # AI 智能体核心（agent loop + 工具 + 技能）
 │   ├── ai-config.js      # AI 配置本地持久化
-│   ├── updater.js        # 自动更新器（检查/下载/安装）
+│   ├── updater.js        # 自动更新器（检查/校验/退出后替换）
 │   ├── filetypes.js      # 支持的文件类型
 │   ├── office-replace.js # Office(zip) 文本替换引擎
 │   ├── pdf-watermark.js  # PDF 水印去除引擎
@@ -30,8 +30,9 @@ AI-Copilot/
 │   ├── CHANGELOG.md      # 版本记录
 │   └── renderer/         # 界面（index.html / app.js / style.css / assets）
 ├── dmg-assets/           # DMG 品牌资源（背景图、卷标图标、.DS_Store 参考、使用说明）
-├── make_dmg.py           # 品牌化 DMG 打包脚本
-├── publish_release.py    # 发布脚本：同步源码→打包→建 Release→更新 latest.json→推送
+├── make_dmg.py           # 品牌化 DMG 打包 + 签名/版本校验
+├── publish_release.py    # 发布脚本：上传并校验完整包/增量包，生成 latest.json
+├── test/updater.test.js  # 增量、完整包与 launchd 更新助手集成测试
 ├── latest.json           # 更新清单（App 启动时读取）
 ├── 配置说明.md            # 配置项说明
 └── README.md
@@ -47,32 +48,43 @@ AI-Copilot/
 cd app
 npm install              # 安装 electron / electron-builder（开发依赖）
 npm run dist:arm         # 产出 .app（在 release/ 下）
-# 然后用 make_dmg.py 打成品牌化 DMG
-python3 make_dmg.py      # 产物：~/Downloads/AI Copilot-x.y.z-arm64.dmg
+cd ..
+python3 make_dmg.py --app app/release/mac-arm64/AI\ Copilot.app --output-dir release
+npm --prefix app run test:updater
 ```
 
-当前构建流程在开发机上以 `/tmp/AIReplace/` 为工作区：`make_dmg.py` 直接拷贝已构建好的
-`AI Copilot.app` 并套用 `dmg-assets` 品牌布局。普通用户无需本地构建，直接从 Release 下载 DMG 安装即可。
+`make_dmg.py` 不依赖开发机的固定目录：它会把传入 app bundle 的 `Info.plist` 同步到
+`package.json` 版本、重新进行 ad-hoc 签名，并在 DMG 生成后挂载验证 bundle 版本与签名。
+普通用户无需本地构建，直接从 Release 下载 DMG 安装即可。
 
 ## 自动更新机制
 
-- `app/updater.js` 在启动时从 `https://raw.githubusercontent.com/ddxmu/AI-Copilot/main/latest.json` 拉取清单，与 `app.getVersion()` 比对。
+- `app/updater.js` 在启动时从 `https://raw.githubusercontent.com/ddxmu/AI-Copilot/main/latest.json` 拉取清单，与 `Resources/app/package.json` 的真实版本比对。
 - 有更新时：设置页「软件更新」卡片显示新版本与更新内容，可点「下载并安装」。
-- 安装流程：下载 Release 里的 DMG → 挂载 → 拷贝新 `.app` 到暂存区 → 退出后由独立脚本替换并重启（适配未签名 DMG 分发）。
+- 有匹配版本时，优先下载几十 KB 到数百 KB 的增量包；每次下载都按版本与 sha256 隔离缓存，并在安装前校验 hash。
+- 安装流程：下载到 userData 的暂存区 → 旧应用退出 → 独立 launchd 助手替换、校验签名并重启。完整 DMG 是没有匹配增量包时的自动回退。
+- 应用应安装在“应用程序 / Applications”中；桌面、下载或文稿等受保护目录会明确提示使用完整 DMG 安装，避免伪成功。
 - 仅检查与下载需要网络；Release 为公开仓库，无需登录。
 
 ## 发布新版本
 
-由维护者（AI 助手）执行。每次升级只需一条命令：
+由维护者执行。发布不会改写已有 tag，也不会从固定临时目录复制未知源码：
 
 ```bash
-export GITHUB_TOKEN="ghp_xxx"   # 需要 repo 权限的个人访问令牌
-python3 publish_release.py
+git add app make_dmg.py publish_release.py test
+git commit -m "release: vX.Y.Z"
+git tag vX.Y.Z
+git push origin main
+git push origin vX.Y.Z
+python3 make_dmg.py --app /path/to/AI\ Copilot.app --output-dir release
+export GITHUB_TOKEN="..."       # 需要 repo 权限的个人访问令牌
+python3 publish_release.py --tag vX.Y.Z --dmg release/AI.Copilot-X.Y.Z-arm64.dmg --publish
+git add latest.json && git commit -m "release: vX.Y.Z latest.json" && git push origin main
 ```
 
-脚本会自动：① 将最新源码从构建工作区同步进 `app/` ②（若需要）调用 `make_dmg.py` 打包
-③ 在 GitHub 创建 `vX.Y.Z` Release 并上传 DMG ④ 生成 `latest.json`（含下载地址与 sha256）
-⑤ `git commit` + `git push`。App 端下次启动即能检测到新版本。
+脚本会为所有已有的 `v0.8.x` source tag 生成到新版本的独立增量包，上传完整 DMG 与
+所有增量包后逐个核对 GitHub 返回的文件大小和 sha256，再生成 `latest.json`。App 端下次
+启动即可检测到新版本。
 
 ## 许可证
 
