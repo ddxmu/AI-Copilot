@@ -1,10 +1,10 @@
 {
-  "version": "0.8.6",
-  "notes": "- **新增默认智能体技能**：将 `file-organizer-skill`、`document-converter` 设为智能体默认技能（内置、始终可用）；并为「文件格式转换」面板新增技能选择器：`document-converter` 为默认，另提供 3 个 PDF 专项技能（`pdf-to-office` PDF 与 Office/图片/文本互转、`pdf-compress` PDF 压缩、`pdf-merge-split` PDF 合并/拆分/提取），以及「本地引擎（快速，不依赖 AI）」兜底选项。点击「开始转换」即使用所选择的技能（经 AI 代理执行），选「本地引擎」则走原内置快速转换。",
-  "pubDate": "2026-08-09T08:53:55+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.6/AI.Copilot-0.8.6-arm64.dmg",
-  "sha256": "5be329eb9b7f59401070d63b3097f0b1238a70f349b8b28895d8b1369ce39509",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.6/delta-0.8.6.zip",
-  "deltaSha256": "3442aec28c33276b15973b9604da285c2f13c52d09b3bd5cce3ebb1695681670",
-  "deltaFromVersion": "0.8.5"
+  "version": "0.8.7",
+  "notes": "- **「文件自动化」新增技能选项**：在执行区（「开始编写」前）新增「使用技能（可选）」下拉，自动列出「已安装技能」与「文件整理相关内置技能」（`file-organizer-skill`、`document-converter`、`pdf-to-office`、`pdf-compress`、`pdf-merge-split` 等）。选中某技能后，点击「开始编写（AI）」或「AI 协助转换」时，会先调用 skill 工具加载该技能、按其指引执行文件自动化任务；不指定则走默认流程。",
+  "pubDate": "2026-08-09T09:25:36+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.7/AI.Copilot-0.8.7-arm64.dmg",
+  "sha256": "e0fb7e8f9c35a58e6625d7125bd8beed85350764d2ceadb8de5170bf582f4f22",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.7/delta-0.8.7.zip",
+  "deltaSha256": "5a6dfb7a1f0441ca1eff0cf69e9dd2dce84fc3909959a3f3e7e12da3bdae7aa6",
+  "deltaFromVersion": "0.8.6"
 }

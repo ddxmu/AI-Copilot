@@ -496,6 +496,18 @@
           </div>
         </div>
 
+        <!-- ⑥ 使用技能（可选） -->
+        <div class="card">
+          <h2>⑥ 使用技能（可选）</h2>
+          <div class="form-row">
+            <label>AI 编写 / 协助转换所用技能</label>
+            <select id="auto-skill" class="auto-select">
+              <option value="">（不指定技能，按默认流程）</option>
+            </select>
+          </div>
+          <p class="hint" style="font-size:12px;margin-top:6px;">自动列出「已安装技能」与「文件整理相关内置技能」。选好后，「开始编写（AI）」与「AI 协助转换」会先调用 skill 工具加载该技能、按其指引执行任务。</p>
+        </div>
+
         <!-- 执行 -->
         <div class="wizard-nav">
           <span id="auto-msg" class="wizard-msg"></span>

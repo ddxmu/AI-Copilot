@@ -1,3 +1,6 @@
+## v0.8.7 — 2026-08-09
+- **「文件自动化」新增技能选项**：在执行区（「开始编写」前）新增「使用技能（可选）」下拉，自动列出「已安装技能」与「文件整理相关内置技能」（`file-organizer-skill`、`document-converter`、`pdf-to-office`、`pdf-compress`、`pdf-merge-split` 等）。选中某技能后，点击「开始编写（AI）」或「AI 协助转换」时，会先调用 skill 工具加载该技能、按其指引执行文件自动化任务；不指定则走默认流程。
+
 ## v0.8.6 — 2026-08-09
 - **新增默认智能体技能**：将 `file-organizer-skill`、`document-converter` 设为智能体默认技能（内置、始终可用）；并为「文件格式转换」面板新增技能选择器：`document-converter` 为默认，另提供 3 个 PDF 专项技能（`pdf-to-office` PDF 与 Office/图片/文本互转、`pdf-compress` PDF 压缩、`pdf-merge-split` PDF 合并/拆分/提取），以及「本地引擎（快速，不依赖 AI）」兜底选项。点击「开始转换」即使用所选择的技能（经 AI 代理执行），选「本地引擎」则走原内置快速转换。
 
