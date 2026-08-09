@@ -154,8 +154,9 @@ function downloadFile(url, dest, opts = {}) {
       const doGet = (u, redirects) => {
         if (redirects > 10) return onFail(new Error('重定向次数过多'));
         const mod = u.startsWith('https') ? https : http;
-        const headers = {};
-        if (startByte > 0) headers.Range = `bytes=${startByte}-`;
+        const headers = { 'User-Agent': 'AI-Copilot-Updater/1.0' };
+        // 仅对原始请求（未发生重定向）携带 Range；GitHub 302 后的 SAS URL 带 Range 可能 403/416
+        if (redirects === 0 && startByte > 0) headers.Range = `bytes=${startByte}-`;
         const req = mod.get(u, { headers, timeout: 30000 }, (res) => {
           if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
             res.resume();
@@ -163,6 +164,7 @@ function downloadFile(url, dest, opts = {}) {
           }
           if (res.statusCode !== 200 && res.statusCode !== 206) {
             res.resume();
+            log('downloadFile HTTP 错误', res.statusCode, 'URL:', u);
             return onFail(new Error('下载失败 HTTP ' + res.statusCode));
           }
           total = parseInt(res.headers['content-length'] || '0', 10) + startByte;
@@ -220,8 +222,34 @@ function detachDmg(vol) {
 function copyApp(src, dest) {
   return new Promise((resolve, reject) => {
     fs.rmSync(dest, { recursive: true, force: true });
-    execFile('cp', ['-R', src, dest], (err) => (err ? reject(err) : resolve()));
+    // 用 -X 跳过扩展属性，避免运行中 .app 的 com.apple.provenance 导致 Operation not permitted
+    execFile('cp', ['-RX', src, dest], (err) => (err ? reject(err) : resolve()));
   });
+}
+
+// 用 Node.js 逐文件复制（fallback，避开 cp 复制扩展属性时的权限问题）
+function copyTreeNodeSync(src, dst) {
+  if (!fs.existsSync(dst)) fs.mkdirSync(dst, { recursive: true });
+  for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, ent.name);
+    const d = path.join(dst, ent.name);
+    if (ent.isDirectory()) {
+      copyTreeNodeSync(s, d);
+    } else {
+      fs.copyFileSync(s, d);
+    }
+  }
+}
+
+// 把 src 目录内容覆盖到 dst 目录；优先用 cp -RfX（不复制扩展属性），
+// 失败则回退 Node.js 逐文件复制，避免 com.apple.provenance 等导致 Operation not permitted
+function copyIntoSync(src, dst) {
+  try {
+    execFileSync('cp', ['-RfX', src + '/.', dst + '/']);
+  } catch (e) {
+    log('cp -RfX 失败，回退 Node.js 复制:', e.message);
+    copyTreeNodeSync(src, dst);
+  }
 }
 
 // 把 Info.plist 的版本号同步为真实版本（增量更新只覆盖 Resources/app，
@@ -264,7 +292,8 @@ function applyDeltaAndRelaunch(deltaZipPath) {
   log('applyDelta: 准备覆盖', appResDir, '| 当前版本', beforeVer, '| 删除列表', deletedFiles);
 
   // 同步覆盖变更文件（app 仍在运行，Resources/app 里都是普通数据文件，可安全覆盖）
-  execFileSync('cp', ['-Rf', stagingDir + '/.', appResDir + '/']);
+  // 用 copyIntoSync 处理扩展属性（com.apple.provenance）导致的 cp 失败
+  copyIntoSync(stagingDir, appResDir);
 
   // 同步删除已移除文件
   for (const f of deletedFiles) {
@@ -301,7 +330,8 @@ function relaunchAndApply(staging) {
   // 先尝试整包原地覆盖（不删目标目录，避免破坏运行中进程的 inode）
   let fullOk = true;
   try {
-    execFileSync('cp', ['-Rf', staging + '/.', target + '/']);
+    // 用 -X 跳过扩展属性，避免 com.apple.provenance 导致 Operation not permitted
+    execFileSync('cp', ['-RfX', staging + '/.', target + '/']);
   } catch (e) {
     // 运行中的可执行文件/框架会返回 ETXTBSY，整包覆盖失败属预期情况
     fullOk = false;
@@ -313,7 +343,7 @@ function relaunchAndApply(staging) {
     const srcRes = path.join(staging, 'Contents', 'Resources', 'app');
     const dstRes = appResDirPath();
     if (fs.existsSync(srcRes)) {
-      execFileSync('cp', ['-Rf', srcRes + '/.', dstRes + '/']);
+      copyIntoSync(srcRes, dstRes);
     }
     const srcPlist = path.join(staging, 'Contents', 'Info.plist');
     const dstPlist = path.join(target, 'Contents', 'Info.plist');
