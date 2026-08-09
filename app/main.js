@@ -1269,15 +1269,26 @@ ipcMain.handle('pdf-engine-info', () => {
 ipcMain.handle('pdf-analyze-watermark', (_e, files) => {
   const agg = new Map();
   const errors = [];
-  for (const f of files) {
-    const r = pdfwm.analyze(f);
-    if (!r.ok) { errors.push({ file: f, error: r.error }); continue; }
-    for (const c of r.candidates) {
-      const cur = agg.get(c.text) || { text: c.text, count: 0, files: 0 };
-      cur.count += c.count;
-      cur.files += 1;
-      agg.set(c.text, cur);
+  try {
+    for (const f of (files || [])) {
+      let r;
+      try {
+        r = pdfwm.analyze(f);
+      } catch (err) {
+        errors.push({ file: f, error: '解析异常：' + (err && err.message ? err.message : err) });
+        continue;
+      }
+      if (!r || !r.ok) { errors.push({ file: f, error: (r && r.error) || '未知错误' }); continue; }
+      for (const c of r.candidates) {
+        const cur = agg.get(c.text) || { text: c.text, count: 0, files: 0 };
+        cur.count += c.count;
+        cur.files += 1;
+        agg.set(c.text, cur);
+      }
     }
+  } catch (e) {
+    // 整体兜底：绝不让 IPC 调用 reject，否则渲染端会静默无反馈
+    errors.push({ file: '(未知)', error: '分析过程异常：' + (e && e.message ? e.message : e) });
   }
   const candidates = [...agg.values()].sort((a, b) => b.count - a.count).slice(0, 80);
   return { ok: true, candidates, errors };

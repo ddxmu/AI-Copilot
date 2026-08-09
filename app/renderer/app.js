@@ -3500,31 +3500,43 @@ function renderWmCandidates() {
 document.getElementById('wm-analyze').addEventListener('click', async () => {
   if (!wm.files.length) { setWmMsg('请先选择 PDF 文件'); return; }
   setWmMsg('正在分析水印…');
-  const r = await window.api.pdfAnalyzeWatermark(wm.files);
-  wm.candidates = (r.candidates || []).map((c) => ({ ...c, marked: false }));
-  renderWmCandidates();
-  if (r.errors && r.errors.length) setWmMsg(`已分析，${r.errors.length} 个文件无法解析`);
-  else setWmMsg(wm.candidates.length ? '' : '未检测到文字内容');
+  try {
+    const r = await window.api.pdfAnalyzeWatermark(wm.files);
+    wm.candidates = (r.candidates || []).map((c) => ({ ...c, marked: false }));
+    renderWmCandidates();
+    if (r.errors && r.errors.length) setWmMsg(`已分析，${r.errors.length} 个文件无法解析（图片/加密型水印暂不支持）`);
+    else if (!wm.candidates.length) setWmMsg('未检测到文字内容（图片水印或加密 PDF 可能无法识别）');
+    else setWmMsg(`共发现 ${wm.candidates.length} 个候选文字，请勾选要删除的项`);
+  } catch (e) {
+    console.error('分析水印失败', e);
+    setWmMsg('分析失败：' + (e && e.message ? e.message : e));
+  }
 });
 
 // AI 分析：启发式预勾选 + 交给 AI 给出判断
 document.getElementById('wm-ai-analyze').addEventListener('click', async () => {
   if (!wm.files.length) { setWmMsg('请先选择 PDF 文件'); return; }
-  if (!wm.candidates.length) {
-    setWmMsg('正在分析水印…');
-    const r = await window.api.pdfAnalyzeWatermark(wm.files);
-    wm.candidates = (r.candidates || []).map((c) => ({ ...c, marked: false }));
-  }
-  // 启发式：命中水印关键词 或 多处出现 → 预勾选
-  wm.candidates.forEach((c) => {
-    const low = c.text.toLowerCase();
-    c.marked = WM_KEYWORDS.some((k) => low.includes(k.toLowerCase())) || c.count >= 2;
-  });
-  renderWmCandidates();
-  setWmMsg('已按关键词/频次预勾选，可在下方调整；下方同时请 AI 给出判断');
+  setWmMsg('正在分析水印…');
+  try {
+    if (!wm.candidates.length) {
+      const r = await window.api.pdfAnalyzeWatermark(wm.files);
+      wm.candidates = (r.candidates || []).map((c) => ({ ...c, marked: false }));
+    }
+    // 启发式：命中水印关键词 或 多处出现 → 预勾选
+    wm.candidates.forEach((c) => {
+      const low = c.text.toLowerCase();
+      c.marked = WM_KEYWORDS.some((k) => low.includes(k.toLowerCase())) || c.count >= 2;
+    });
+    renderWmCandidates();
 
-  // 交给 AI 给意见（切到 AI 面板展示）
-  if (aiState.profiles.length && aiState.activeId) {
+    // 未配置 / 未启用 AI 模型：本地预勾选已完成，明确告知而不是静默跳过
+    if (!(aiState.profiles.length && aiState.activeId)) {
+      setWmMsg('已按关键词/频次预勾选（未配置 AI 模型，仅做本地分析；可在「AI 设置」配置并启用模型后获得 AI 判断）。请在下方调整勾选。');
+      return;
+    }
+    setWmMsg('已按关键词/频次预勾选，正在请 AI 给出判断…');
+
+    // 交给 AI 给意见（切到 AI 面板展示）
     const list = wm.candidates.slice(0, 40).map((c) => `- "${c.text}"（出现 ${c.count} 处）`).join('\n');
     const prompt = `我从 PDF 中提取到以下文本片段，请判断哪些最可能是需要删除的“水印”文字（如机密/内部/样品/draft 等标记），哪些可能是正文应保留。请只输出一个“应删除”的清单（每行一条原文），没有就说“无”。\n\n${list}`;
     switchPanel('ai');
@@ -3546,6 +3558,9 @@ document.getElementById('wm-ai-analyze').addEventListener('click', async () => {
     setSending(false);
     persistCurrentChat();
     saveChats();
+  } catch (e) {
+    console.error('AI 分析水印失败', e);
+    setWmMsg('AI 分析失败：' + (e && e.message ? e.message : e));
   }
 });
 
