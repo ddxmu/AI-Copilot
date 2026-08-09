@@ -3269,3 +3269,59 @@ body {
   background: #232833;
   color: var(--text-light);
 }
+
+/* ===== 升级成功提示条（升级后首次启动显示） ===== */
+.upgrade-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 12px;
+  border-radius: 10px;
+  background: #eaf6ee;
+  border: 1px solid #b7e0c4;
+  color: #1c6b3a;
+  font-size: 13px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  animation: upgradeToastIn 0.28s ease-out;
+}
+@keyframes upgradeToastIn {
+  from { opacity: 0; transform: translate(-50%, -12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.upgrade-toast .ut-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2e9e5b;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  flex: none;
+}
+.upgrade-toast .ut-text b { font-weight: 600; }
+.upgrade-toast .ut-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.upgrade-toast .ut-close:hover { opacity: 1; }
+:root.dark .upgrade-toast {
+  background: #1b2a20;
+  border-color: #2f5c40;
+  color: #7fd6a0;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+:root.dark .upgrade-toast .ut-ico { background: #2e9e5b; color: #0d1712; }
