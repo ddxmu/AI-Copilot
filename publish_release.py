@@ -87,6 +87,10 @@ def package_version_at(tag):
     return version
 
 
+def tag_commit(tag):
+    return git_text('rev-parse', tag + '^{commit}').strip()
+
+
 def release_notes(tag, version):
     text = git_text('show', tag + ':app/CHANGELOG.md')
     marker = '## v' + version
@@ -264,7 +268,7 @@ def create_or_get_draft_release(token, tag, version, notes):
         return existing
     return api(token, 'POST', '/releases', {
         'tag_name': tag,
-        'target_commitish': tag,
+        'target_commitish': tag_commit(tag),
         'name': 'AI Copilot ' + version,
         'body': notes,
         'draft': True,
