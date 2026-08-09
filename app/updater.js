@@ -265,8 +265,42 @@ function syncInfoPlistVersion(appPath, version) {
   }
 }
 
-// 应用增量包：解压 delta zip → 同步覆盖 Resources/app → 删除被移除文件 → 重启
-// 全程在主进程内同步执行，不依赖任何子进程，避免 app 退出时 apply 被中断。
+// 「退出后替换」机制：macOS 禁止在 app 运行时覆盖其自身 bundle 内的文件
+// （cp/fs 均报 Operation not permitted，且间歇性触发，无法稳定绕过——单文件偶尔可写、
+// 但递归覆盖必败）。因此绝不在 app 退出前覆盖自身文件，而是把待更新文件暂存到 app
+// 外部的 userData/pending-update，写标记后重启；由新进程启动最早期（main.js 顶部、
+// 任何业务模块加载前）执行真正的文件覆盖。这是 electron-updater 等成熟方案的标准做法。
+
+// pending 暂存目录（位于 userData 内，app 运行时可写，且不在 app bundle 内）
+function pendingDir() { return path.join(userData(), 'pending-update'); }
+
+// 安排「退出后替换」：把待覆盖的 app 目录（及可选 Info.plist）暂存到 pending，
+// 写标记，然后重启。真正的文件覆盖由新进程启动早期完成。
+function stageUpdate(stagingAppDir, { infoPlist, deletedFiles = [] } = {}) {
+  const pd = pendingDir();
+  fs.rmSync(pd, { recursive: true, force: true });
+  fs.mkdirSync(pd, { recursive: true });
+  // 复制待覆盖 app 目录到 pending/app（stagingAppDir 内即为 app 根，不含外层目录）
+  copyIntoSync(stagingAppDir, path.join(pd, 'app'));
+  // 完整包路径会附带 Info.plist，一并暂存
+  if (infoPlist && fs.existsSync(infoPlist)) {
+    const cdir = path.join(pd, 'Contents');
+    fs.mkdirSync(cdir, { recursive: true });
+    fs.copyFileSync(infoPlist, path.join(cdir, 'Info.plist'));
+  }
+  fs.writeFileSync(path.join(pd, 'meta.json'), JSON.stringify({
+    from: getCurrentVersion(),
+    deletedFiles,
+    hasInfoPlist: !!(infoPlist && fs.existsSync(infoPlist)),
+  }));
+  // 清理下载缓存（staging/dmg 等）
+  try { fs.rmSync(updateDir(), { recursive: true, force: true }); } catch (e) { /* ignore */ }
+  log('stageUpdate: 已暂存待替换文件，即将重启（退出后由新进程执行覆盖）');
+  app.relaunch();
+  app.exit(0);
+}
+
+// 应用增量包：解压 delta zip → 暂存 → 安排退出后替换（不在运行时覆盖自身文件）
 function applyDeltaAndRelaunch(deltaZipPath) {
   const stagingDir = path.join(updateDir(), 'staging');
   fs.rmSync(stagingDir, { recursive: true, force: true });
@@ -286,82 +320,26 @@ function applyDeltaAndRelaunch(deltaZipPath) {
     fs.writeFileSync(dest, e.data);
   }
 
-  const target = currentAppPath();
-  const appResDir = appResDirPath();
   const beforeVer = getCurrentVersion();
-  log('applyDelta: 准备覆盖', appResDir, '| 当前版本', beforeVer, '| 删除列表', deletedFiles);
-
-  // 同步覆盖变更文件（app 仍在运行，Resources/app 里都是普通数据文件，可安全覆盖）
-  // 用 copyIntoSync 处理扩展属性（com.apple.provenance）导致的 cp 失败
-  copyIntoSync(stagingDir, appResDir);
-
-  // 同步删除已移除文件
-  for (const f of deletedFiles) {
-    try { fs.unlinkSync(path.join(appResDir, f)); } catch (e) { /* ignore */ }
-  }
-
-  // 校验：覆盖后版本号必须真的变了，否则说明 apply 没生效，直接报错而不是静默重启
-  const afterVer = getCurrentVersion();
-  if (compareVersions(afterVer, beforeVer) <= 0) {
-    log('applyDelta: ❌ 覆盖后版本仍为', afterVer, '，apply 未生效');
-    throw new Error(`增量更新未生效（版本仍为 ${afterVer}），请改用完整安装包`);
-  }
-
-  // 关键：把 Info.plist 版本号同步为新版本，避免系统信息与实际版本不一致
-  syncInfoPlistVersion(target, afterVer);
-
-  // 清理 quarantine 属性 + 更新目录
-  try { execFileSync('xattr', ['-dr', 'com.apple.quarantine', target]); } catch (e) { /* ignore */ }
-  try { fs.rmSync(updateDir(), { recursive: true, force: true }); } catch (e) { /* ignore */ }
-
-  log('applyDelta: ✅ 覆盖完成', beforeVer, '→', afterVer, '，即将重启');
-  // 重启 app（relaunch + exit，全部在主进程内完成）
-  app.relaunch();
-  app.exit(0);
+  log('applyDelta: 解压完成 | 当前版本', beforeVer, '| 删除列表', deletedFiles);
+  // 暂存并安排退出后替换（关键：不在运行时覆盖自身文件）
+  stageUpdate(stagingDir, { deletedFiles });
 }
 
-// 完整 DMG 安装：下载 → 挂载 → 拷到 staging → 同步覆盖到目标 .app → 重启
-// 同样在主进程内同步完成，不依赖 detached 子进程。
+// 完整 DMG 安装：下载 → 挂载 → 拷到 staging → 提取 Resources/app + Info.plist → 安排退出后替换
 function relaunchAndApply(staging) {
-  const target = currentAppPath();
   const beforeVer = getCurrentVersion();
-  log('relaunchAndApply: 准备覆盖', target, '<-', staging, '| 当前版本', beforeVer);
-
-  // 先尝试整包原地覆盖（不删目标目录，避免破坏运行中进程的 inode）
-  let fullOk = true;
-  try {
-    // 用 -X 跳过扩展属性，避免 com.apple.provenance 导致 Operation not permitted
-    execFileSync('cp', ['-RfX', staging + '/.', target + '/']);
-  } catch (e) {
-    // 运行中的可执行文件/框架会返回 ETXTBSY，整包覆盖失败属预期情况
-    fullOk = false;
-    log('relaunchAndApply: 整包覆盖失败（多为可执行文件被占用），回退为只覆盖 Resources/app +Info.plist：', e.message);
-  }
-
-  if (!fullOk) {
-    // 回退：只覆盖 Resources/app（纯数据文件，可安全覆盖）与 Info.plist
-    const srcRes = path.join(staging, 'Contents', 'Resources', 'app');
-    const dstRes = appResDirPath();
-    if (fs.existsSync(srcRes)) {
-      copyIntoSync(srcRes, dstRes);
-    }
-    const srcPlist = path.join(staging, 'Contents', 'Info.plist');
-    const dstPlist = path.join(target, 'Contents', 'Info.plist');
-    try { if (fs.existsSync(srcPlist)) fs.copyFileSync(srcPlist, dstPlist); } catch (e) { /* ignore */ }
-  }
-
-  const afterVer = getCurrentVersion();
-  if (compareVersions(afterVer, beforeVer) <= 0) {
-    log('relaunchAndApply: ❌ 覆盖后版本仍为', afterVer);
-    throw new Error(`更新未生效（版本仍为 ${afterVer}），请手动安装 DMG`);
-  }
-  syncInfoPlistVersion(target, afterVer);
-
-  try { execFileSync('xattr', ['-dr', 'com.apple.quarantine', target]); } catch (e) { /* ignore */ }
-  try { fs.rmSync(updateDir(), { recursive: true, force: true }); } catch (e) { /* ignore */ }
-  log('relaunchAndApply: ✅ 覆盖完成', beforeVer, '→', afterVer, '，即将重启');
-  app.relaunch();
-  app.exit(0);
+  log('relaunchAndApply: 准备提取更新文件 | 当前版本', beforeVer);
+  const srcRes = path.join(staging, 'Contents', 'Resources', 'app');
+  const srcPlist = path.join(staging, 'Contents', 'Info.plist');
+  const tmp = path.join(updateDir(), 'full-staging');
+  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.mkdirSync(tmp, { recursive: true });
+  // 只提取纯数据文件（Resources/app）与 Info.plist，避免覆盖正在运行的二进制/Framework
+  if (fs.existsSync(srcRes)) copyIntoSync(srcRes, tmp);
+  let infoPlist = null;
+  if (fs.existsSync(srcPlist)) { infoPlist = path.join(tmp, 'Info.plist'); fs.copyFileSync(srcPlist, infoPlist); }
+  stageUpdate(tmp, { infoPlist });
 }
 
 // ===== 对外 API =====
