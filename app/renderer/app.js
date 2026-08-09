@@ -1207,6 +1207,15 @@ function formatBytes(n) {
   return n + ' B';
 }
 
+// 是否可用增量升级：deltas 数组中存在 from === 当前版本，或旧版单一 deltaUrl 匹配
+function hasMatchingDelta(res) {
+  const cur = res && res.currentVersion;
+  if (cur && Array.isArray(res && res.deltas)) {
+    if (res.deltas.some((d) => d && d.from && d.from === cur)) return true;
+  }
+  return !!(res && res.deltaUrl && res.deltaFromVersion === cur);
+}
+
 function showSidebarUpdateBox(res) {
   const box = document.getElementById('sidebar-update-box');
   const sub = document.getElementById('sidebar-update-sub');
@@ -1214,7 +1223,7 @@ function showSidebarUpdateBox(res) {
   if (!box) return;
   if (sub) sub.textContent = `v${res.version} 可用（当前 v${res.currentVersion}）`;
   if (note) {
-    const isDelta = res.deltaUrl && res.deltaFromVersion === res.currentVersion;
+    const isDelta = hasMatchingDelta(res);
     note.textContent = isDelta
       ? '支持增量升级，点击「立即升级」一键更新。'
       : '点击「立即升级」下载并安装（完整包约 340MB）。';
@@ -1237,7 +1246,7 @@ function revealInstall(res) {
   const notes = document.getElementById('update-notes');
   if (ver) ver.textContent = 'v' + res.version;
   if (status) {
-    const isDelta = res.deltaUrl && res.deltaFromVersion === res.currentVersion;
+    const isDelta = hasMatchingDelta(res);
     status.textContent = isDelta ? '有可用更新（支持增量升级）' : '有可用更新';
     status.className = 'update-status has-update';
   }
@@ -1327,7 +1336,7 @@ async function initUpdater() {
     const bar = document.getElementById('update-progress-bar');
     // 判断走增量还是完整包
     const curVer = await window.api.getAppVersion().catch(() => '');
-    const isDelta = pendingUpdate.deltaUrl && pendingUpdate.deltaFromVersion === curVer;
+    const isDelta = hasMatchingDelta({ ...pendingUpdate, currentVersion: curVer });
     if (status) {
       status.textContent = isDelta ? '正在下载增量更新…' : '正在下载完整安装包…';
       status.className = 'update-status';

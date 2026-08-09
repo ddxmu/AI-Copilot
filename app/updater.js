@@ -5,6 +5,7 @@ const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
 const { app } = require('electron');
 const { readZipEntries } = require('./office-replace');
@@ -231,6 +232,7 @@ async function checkForUpdates() {
       deltaUrl: m.deltaUrl || '',
       deltaSha256: m.deltaSha256 || '',
       deltaFromVersion: m.deltaFromVersion || '',
+      deltas: Array.isArray(m.deltas) ? m.deltas : [],
     };
   } catch (e) {
     return { updateAvailable: false, currentVersion: cur, error: e.message };
@@ -288,17 +290,34 @@ async function downloadAndInstall(manifest, cb = {}) {
   // 判断走增量还是完整包
   const cur = app.getVersion();
   const info = typeof manifest === 'string' ? { dmgUrl: manifest } : manifest;
-  const canDelta = info.deltaUrl && info.deltaFromVersion &&
-    compareVersions(info.deltaFromVersion, cur) === 0;
 
-  if (canDelta) {
+  // 构造可用增量包列表：优先 latest.json 的 deltas 数组（多版本），
+  // 兼容旧版单一 deltaUrl/deltaFromVersion 字段
+  const allDeltas = Array.isArray(info.deltas) ? info.deltas.slice() : [];
+  if (info.deltaUrl && info.deltaFromVersion) {
+    allDeltas.push({ from: info.deltaFromVersion, url: info.deltaUrl, sha256: info.deltaSha256 });
+  }
+  // 选一个与当前运行版本精确匹配的增量包（不管当前是第几版，都能用 tiny delta）
+  const chosen = allDeltas.find(
+    (d) => d && d.from && d.url && compareVersions(d.from, cur) === 0
+  );
+
+  if (chosen) {
     // === 增量更新路径 ===
-    const deltaPath = path.join(updateDir(), 'delta.zip');
+    const safeFrom = String(chosen.from).replace(/[^0-9.]/g, '') || 'latest';
+    const deltaPath = path.join(updateDir(), `delta-${safeFrom}.zip`);
     if (cb.onStage) cb.onStage('下载增量更新包…');
-    await downloadFile(info.deltaUrl, deltaPath, {
+    await downloadFile(chosen.url, deltaPath, {
       onProgress: (p) => cb.onProgress && cb.onProgress(p),
       onStage: (s) => cb.onStage && cb.onStage(s),
     });
+    // 可选：sha256 校验
+    if (chosen.sha256) {
+      const actual = crypto.createHash('sha256').update(fs.readFileSync(deltaPath)).digest('hex');
+      if (actual.toLowerCase() !== String(chosen.sha256).toLowerCase()) {
+        throw new Error('增量包校验失败（sha256 不匹配），已取消更新');
+      }
+    }
     if (cb.onStage) cb.onStage('应用增量更新…');
     applyDeltaAndRelaunch(deltaPath, cb); // 内部会 app.quit
     return;
