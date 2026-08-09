@@ -1,3 +1,14 @@
+## v0.8.16 — 2026-08-09
+- **修复「在线升级永远失败、重启仍是老版本」的根因**：此前更新器依赖 Electron 的 `app.getVersion()` 判断当前版本，但 macOS 打包的 `.app` 中该 API 读取的是 `Info.plist` 的 `CFBundleVersion`（本应用恒为 `0.7.2`，增量更新不覆盖 `Info.plist`），导致版本判断永远错乱——所有增量包（`deltas`）都匹配不上，只能走「完整 DMG」路径；而该路径用 `detached bash + app.quit()` 在 app 退出后子进程被一并杀死、`apply.sh` 从未执行，于是升级永远不生效。
+  - 改为更新逻辑直接读取 `Resources/app/package.json` 的真实版本号（`getCurrentVersion()`），增量匹配恢复准确。
+  - 增量与「完整 DMG」两种安装路径**统一改为在主进程内同步完成**（下载→`cp -Rf` 原地覆盖文件→`app.relaunch()`+`app.exit(0)`），不再依赖任何会被杀的 `detached bash` / `launchctl` 子进程。
+  - **升级完成后同步刷新 `Info.plist` 版本号**：增量包只覆盖 `Resources/app`，此前 `Info.plist` 会永远停留在打包模板的旧版本；现在应用更新后用 `plutil` 把 `CFBundleShortVersionString`/`CFBundleVersion` 一并改为新版本，重新打开后版本号处处一致。
+  - **新增「覆盖结果校验」**：应用更新后立刻回读 `package.json`，若版本号没有真正变大则判定为失败并抛错，不再静默重启造成「点了升级还是老版本」的假象；增量应用失败时自动回退到完整安装包路径。
+  - 修复 `attachDmg` / `copyApp` 误把异步 `execFile` 写成同步 `execFileSync` 却仍传回调，导致回调永不执行、Promise 永久挂起、完整安装包路径直接卡死的问题。
+  - 「完整 DMG」整包覆盖遇到运行中可执行文件被占用（ETXTBSY）时，自动回退为只覆盖 `Resources/app` 与 `Info.plist`，保证版本号仍能正确更新。
+  - 新增升级诊断日志：`userData/.update/updater.log` 记录每次下载/应用/重启，便于日后排查。
+  - 打包脚本（`make_dmg.py`）新增把 `Info.plist` 版本同步为 `package.json` 版本，避免系统「关于」信息显示错乱。
+
 ## v0.8.15 — 2026-08-09
 - **AI 设置新增「更新日志」卡片**：在 AI 设置面板最底部新增「更新日志」区块，自动读取本机 `CHANGELOG.md`，按版本倒序展示近期（最近 6 个）版本的升级内容（版本号 + 日期 + 要点列表），浅色/深色主题均适配，便于用户快速了解近期更新。通过新增 `get-changelog` IPC（主进程读取 `app/CHANGELOG.md`）供渲染进程获取原文并解析渲染。
 

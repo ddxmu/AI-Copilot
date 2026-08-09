@@ -1,12 +1,18 @@
 // updater.js — AI Copilot 自动更新器（主进程，适配未签名 DMG 分发）
-// 流程：拉取 GitHub raw 上的 latest.json → 比对版本 → 下载 Release DMG →
-//       挂载 → 拷贝新 .app 到 staging → 写独立 apply 脚本 → relaunch 自安装
+// 流程：拉取 GitHub raw 上的 latest.json → 比对版本 → 下载 Release → 应用 → 重启
+//
+// 设计要点（修复历史升级失效）：
+// 1) 版本判断必须读 Resources/app/package.json，不能读 app.getVersion()——
+//    macOS 打包后 app.getVersion() 返回 Info.plist 的 CFBundleVersion（本应用恒为 0.7.2，
+//    增量更新不覆盖 Info.plist），否则版本判断错乱、增量永远不匹配、永远走完整包。
+// 2) 应用更新必须在主进程内「同步」完成（cp 覆盖文件），再用 app.relaunch()+app.exit(0) 重启。
+//    任何 detached bash / launchctl 子进程都会在 app 退出时被一起杀掉，导致 apply 永不执行。
 const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { execFile, spawn, execFileSync } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 const { app } = require('electron');
 const { readZipEntries } = require('./office-replace');
 
@@ -23,6 +29,28 @@ const PROGRESS_THROTTLE_MS = 250;    // 进度事件最小间隔
 function userData() { return app.getPath('userData'); }
 function currentAppPath() { return path.resolve(app.getPath('exe'), '..', '..', '..'); }
 function updateDir() { return path.join(userData(), '.update'); }
+// Resources/app 目录（源码所在，增量更新只覆盖这里）
+function appResDirPath() { return path.join(currentAppPath(), 'Contents', 'Resources', 'app'); }
+
+// 诊断日志（写入 userData/.update/updater.log，便于日后排查升级问题）
+function log(...args) {
+  try {
+    const line = `[${new Date().toISOString()}] ` + args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ') + '\n';
+    fs.mkdirSync(updateDir(), { recursive: true });
+    fs.appendFileSync(path.join(updateDir(), 'updater.log'), line);
+  } catch (e) { /* 日志失败不影响升级 */ }
+}
+
+// 取得「真实」当前版本：直接读 Resources/app/package.json 的 version 字段
+// （见文件头说明：app.getVersion() 在本应用不可信）
+function getCurrentVersion() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(appResDirPath(), 'package.json'), 'utf8'));
+    return pkg.version || app.getVersion();
+  } catch (e) {
+    return app.getVersion();
+  }
+}
 
 // ===== 工具 =====
 function compareVersions(a, b) {
@@ -170,10 +198,12 @@ function downloadFile(url, dest, opts = {}) {
 
 function attachDmg(dmg) {
   return new Promise((resolve, reject) => {
-    execFile('hdiutil', ['attach', '-nobrowse', '-noautoopen', dmg], (err, stdout) => {
+    // 注意：必须用异步 execFile（带回调）。此前误写成 execFileSync 传回调，
+    // 导致回调永不执行、Promise 永久挂起，完整包路径直接卡死。
+    execFile('hdiutil', ['attach', '-nobrowse', '-noautoopen', dmg], { maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
       if (err) return reject(err);
-      const line = stdout.split('\n').find((l) => l.includes('/Volumes/'));
-      const vol = line ? line.trim().split(/\s+/).pop() : null;
+      const line = String(stdout).split('\n').find((l) => l.includes('/Volumes/'));
+      const vol = line ? line.trim().split(/\t/).pop().trim() : null;
       if (!vol || !fs.existsSync(vol)) return reject(new Error('找不到 DMG 挂载点'));
       resolve(vol);
     });
@@ -182,7 +212,8 @@ function attachDmg(dmg) {
 
 function detachDmg(vol) {
   return new Promise((resolve) => {
-    execFile('hdiutil', ['detach', '-force', vol], () => resolve());
+    try { execFileSync('hdiutil', ['detach', '-force', vol]); } catch (e) {}
+    resolve();
   });
 }
 
@@ -193,34 +224,119 @@ function copyApp(src, dest) {
   });
 }
 
-// 写独立安装脚本，脱离主进程在 app 退出后完成替换并重启
+// 把 Info.plist 的版本号同步为真实版本（增量更新只覆盖 Resources/app，
+// 否则 Info.plist 会永远停留在打包模板的旧版本号，导致系统「关于」显示错乱）
+function syncInfoPlistVersion(appPath, version) {
+  if (!version) return;
+  const plist = path.join(appPath, 'Contents', 'Info.plist');
+  if (!fs.existsSync(plist)) return;
+  for (const key of ['CFBundleShortVersionString', 'CFBundleVersion']) {
+    try {
+      execFileSync('plutil', ['-replace', key, '-string', version, plist]);
+    } catch (e) { log('syncInfoPlistVersion 失败', key, e.message); }
+  }
+}
+
+// 应用增量包：解压 delta zip → 同步覆盖 Resources/app → 删除被移除文件 → 重启
+// 全程在主进程内同步执行，不依赖任何子进程，避免 app 退出时 apply 被中断。
+function applyDeltaAndRelaunch(deltaZipPath) {
+  const stagingDir = path.join(updateDir(), 'staging');
+  fs.rmSync(stagingDir, { recursive: true, force: true });
+  fs.mkdirSync(stagingDir, { recursive: true });
+
+  const buf = fs.readFileSync(deltaZipPath);
+  const entries = readZipEntries(buf);
+  const deletedFiles = [];
+  for (const e of entries) {
+    if (e.name === '__deleted.txt') {
+      e.data.toString('utf8').split('\n').forEach((l) => { if (l.trim()) deletedFiles.push(l.trim()); });
+      continue;
+    }
+    if (e.name === '__delta_info.json') continue;
+    const dest = path.join(stagingDir, e.name);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, e.data);
+  }
+
+  const target = currentAppPath();
+  const appResDir = appResDirPath();
+  const beforeVer = getCurrentVersion();
+  log('applyDelta: 准备覆盖', appResDir, '| 当前版本', beforeVer, '| 删除列表', deletedFiles);
+
+  // 同步覆盖变更文件（app 仍在运行，Resources/app 里都是普通数据文件，可安全覆盖）
+  execFileSync('cp', ['-Rf', stagingDir + '/.', appResDir + '/']);
+
+  // 同步删除已移除文件
+  for (const f of deletedFiles) {
+    try { fs.unlinkSync(path.join(appResDir, f)); } catch (e) { /* ignore */ }
+  }
+
+  // 校验：覆盖后版本号必须真的变了，否则说明 apply 没生效，直接报错而不是静默重启
+  const afterVer = getCurrentVersion();
+  if (compareVersions(afterVer, beforeVer) <= 0) {
+    log('applyDelta: ❌ 覆盖后版本仍为', afterVer, '，apply 未生效');
+    throw new Error(`增量更新未生效（版本仍为 ${afterVer}），请改用完整安装包`);
+  }
+
+  // 关键：把 Info.plist 版本号同步为新版本，避免系统信息与实际版本不一致
+  syncInfoPlistVersion(target, afterVer);
+
+  // 清理 quarantine 属性 + 更新目录
+  try { execFileSync('xattr', ['-dr', 'com.apple.quarantine', target]); } catch (e) { /* ignore */ }
+  try { fs.rmSync(updateDir(), { recursive: true, force: true }); } catch (e) { /* ignore */ }
+
+  log('applyDelta: ✅ 覆盖完成', beforeVer, '→', afterVer, '，即将重启');
+  // 重启 app（relaunch + exit，全部在主进程内完成）
+  app.relaunch();
+  app.exit(0);
+}
+
+// 完整 DMG 安装：下载 → 挂载 → 拷到 staging → 同步覆盖到目标 .app → 重启
+// 同样在主进程内同步完成，不依赖 detached 子进程。
 function relaunchAndApply(staging) {
-  return new Promise((resolve) => {
-    const target = currentAppPath();
-    const updateRoot = path.dirname(staging);
-    const script = `#!/bin/bash
-# 等待 app 退出后再替换（避免 rm 运行中的 app 导致崩溃）
-while pgrep -f "${target}/Contents/MacOS" >/dev/null 2>&1; do sleep 0.3; done
-sleep 1
-rm -rf "${target}"
-cp -R "${staging}" "${target}"
-xattr -dr com.apple.quarantine "${target}" 2>/dev/null
-rm -rf "${updateRoot}"
-open "${target}"
-`;
-    const sp = path.join(updateDir(), 'apply.sh');
-    fs.mkdirSync(updateDir(), { recursive: true });
-    fs.writeFileSync(sp, script);
-    fs.chmodSync(sp, 0o755);
-    const child = spawn('bash', [sp], { detached: true, stdio: 'ignore' });
-    child.unref();
-    setTimeout(() => { app.quit(); resolve(); }, 400);
-  });
+  const target = currentAppPath();
+  const beforeVer = getCurrentVersion();
+  log('relaunchAndApply: 准备覆盖', target, '<-', staging, '| 当前版本', beforeVer);
+
+  // 先尝试整包原地覆盖（不删目标目录，避免破坏运行中进程的 inode）
+  let fullOk = true;
+  try {
+    execFileSync('cp', ['-Rf', staging + '/.', target + '/']);
+  } catch (e) {
+    // 运行中的可执行文件/框架会返回 ETXTBSY，整包覆盖失败属预期情况
+    fullOk = false;
+    log('relaunchAndApply: 整包覆盖失败（多为可执行文件被占用），回退为只覆盖 Resources/app +Info.plist：', e.message);
+  }
+
+  if (!fullOk) {
+    // 回退：只覆盖 Resources/app（纯数据文件，可安全覆盖）与 Info.plist
+    const srcRes = path.join(staging, 'Contents', 'Resources', 'app');
+    const dstRes = appResDirPath();
+    if (fs.existsSync(srcRes)) {
+      execFileSync('cp', ['-Rf', srcRes + '/.', dstRes + '/']);
+    }
+    const srcPlist = path.join(staging, 'Contents', 'Info.plist');
+    const dstPlist = path.join(target, 'Contents', 'Info.plist');
+    try { if (fs.existsSync(srcPlist)) fs.copyFileSync(srcPlist, dstPlist); } catch (e) { /* ignore */ }
+  }
+
+  const afterVer = getCurrentVersion();
+  if (compareVersions(afterVer, beforeVer) <= 0) {
+    log('relaunchAndApply: ❌ 覆盖后版本仍为', afterVer);
+    throw new Error(`更新未生效（版本仍为 ${afterVer}），请手动安装 DMG`);
+  }
+  syncInfoPlistVersion(target, afterVer);
+
+  try { execFileSync('xattr', ['-dr', 'com.apple.quarantine', target]); } catch (e) { /* ignore */ }
+  try { fs.rmSync(updateDir(), { recursive: true, force: true }); } catch (e) { /* ignore */ }
+  log('relaunchAndApply: ✅ 覆盖完成', beforeVer, '→', afterVer, '，即将重启');
+  app.relaunch();
+  app.exit(0);
 }
 
 // ===== 对外 API =====
 async function checkForUpdates() {
-  const cur = app.getVersion();
+  const cur = getCurrentVersion();
   try {
     const m = await fetchJson(MANIFEST_URL);
     return {
@@ -241,81 +357,13 @@ async function checkForUpdates() {
   }
 }
 
-// 增量应用：解压 delta zip 到 staging，同步覆盖 Resources/app 后重启
-// 关键修复：不再依赖 detached bash（app.quit() 后子进程会被杀，apply.sh 从未执行），
-// 改为在 app 退出前同步 cp 覆盖文件，然后 app.relaunch() + app.exit(0) 重启
-function applyDeltaAndRelaunch(deltaZipPath, cb) {
-  const stagingDir = path.join(updateDir(), 'staging');
-  fs.rmSync(stagingDir, { recursive: true, force: true });
-  fs.mkdirSync(stagingDir, { recursive: true });
-
-  const buf = fs.readFileSync(deltaZipPath);
-  const entries = readZipEntries(buf);
-  const deletedFiles = [];
-  for (const e of entries) {
-    if (e.name === '__deleted.txt') {
-      e.data.toString('utf8').split('\n').forEach((l) => { if (l.trim()) deletedFiles.push(l.trim()); });
-      continue;
-    }
-    if (e.name === '__delta_info.json') continue;
-    const dest = path.join(stagingDir, e.name);
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.writeFileSync(dest, e.data);
-  }
-
-  const target = currentAppPath();
-  const appResDir = path.join(target, 'Contents', 'Resources', 'app');
-  const updateRoot = updateDir();
-
-  // 同步覆盖变更文件（app 仍在运行，macOS 允许覆盖；下次启动加载新文件）
-  let cpOk = false;
-  try {
-    execFileSync('cp', ['-Rf', stagingDir + '/.', appResDir + '/']);
-    cpOk = true;
-  } catch (e) { /* 同步 cp 失败则回退到 detached bash */ }
-
-  if (cpOk) {
-    // 同步删除已移除文件
-    for (const f of deletedFiles) {
-      try { fs.unlinkSync(path.join(appResDir, f)); } catch (e) { /* ignore */ }
-    }
-    // 清理 quarantine 属性
-    try { execFileSync('xattr', ['-dr', 'com.apple.quarantine', target]); } catch (e) { /* ignore */ }
-    // 清理更新目录
-    try { fs.rmSync(updateRoot, { recursive: true, force: true }); } catch (e) { /* ignore */ }
-    // 重启 app（relaunch + exit，不依赖 detached bash）
-    app.relaunch();
-    app.exit(0);
-    return;
-  }
-
-  // 回退方案：detached bash（旧机制，仅在同步 cp 失败时使用）
-  const deleteCmds = deletedFiles.map((f) => `rm -f "${appResDir}/${f}" 2>/dev/null`).join('\n');
-  const script = `#!/bin/bash
-# 等待 app 退出后再执行
-while pgrep -f "${target}/Contents/MacOS" >/dev/null 2>&1; do sleep 0.3; done
-sleep 1
-cp -Rf "${stagingDir}/." "${appResDir}/"
-${deleteCmds}
-xattr -dr com.apple.quarantine "${target}" 2>/dev/null
-rm -rf "${updateRoot}"
-open "${target}"
-`;
-  const sp = path.join(updateDir(), 'apply.sh');
-  fs.writeFileSync(sp, script);
-  fs.chmodSync(sp, 0o755);
-  const child = spawn('bash', [sp], { detached: true, stdio: 'ignore' });
-  child.unref();
-  setTimeout(() => { app.quit(); }, 400);
-}
-
-// cb: { onProgress({percent,written,total,speedBps}), onStage(text) }
+// cb: { onProgress({percent,written,total,speedBps}), onStage(text), onError(msg) }
 // manifest 可以是字符串（dmgUrl，兼容旧调用）或对象（含 deltaUrl 等字段）
 async function downloadAndInstall(manifest, cb = {}) {
   fs.mkdirSync(updateDir(), { recursive: true });
 
   // 判断走增量还是完整包
-  const cur = app.getVersion();
+  const cur = getCurrentVersion();
   const info = typeof manifest === 'string' ? { dmgUrl: manifest } : manifest;
 
   // 构造可用增量包列表：优先 latest.json 的 deltas 数组（多版本），
@@ -338,19 +386,32 @@ async function downloadAndInstall(manifest, cb = {}) {
       onProgress: (p) => cb.onProgress && cb.onProgress(p),
       onStage: (s) => cb.onStage && cb.onStage(s),
     });
-    // 可选：sha256 校验
+    // sha256 校验
     if (chosen.sha256) {
       const actual = crypto.createHash('sha256').update(fs.readFileSync(deltaPath)).digest('hex');
       if (actual.toLowerCase() !== String(chosen.sha256).toLowerCase()) {
-        throw new Error('增量包校验失败（sha256 不匹配），已取消更新');
+        const msg = '增量包校验失败（sha256 不匹配），已取消更新';
+        if (cb.onError) cb.onError(msg);
+        throw new Error(msg);
       }
     }
     if (cb.onStage) cb.onStage('应用增量更新…');
-    applyDeltaAndRelaunch(deltaPath, cb); // 内部会 app.quit
-    return;
+    try {
+      applyDeltaAndRelaunch(deltaPath); // 成功则内部 app.exit(0)，不会返回
+      return;
+    } catch (e) {
+      // 增量应用失败（如权限/文件占用）→ 不中断，自动回退到完整包
+      log('增量应用失败，回退完整包：', e.message);
+      if (cb.onStage) cb.onStage('增量更新失败，改用完整安装包…');
+    }
   }
 
   // === 完整 DMG 更新路径（回退） ===
+  if (!info.dmgUrl) {
+    const msg = '未找到可用的更新包（既无增量也无完整包）';
+    if (cb.onError) cb.onError(msg);
+    throw new Error(msg);
+  }
   const tmpDmg = path.join(updateDir(), 'update.dmg');
   if (cb.onStage) cb.onStage('下载完整安装包…');
   await downloadFile(info.dmgUrl, tmpDmg, {
@@ -365,7 +426,7 @@ async function downloadAndInstall(manifest, cb = {}) {
   await copyApp(srcApp, staging);
   await detachDmg(vol);
   if (cb.onStage) cb.onStage('准备安装…');
-  await relaunchAndApply(staging); // 内部会 app.quit，不会正常返回
+  relaunchAndApply(staging); // 内部会 app.exit(0)
 }
 
 module.exports = { checkForUpdates, downloadAndInstall, REPO, MANIFEST_URL };
