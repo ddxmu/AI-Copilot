@@ -1,3 +1,6 @@
+## v0.8.6 — 2026-08-09
+- **新增默认智能体技能**：将 `file-organizer-skill`、`document-converter` 设为智能体默认技能（内置、始终可用）；并为「文件格式转换」面板新增技能选择器：`document-converter` 为默认，另提供 3 个 PDF 专项技能（`pdf-to-office` PDF 与 Office/图片/文本互转、`pdf-compress` PDF 压缩、`pdf-merge-split` PDF 合并/拆分/提取），以及「本地引擎（快速，不依赖 AI）」兜底选项。点击「开始转换」即使用所选择的技能（经 AI 代理执行），选「本地引擎」则走原内置快速转换。
+
 ## v0.8.5 — 2026-08-08
 - **修正 `open-kimi-ppt` 技能依赖自检提示**：该技能默认走本地离线导出（纯 python-pptx，无需浏览器/联网/Node），原来的环境依赖却把 Node.js 18+ 标成必装，会导致自动安装提示多此一举地逼用户装 Node。本版将 Node.js 18+ 标记为「可选（仅 Kimi 在线导出兜底才需要）」，Python 3 仍为必装；`check_dependencies` 工具新增对 `optional` 标记的识别——可选依赖缺失时显示「⚪️ 可选缺失」且不计入缺失项、不弹安装确认。注：`open-kimi-ppt` 技能本身由 AI Copilot 从 GitHub（`ddxmu/open-kimi-ppt-skill` main 分支）按需拉取，离线优先的导出逻辑已于今日推送到该仓库，新装用户直接获得离线优先版。
 

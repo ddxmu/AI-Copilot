@@ -3101,10 +3101,22 @@ const CV_DST_FORMATS = [
   { v: 'html', t: '网页（.html）' }, { v: 'txt', t: '纯文本（.txt）' },
   { v: 'md', t: 'Markdown（.md）' }, { v: 'csv', t: 'CSV（.csv）' }, { v: 'json', t: 'JSON（.json）' },
 ];
+const CONV_SKILLS = [
+  { v: 'document-converter', t: 'document-converter（文档格式转换·默认）' },
+  { v: 'pdf-to-office', t: 'pdf-to-office（PDF ⇄ Office/图片/文本）' },
+  { v: 'pdf-compress', t: 'pdf-compress（PDF 压缩）' },
+  { v: 'pdf-merge-split', t: 'pdf-merge-split（PDF 合并/拆分/提取）' },
+  { v: 'local', t: '本地引擎（快速，不依赖 AI）' },
+];
 function populateConvFormats() {
   CV_SRC_FORMATS.forEach((f) => { const o = document.createElement('option'); o.value = f.v; o.textContent = f.t; cvSrcSel.appendChild(o); });
   CV_DST_FORMATS.forEach((f) => { const o = document.createElement('option'); o.value = f.v; o.textContent = f.t; cvDstSel.appendChild(o); });
   cvDstSel.value = 'txt';
+  const cvSkillSel = document.getElementById('conv-skill');
+  if (cvSkillSel) {
+    CONV_SKILLS.forEach((s) => { const o = document.createElement('option'); o.value = s.v; o.textContent = s.t; cvSkillSel.appendChild(o); });
+    cvSkillSel.value = 'document-converter';
+  }
 }
 
 // PDF 引擎信息（启动时拉一次缓存）
@@ -3176,6 +3188,9 @@ document.getElementById('conv-pick-output').addEventListener('click', async () =
 document.getElementById('conv-start').addEventListener('click', async () => {
   setCvMsg('');
   if (!cv.files.length) { setCvMsg('请先选择要转换的文件'); return; }
+  const cvSkillSel = document.getElementById('conv-skill');
+  const skill = cvSkillSel ? (cvSkillSel.value || 'local') : 'local';
+  if (skill && skill !== 'local') { await aiConvertWithSkill(skill); return; }
   const saveMode = getCvSaveMode();
   if (saveMode === 'output' && !cv.outputDir) { setCvMsg('请先选择输出文件夹'); return; }
   const btn = document.getElementById('conv-start');
@@ -3200,6 +3215,51 @@ document.getElementById('conv-start').addEventListener('click', async () => {
   });
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 });
+
+/* ---- 技能驱动转换：用选定技能经 AI 代理执行转换 ---- */
+async function aiConvertWithSkill(skillName) {
+  setCvMsg('');
+  if (!cv.files.length) { setCvMsg('请先选择要转换的文件'); return; }
+  const saveMode = getCvSaveMode();
+  if (saveMode === 'output' && !cv.outputDir) { setCvMsg('请先选择输出文件夹'); return; }
+  if (!(aiState.profiles.length && aiState.activeId)) { setCvMsg('请先在「AI 设置」中配置并启用一个模型'); return; }
+  const keepStructure = document.getElementById('conv-keep-structure').checked;
+  const srcDesc = cvSrcSel.value === 'auto' ? '按每个文件实际格式' : cvSrcSel.value;
+  const dstDesc = cvDstSel.value;
+  const saveDesc = saveMode === 'output'
+    ? `转换后输出到目录 ${cv.outputDir}${keepStructure && cv.sourceFolder ? `，并按源文件夹 ${cv.sourceFolder} 的子目录结构复刻层级` : ''}（不要改动原文件）`
+    : '转换后保存到源文件所在文件夹（新扩展名，不覆盖原文件）';
+  const fileList = cv.files.slice(0, 300).join('\n');
+  const prompt =
+    `请使用「${skillName}」技能完成本次文件格式转换：把以下 ${cv.files.length} 个文件从「${srcDesc}」转换成「${dstDesc}」格式。\n` +
+    `第一步：调用 skill 工具加载「${skillName}」技能，获取其详细操作指引，并严格按指引执行。\n\n` +
+    `要求：\n` +
+    `1. 逐个读取/处理每个源文件，转换成目标格式，保持原有结构与样式、内容一致。\n` +
+    `2. ${saveDesc}。\n` +
+    `3. 写文件/修改文件前会向我请求授权，你正常调用 write_file / edit_file / run_command 即可。\n\n` +
+    `文件列表：\n${fileList}\n\n` +
+    `全部转换完成后，简要汇报处理了几个文件、分别输出到哪里、是否遇到无法转换的文件。`;
+  switchPanel('ai');
+  setSending(true);
+  ensureActiveChat();
+  addBubble('user', `【AI 格式转换 · ${skillName}】${cv.files.length} 个文件 ${srcDesc} → ${dstDesc}`);
+  chatHistory.push({ role: 'user', content: prompt });
+  currentAssistantBubble = null;
+  chatStatusEl.textContent = 'AI 正在转换文件…';
+  const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
+  chatStatusEl.textContent = '';
+  if (!r.ok) {
+    addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+  } else {
+    const bubbles = [...chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble')];
+    const last = bubbles[bubbles.length - 1];
+    chatHistory.push({ role: 'assistant', content: last ? last.textContent : '' });
+  }
+  currentAssistantBubble = null;
+  setSending(false);
+  persistCurrentChat();
+  saveChats();
+}
 
 /* ---- AI 助手转换 ---- */
 document.getElementById('conv-ai-start').addEventListener('click', async () => {

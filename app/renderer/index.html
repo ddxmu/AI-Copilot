@@ -312,6 +312,11 @@
             </div>
           </div>
           <p class="conv-note">提示：源格式选「按文件自动识别」时按每个文件实际扩展名转换。PDF 既可作源（提取文字转换，纯文本），也可作目标（文本排版，不含图片/复杂格式）。</p>
+          <div class="conv-field conv-skill-field" style="margin-top:14px">
+            <label>转换方式（技能）</label>
+            <select id="conv-skill" class="auto-select"></select>
+            <p class="conv-note">选择用哪个技能执行转换。<b>document-converter</b> 为默认；也可选 PDF 专项技能。选「本地引擎」则走内置快速转换（不依赖 AI）。</p>
+          </div>
         </div>
 
         <div class="card">
