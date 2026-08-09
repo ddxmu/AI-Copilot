@@ -189,6 +189,10 @@ def verify_asset(token, release_id, asset_path, expected_sha):
     return asset
 
 
+def release_download_url(tag, asset_name):
+    return 'https://github.com/' + REPO + '/releases/download/' + urllib.parse.quote(tag, safe='') + '/' + urllib.parse.quote(asset_name)
+
+
 def safe_app_path(value):
     path_value = Path(value)
     if path_value.parts[:1] != ('app',) or '..' in path_value.parts:
@@ -318,27 +322,35 @@ def main():
 
     delete_asset_if_present(token, release, args.dmg.name)
     upload_asset(token, release_id, args.dmg)
-    full_asset = verify_asset(token, release_id, args.dmg, dmg_sha)
+    verify_asset(token, release_id, args.dmg, dmg_sha)
     deltas = []
     for from_tag in from_tags:
         delta_path, delta_sha = build_delta(from_tag, tag, args.artifacts_dir)
         release = api(token, 'GET', '/releases/' + str(release_id))
         delete_asset_if_present(token, release, delta_path.name)
         upload_asset(token, release_id, delta_path)
-        asset = verify_asset(token, release_id, delta_path, delta_sha)
+        verify_asset(token, release_id, delta_path, delta_sha)
         deltas.append({
             'from': tag_version(from_tag),
-            'url': asset['browser_download_url'],
+            'url': release_download_url(tag, delta_path.name),
             'sha256': delta_sha,
         })
         print('verified delta:', from_tag, '->', tag, delta_path.stat().st_size, 'bytes')
+
+    if not args.publish:
+        print('release remains a draft; inspect assets, then rerun with --publish')
+        return
+
+    api(token, 'PATCH', '/releases/' + str(release_id), {'draft': False})
+    for obsolete_tag in args.delete_release:
+        delete_release(token, obsolete_tag)
 
     deltas.sort(key=lambda item: version_tuple(item['from']))
     manifest = {
         'version': version,
         'notes': notes,
         'pubDate': datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).isoformat(timespec='seconds'),
-        'dmgUrl': full_asset['browser_download_url'],
+        'dmgUrl': release_download_url(tag, args.dmg.name),
         'sha256': dmg_sha,
         'deltas': deltas,
     }
@@ -351,14 +363,7 @@ def main():
         })
     args.manifest.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print('wrote manifest:', args.manifest)
-
-    if args.publish:
-        api(token, 'PATCH', '/releases/' + str(release_id), {'draft': False})
-        for obsolete_tag in args.delete_release:
-            delete_release(token, obsolete_tag)
-        print('published release:', tag)
-    else:
-        print('release remains a draft; inspect assets, then rerun with --publish')
+    print('published release:', tag)
 
 
 if __name__ == '__main__':
