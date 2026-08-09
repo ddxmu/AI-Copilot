@@ -1359,7 +1359,10 @@ async function initUpdater() {
     const sbtn = document.getElementById('sidebar-update-now');
     if (sbtn) { sbtn.disabled = true; sbtn.textContent = '升级中…'; }
     setVersionUpdateDot(false); // 升级进行中，隐藏黄色点
-    await window.api.downloadUpdate(pendingUpdate);
+    const res = await window.api.downloadUpdate(pendingUpdate);
+    // 失败分支：onUpdateError 已显示真实错误与「手动下载」链接并恢复了按钮，
+    // 这里切勿用「正在安装并重启…」覆盖它，否则用户会看到假装在装、实际已崩。
+    if (res && res.ok === false) return;
     if (status) status.textContent = '正在安装并重启…';
   }
 
