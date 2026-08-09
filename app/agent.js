@@ -189,6 +189,53 @@ const BUILTIN_SKILLS = {
 - 涉及点击、输入、提交、下载等写操作，遵循权限提示，由用户确认后再执行。
 - 多步骤任务先用 todo_write 规划，再逐步执行。`,
   },
+  /* ---- v0.8.6：默认技能（文件整理 / 文档转换 / PDF 专项） ---- */
+  'file-organizer-skill': {
+    description: '文件整理：按类型/日期/项目归类、批量重命名、移动到对应文件夹，让目录井然有序',
+    body: `执行文件整理任务时：
+1. 用 glob_files / list_dir 扫描目标目录，统计文件类型与数量
+2. 与用户确认归类规则（按扩展名分组 / 按修改日期 / 按项目名）；规则未明确时先给出建议方案再执行
+3. 用 run_command 执行 mv 移动或重命名（用户授权后执行）；批量改名用统一的命名模板
+4. 不删除任何文件，只移动/重命名；操作前建议用户备份
+5. 完成后列出移动了哪些文件、新建了哪些文件夹`,
+  },
+  'document-converter': {
+    description: '文档格式转换：doc/docx/rtf/odt/html/txt/md/csv/json/pdf 等格式互转，保持结构与样式',
+    body: `执行文档格式转换时：
+1. 优先用 convert_file 工具处理 doc/docx/rtf/odt/html/txt/md 互转（指定 path、to、output）
+2. convert_file 不支持或效果不佳时（如 PDF↔Office、复杂排版）：
+   - 用 read_file 读取源内容，理解结构后用 write_file 写出目标格式（保持标题层级、列表、表格）
+   - 或用 run_command 调本机引擎：textutil（macOS 文本转换）、libreoffice --headless --convert-to（需安装）
+3. PDF 作为源：用 pdftotext / mdls 提取文本与元数据；PDF 作为目标：用文本排版生成（不含图片/复杂格式）
+4. 批量文件逐个处理，转换后汇报每个文件输出路径，失败的说明原因`,
+  },
+  'pdf-to-office': {
+    description: 'PDF 与 Office/图片/文本互转：PDF → Word/Excel/PPT/图片/文本；Office/图片 → PDF',
+    body: `执行 PDF 与其他格式互转时：
+1. PDF → 文本：run_command 执行 pdftotext <file> -（需 poppler）
+2. PDF → Word/Excel/PPT/图片：优先 libreoffice --headless --convert-to <fmt> <file>；图片也可用 pdftoppm / pdf2image（Python）
+3. Office/图片 → PDF：libreoffice --headless --convert-to pdf，或 macOS 用 textutil / 预览导出
+4. 大文件先用 mdls 查页数，避免超时；加密 PDF 用 qpdf --decrypt 先解密
+5. 所有命令需用户授权后执行，完成后汇报输出路径`,
+  },
+  'pdf-compress': {
+    description: 'PDF 压缩：减小 PDF 体积，保留文本层与可读性',
+    body: `压缩 PDF 时：
+1. 优先用 run_command 执行 Ghostscript：gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/ebook -o <output> <input>（需安装 ghostscript）
+2. 也可用 qpdf --compress-streams=y --object-streams=generate <input> <output>
+3. Python 可用 pypdf 重新写入以压缩（需安装 pypdf）
+4. 压缩前后对比文件大小，向用户汇报；若压缩后质量不可接受，提供 /screen（更小）与 /printer（更清晰）档位选择
+5. 命令需用户授权后执行，不覆盖原文件`,
+  },
+  'pdf-merge-split': {
+    description: 'PDF 合并 / 拆分 / 提取页面 / 旋转：多文件合并、按页范围拆分、抽取指定页',
+    body: `处理 PDF 合并与拆分时：
+1. 合并：Python pypdf 的 PdfMerger 按指定顺序合并多个 PDF
+2. 拆分：按页范围（如 1-5、6-10）或每页一个文件拆分，用 pypdf 提取写入
+3. 提取指定页：PdfReader 选页 → PdfWriter 写出
+4. 旋转页面：page.rotate_clockwise / rotate_counter_clockwise
+5. 用 run_command 或 write_file 执行 Python 脚本（用户授权后）；完成后汇报输出文件与页数`,
+  },
 };
 
 /* ================= 推荐技能目录（用户可一键安装） ================= */
