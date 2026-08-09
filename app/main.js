@@ -230,6 +230,12 @@ ipcMain.handle('get-app-version', () => {
   try { return require('./package.json').version; } catch (e) { return '0.0.0'; }
 });
 
+// 读取更新日志（CHANGELOG.md 原文，供 AI 设置「更新日志」卡片渲染）
+ipcMain.handle('get-changelog', () => {
+  try { return require('fs').readFileSync(path.join(__dirname, 'CHANGELOG.md'), 'utf8'); }
+  catch (e) { return ''; }
+});
+
 // ===== 自动更新 =====
 ipcMain.handle('check-update', async () => updater.checkForUpdates());
 
