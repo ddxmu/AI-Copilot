@@ -2248,6 +2248,7 @@ const AUTO_SKILL_FILE_RELATED = [
 ];
 
 // 自动填充「使用技能」下拉：已安装技能 + 文件整理相关内置技能
+const AUTO_SKILL_DEFAULT = 'file-organizer-skill';
 async function populateAutoSkill() {
   const sel = document.getElementById('auto-skill');
   if (!sel) return;
@@ -2271,6 +2272,9 @@ async function populateAutoSkill() {
     o.textContent = s.name + (s.source === 'installed' ? '（已安装）' : '（内置）');
     sel.appendChild(o);
   }
+  // 默认选中 file-organizer-skill（若它出现在列表中）
+  const hasDefault = [...sel.options].some((o) => o.value === AUTO_SKILL_DEFAULT);
+  if (hasDefault) sel.value = AUTO_SKILL_DEFAULT;
 }
 
 function getAutoSkillName() {
