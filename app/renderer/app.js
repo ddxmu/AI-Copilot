@@ -2232,6 +2232,50 @@ const auto = {
 };
 let autoRuleSeq = 0;
 
+// 文件整理相关内置技能（自动出现在「文件自动化」技能下拉中）
+const AUTO_SKILL_FILE_RELATED = [
+  'file-organizer-skill', 'document-converter', 'pdf-to-office',
+  'pdf-compress', 'pdf-merge-split', 'batch-rename-company', 'format-convert',
+];
+
+// 自动填充「使用技能」下拉：已安装技能 + 文件整理相关内置技能
+async function populateAutoSkill() {
+  const sel = document.getElementById('auto-skill');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">（不指定技能，按默认流程）</option>';
+  const map = new Map();
+  try {
+    const { builtin = [], installed = [] } = await window.api.skillsList();
+    for (const b of builtin) {
+      if (AUTO_SKILL_FILE_RELATED.includes(b.name)) {
+        map.set(b.name, { name: b.name, desc: b.description || '', source: 'builtin' });
+      }
+    }
+    for (const i of installed) {
+      if (!map.has(i.name)) map.set(i.name, { name: i.name, desc: i.description || '', source: 'installed' });
+    }
+  } catch (e) { /* 拉取失败则只保留默认项 */ }
+  const list = [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  for (const s of list) {
+    const o = document.createElement('option');
+    o.value = s.name;
+    o.textContent = s.name + (s.source === 'installed' ? '（已安装）' : '（内置）');
+    sel.appendChild(o);
+  }
+}
+
+function getAutoSkillName() {
+  const sel = document.getElementById('auto-skill');
+  return sel ? sel.value : '';
+}
+
+// 在提示词前追加「先加载该技能」的指令，交给 AI 代理按技能指引执行
+function withAutoSkill(prompt, skillName) {
+  if (!skillName) return prompt;
+  return `请先调用 skill 工具加载「${skillName}」技能，获取其详细操作指引，并严格按指引执行本「文件自动化」任务。\n\n` + prompt;
+}
+
+
 const autoTemplateInfo = document.getElementById('auto-template-info');
 const autoFileListEl = document.getElementById('auto-file-list');
 const autoFileEmptyEl = document.getElementById('auto-file-empty');
@@ -2484,7 +2528,7 @@ document.getElementById('auto-start').addEventListener('click', async () => {
   if (getAutoSaveMode() === 'output' && !autoOutputDir) { setAutoMsg('请先选择输出文件夹'); return; }
   if (!(aiState.profiles.length && aiState.activeId)) { setAutoMsg('请先在「AI 设置」中配置并启用一个模型'); return; }
 
-  const prompt = buildAutomationPrompt();
+  const prompt = withAutoSkill(buildAutomationPrompt(), getAutoSkillName());
   switchPanel('ai');
   setSending(true);
   ensureActiveChat();
@@ -2613,7 +2657,7 @@ document.getElementById('auto-ai-convert').addEventListener('click', async () =>
     : '  （未额外添加，主要参照模版结构）';
 
   // 第三步：交给 AI 核对文件摆放是否正确
-  const prompt = [
+  const prompt = withAutoSkill([
     '【文件自动化 · AI 协助转换 · 完整性核对】',
     `已按关键字把需编写文件匹配到模版对应位置并复制到输出目录（模版文件未复制）。请核对文件摆放是否正确。`,
     ``,
@@ -2640,7 +2684,7 @@ document.getElementById('auto-ai-convert').addEventListener('click', async () =>
     '3. 跳过的文件是否确实在模版中无对应位置；',
     '4. 总体结论：完整 / 基本完整 / 有问题，并给出下一步建议。',
     '（本任务只做核对与报告，不要修改、移动或删除任何文件。）',
-  ].join('\n');
+  ].join('\n'), getAutoSkillName());
 
   switchPanel('ai');
   setSending(true);
@@ -3658,6 +3702,7 @@ loadAutoPresets();
 renderRnFiles();
 renderRnRules();
 populateConvFormats();
+populateAutoSkill();
 renderCvFiles();
 renderWmFiles();
 renderWmCandidates();
