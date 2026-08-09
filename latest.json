@@ -4,6 +4,9 @@
   "pubDate": "2026-08-09T14:03:26+08:00",
   "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.18/AI.Copilot-0.8.18-arm64.dmg",
   "sha256": "46463cc651fa86a3c758e254e12ce3c9b3c2de0e125ab3f6170ea68394f4c4b8",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.18/delta-0.8.18-from-0.8.17.zip",
+  "deltaSha256": "a1ab7d05d1d1fd763a59bc25084fe289008693a40199c3cb1acabc7bfd8cd0aa",
+  "deltaFromVersion": "0.8.17",
   "deltas": [
     {
       "from": "0.8.0",
