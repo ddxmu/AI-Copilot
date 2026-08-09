@@ -390,11 +390,20 @@
           </div>
         </div>
 
+        <!-- ④ 技能选择（可选） -->
+        <div class="card">
+          <h2>④ 技能选择（可选）</h2>
+          <div class="form-row">
+            <label>AI 去水印所用技能</label>
+            <select id="wm-skill" class="auto-select" title="选择用于「AI 去水印」的技能（自动列出与 PDF 去水印相关的技能，默认 pdf-watermark-remover）">
+              <option value="">（不指定技能，按默认流程）</option>
+            </select>
+          </div>
+          <p class="hint" style="font-size:12px;margin-top:6px;">自动列出「已安装技能」与「PDF 去水印相关内置技能」。选好后，「✦ AI 去水印」会先调用 skill 工具加载该技能、按其指引执行任务。</p>
+        </div>
+
         <div class="wizard-nav">
           <span id="wm-msg" class="wizard-msg"></span>
-          <select id="wm-skill" class="auto-select" title="选择用于「AI 去水印」的技能（自动列出与 PDF 去水印相关的技能，默认 pdf-watermark-remover）">
-            <option value="">（不指定技能，按默认流程）</option>
-          </select>
           <button class="btn large" id="wm-ai-remove">✦ AI 去水印</button>
           <button class="btn primary large" id="wm-start">▶ 去除水印</button>
         </div>

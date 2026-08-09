@@ -1,3 +1,6 @@
+## v0.8.11 — 2026-08-09
+- **「PDF 去水印」技能选择器位置调整**：将「AI 去水印」所用的「技能」下拉从执行按钮旁（向导导航栏）移到「③ 保存地址」下方，新增独立卡片「④ 技能选择（可选）」，交互与文案对齐「文件自动化」模块的「⑥ 使用技能（可选）」——更清晰，不再紧贴按钮。
+
 ## v0.8.10 — 2026-08-09
 - **修复增量更新「点击升级后重启仍是旧版」问题**：根因是 `applyDeltaAndRelaunch` 用 `spawn('bash', [sp], { detached: true })` + `app.quit()`，detached bash 子进程在 app 退出后被 macOS 杀掉，apply.sh 从未执行（delta 下载成功但文件没覆盖）。修复为**同步 `execFileSync('cp')` 在 app 退出前直接覆盖 `Resources/app/` 文件**，然后 `app.relaunch()` + `app.exit(0)` 重启——完全不依赖 detached bash。同步 cp 失败时仍回退到旧 detached bash（加了 `pgrep` 等待 app 退出循环）。完整 DMG 路径（`relaunchAndApply`）同样加了等待 app 退出的循环，避免 rm 运行中 app 导致崩溃。
 - **「PPT 写手」两个子面板新增技能选择器**：「新编写 PPT」和「修改 PPT」各新增「使用技能（可选）」下拉，自动列出智能体技能里 PPT 相关的已安装/内置技能（关键词：ppt/pptx/kimi/presentation/演示/幻灯片）。选中技能后点「开始编写」或「AI 助手编辑保存」会先调用 skill 工具加载该技能、按其指引执行；若已安装 `open-kimi-ppt` 则默认选中。
