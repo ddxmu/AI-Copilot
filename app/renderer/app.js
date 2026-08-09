@@ -3362,6 +3362,37 @@ function setWmMsg(t) { wmMsgEl.textContent = t || ''; }
 
 const WM_KEYWORDS = ['水印', '机密', '保密', '秘密', '内部资料', '内部', '严禁', '禁止', '仅供', '仅限', '草案', '试阅', '样品', '样本', '请勿', '不得', '翻印', '版权', 'draft', 'confidential', 'secret', 'sample', 'watermark', 'internal', 'private', 'do not copy'];
 
+// PDF 去水印：自动列出与「PDF 去水印」相关技能（内置+已安装），默认 pdf-watermark-remover
+const WM_SKILL_KEYWORDS = ['watermark', '水印', 'wm-remove', 'wmremove', 'pdf-wm'];
+async function populateWmSkill() {
+  const sel = document.getElementById('wm-skill');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">（不指定技能，按默认流程）</option>';
+  const map = new Map();
+  try {
+    const { builtin = [], installed = [] } = await window.api.skillsList();
+    const match = (s) => WM_SKILL_KEYWORDS.some((k) => (s.name + ' ' + (s.description || '')).toLowerCase().includes(k));
+    for (const b of builtin) if (match(b)) map.set(b.name, { name: b.name, source: 'builtin' });
+    for (const i of installed) if (match(i)) map.set(i.name, { name: i.name, source: 'installed' });
+  } catch (e) { /* 拉取失败则只保留默认项 */ }
+  const list = [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  for (const s of list) {
+    const o = document.createElement('option');
+    o.value = s.name;
+    o.textContent = s.name + (s.source === 'installed' ? '（已安装）' : '（内置）');
+    sel.appendChild(o);
+  }
+  if (map.has('pdf-watermark-remover')) sel.value = 'pdf-watermark-remover';
+}
+function getWmSkillName() {
+  const sel = document.getElementById('wm-skill');
+  return sel ? sel.value : '';
+}
+function withWmSkill(prompt, skillName) {
+  if (!skillName) return prompt;
+  return `请先调用 skill 工具加载「${skillName}」技能，获取其详细操作指引，并严格按指引执行本「PDF 去水印」任务。\n\n` + prompt;
+}
+
 function renderWmFiles() {
   wmFileListEl.innerHTML = '';
   wmFileEmptyEl.style.display = wm.files.length ? 'none' : 'block';
@@ -3486,6 +3517,57 @@ document.getElementById('wm-start').addEventListener('click', async () => {
     list.appendChild(li);
   });
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+/* ---- AI 去水印：加载所选技能，由 AI 代理按技能指引移除 PDF 水印 ---- */
+document.getElementById('wm-ai-remove').addEventListener('click', async () => {
+  setWmMsg('');
+  if (!wm.files.length) { setWmMsg('请先选择 PDF 文件'); return; }
+  if (!wm.outputDir) { setWmMsg('请先选择输出文件夹'); return; }
+  if (!(aiState.profiles.length && aiState.activeId)) { setWmMsg('请先在「AI 设置」中配置并启用一个模型'); return; }
+  const marks = wm.candidates.filter((c) => c.marked);
+  const markList = marks.length ? marks.map((c) => `- ${c.text}`).join('\n') : '';
+  const fileList = wm.files.slice(0, 300).join('\n');
+  const skillName = getWmSkillName();
+  const prompt = [
+    '【PDF 去水印 · AI 处理】',
+    `请对以下 ${wm.files.length} 个 PDF 执行去水印处理，结果输出到目录：${wm.outputDir}（不改动原文件）。`,
+    '',
+    '== 待处理 PDF ==',
+    fileList,
+    '',
+    marks.length
+      ? `== 用户已勾选要删除的水印文字（务必删除这些）==\n${markList}`
+      : '== 水印清单 ==\n未预先分析，请先用 pdftotext / pypdf 扫描每页文本，识别疑似水印（如 机密/内部/样品/draft/confidential 等标记、多次重复出现的文字），列出候选请用户确认后再删除。',
+    '',
+    '要求：删除上述水印文字后重新生成 PDF；完成后简要汇报每个文件处理了哪些水印、输出到哪里。',
+  ].join('\n');
+  const full = withWmSkill(prompt, skillName);
+  switchPanel('ai');
+  setSending(true);
+  ensureActiveChat();
+  addBubble('user', `【AI 去水印】${wm.files.length} 个 PDF → ${wm.outputDir}${skillName ? ' · ' + skillName : ''}`);
+  chatHistory.push({ role: 'user', content: full });
+  currentAssistantBubble = null;
+  chatStatusEl.textContent = 'AI 正在去水印…';
+  const r = await window.api.aiChat(chatHistory.slice(0, -1), full);
+  chatStatusEl.textContent = '';
+  if (!r.ok) {
+    addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+  } else {
+    const bubbles = [...chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble')];
+    const last = bubbles[bubbles.length - 1];
+    chatHistory.push({ role: 'assistant', content: last ? last.textContent : '' });
+    if (r.usage) {
+      sessionUsage.input += r.usage.input;
+      sessionUsage.output += r.usage.output;
+      chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
+    }
+  }
+  currentAssistantBubble = null;
+  setSending(false);
+  persistCurrentChat();
+  saveChats();
 });
 
 /* ================= 智能体技能管理 ================= */
@@ -3703,6 +3785,7 @@ renderRnFiles();
 renderRnRules();
 populateConvFormats();
 populateAutoSkill();
+populateWmSkill();
 renderCvFiles();
 renderWmFiles();
 renderWmCandidates();

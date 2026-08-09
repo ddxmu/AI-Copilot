@@ -236,6 +236,16 @@ const BUILTIN_SKILLS = {
 4. 旋转页面：page.rotate_clockwise / rotate_counter_clockwise
 5. 用 run_command 或 write_file 执行 Python 脚本（用户授权后）；完成后汇报输出文件与页数`,
   },
+  'pdf-watermark-remover': {
+    description: 'PDF 去水印：识别并移除 PDF 中的文字类水印（机密/内部/样品/draft 等标记），输出无标记副本',
+    body: `执行 PDF 去水印任务时：
+1. 先确认待处理 PDF 列表与输出目录（用户已指定，不改动原文件）。
+2. 文本类水印优先用 Python pypdf 处理：逐页扫描文本，将命中的水印字符串从页面内容流中移除或遮盖后重新写出（需安装 pypdf：pip install pypdf）
+3. 若用户已提供「要删除的水印文字清单」，逐一按清单移除；否则先列出疑似水印文本（如 机密/内部/样品/draft/confidential、同一文字多次重复出现）请用户确认后再删
+4. 可用 run_command 调 pdftotext / qpdf 辅助判断水印位置与内容
+5. 写文件 / 执行命令前会向用户请求授权，正常调用 run_command / write_file 即可
+6. 完成后汇报处理了哪些 PDF、删除了哪些水印、输出到哪里`,
+  },
 };
 
 /* ================= 推荐技能目录（用户可一键安装） ================= */
