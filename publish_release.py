@@ -14,6 +14,7 @@ import io
 import json
 import os
 import re
+import ssl
 import subprocess
 import sys
 import urllib.error
@@ -21,6 +22,12 @@ import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
+
+try:
+    import certifi
+    SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    SSL_CONTEXT = ssl.create_default_context()
 
 ROOT = Path(__file__).resolve().parent
 REPO = 'ddxmu/AI-Copilot'
@@ -111,7 +118,7 @@ def api(token, method, url_or_path, payload=None):
         headers['Content-Type'] = 'application/json'
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=60, context=SSL_CONTEXT) as response:
             body = response.read()
             return json.loads(body.decode('utf-8')) if body else {}
     except urllib.error.HTTPError as error:
