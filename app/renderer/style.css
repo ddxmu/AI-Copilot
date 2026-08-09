@@ -1303,8 +1303,11 @@ body {
   border-color: var(--border);
 }
 .mcp-ico {
-  font-size: 13px;
-  line-height: 1;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  vertical-align: middle;
+  display: inline-block;
 }
 .mcp-state {
   font-size: 11px;

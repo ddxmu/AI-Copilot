@@ -1,77 +1,82 @@
 {
-  "version": "0.8.13",
-  "notes": "- **升级提示增强（三项）**：① 侧边栏「版本号」右上角新增**黄色脉冲提示点**，发现新版本即常驻显示（升级进行中或已是最新时自动隐藏），作为持久提醒；② **程序打开即显示升级提示**——启动静默检查到新版本时，侧边栏更新框（含「立即升级」按钮）自动弹出；③ **闲置后台自动提示**——app 在后台/未聚焦/最小化时检测到更新，弹 macOS 系统通知（每版本仅提示一次，点击通知聚焦 app）。三者共用同一份 `update-available` 事件，互不冲突。",
-  "pubDate": "2026-08-09T11:21:45+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/AI.Copilot-0.8.13-arm64.dmg",
-  "sha256": "4aa8372f2aec849752f38f6f38cb768ec456ebae15a60812d48612d3e77a20d5",
-  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.12.zip",
-  "deltaSha256": "8ab0d28bb6afd09641251f8d5d70bd927b8b92b32ee315b3bf4e1eadf860b392",
-  "deltaFromVersion": "0.8.12",
+  "version": "0.8.14",
+  "notes": "- **MCP 开关图标替换**：将聊天栏 MCP 开关的默认插头 emoji（🔌）替换为用户桌面提供的 `插头.png`，复制为 `renderer/assets/icon-mcp.png` 并通过 `<img>` 引用；CSS 固定为 14×14px、object-fit contain、垂直居中，大小随按钮缩放保持一致。",
+  "pubDate": "2026-08-09T11:39:54+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/AI.Copilot-0.8.14-arm64.dmg",
+  "sha256": "551d32dee79a57f2727dd397ac016893c0f5b4819fe16ab0aa324728ceb90a93",
+  "deltaUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.13.zip",
+  "deltaSha256": "e252e1d8102b802c934bbbc35330a0e438ff420f4cf70f106b860ddf97ba689e",
+  "deltaFromVersion": "0.8.13",
   "deltas": [
     {
       "from": "0.8.0",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.0.zip",
-      "sha256": "58f9d0f0f2773980b01be294268160bff405d9678100c299794f3527a6a9e0c1"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.0.zip",
+      "sha256": "00d19b79690ccde0ab5549e3ea20c1db2ab087be04f6dd2a8e2bbdf4a02cfac2"
     },
     {
       "from": "0.8.1",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.1.zip",
-      "sha256": "7ffc09d181d8e61e5af01ae5d5cbeef9a1cea20e26104052b0f184cdce3aabc7"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.1.zip",
+      "sha256": "a610bc6cc33c2d9aeb117d37dbf86d6503016e4a1db5514c2d0b365e281310d2"
     },
     {
       "from": "0.8.2",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.2.zip",
-      "sha256": "938f2f7bb7d5b0f3d31226d222944ca8fc1cf7b552e25d671f426f69217f70a3"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.2.zip",
+      "sha256": "8b17c9dadc567d83fe6fd89c03c7cc45a31ceb4133dd4b1f939e06781023ea3c"
     },
     {
       "from": "0.8.3",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.3.zip",
-      "sha256": "b36df722fec251fef59cbf4e4edc66a92286eeeac9e426d7df9879aee84ce55a"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.3.zip",
+      "sha256": "f434a8e64c0faba59c6963c4209de70332abcd4e343b50f016eb369907e41d8a"
     },
     {
       "from": "0.8.4",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.4.zip",
-      "sha256": "b7aa2e60eb5130a603aceb8a87a3afaacf8ed45a59cb2f9ef555b3e00e951140"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.4.zip",
+      "sha256": "e7763663096154a00ab4db892522b89b1e1901eaf740b8b1cd49c1fc7196b734"
     },
     {
       "from": "0.8.5",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.5.zip",
-      "sha256": "5ae3206264e0f067e3c9b47f4b00b44037102a8fbdc0b9911da0cb87ec438a42"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.5.zip",
+      "sha256": "623b369389abd403cd43a9536932951cf449dcd068bb6fdc2c7eb31a62d2dbeb"
     },
     {
       "from": "0.8.6",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.6.zip",
-      "sha256": "bbca81224f97161c120dcecda2bfe38d74b52246d0d117190f5e7065645a2cbf"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.6.zip",
+      "sha256": "2c8e7aaa4652f886ca1872165cc2c3e6332c863040eea5a4d5872b97559549af"
     },
     {
       "from": "0.8.7",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.7.zip",
-      "sha256": "87e5d2fb4d7f38679b07cbfa643748a134eb4ba6e35592b298dc3b5f071a68b6"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.7.zip",
+      "sha256": "95a70f2a6fa9be75eafffd8292b2637d7af610b909f82de611157a7eb2e355c7"
     },
     {
       "from": "0.8.8",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.8.zip",
-      "sha256": "29af55e4f640aadbad7c2d4da0069de73560c28aea7228d65f6714d191c1789e"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.8.zip",
+      "sha256": "a987ed70cc2255f7e35bad898b086c8f94dca7c12ad31eb0c839e9d03595d7ec"
     },
     {
       "from": "0.8.9",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.9.zip",
-      "sha256": "9debb9568521ccd95da2fb4b86da6839353aabe68aeeef15edb3f9ca699d1b78"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.9.zip",
+      "sha256": "42e0043a0bc5624e73fa3eeb1170edb7f0592be5ccfb87d69358b6864a1036e5"
     },
     {
       "from": "0.8.10",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.10.zip",
-      "sha256": "b9003e27f04bb1c31b0d576eac23e82c9bd2cfaaf55b52d4b470d02db858420c"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.10.zip",
+      "sha256": "d1e20ff42a847befe2d2633efec99310f5e988b1dfa441756387bf400a041829"
     },
     {
       "from": "0.8.11",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.11.zip",
-      "sha256": "ed80cb0c5e3282ea3a3964229d87c8f488d4a92e4a639ee8f599cb1a559f81ac"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.11.zip",
+      "sha256": "f8458f6fb5d7fd7118853940b15f0b1538bab0b0159f82d955f0108338108313"
     },
     {
       "from": "0.8.12",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.13/delta-0.8.13-from-0.8.12.zip",
-      "sha256": "8ab0d28bb6afd09641251f8d5d70bd927b8b92b32ee315b3bf4e1eadf860b392"
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.12.zip",
+      "sha256": "dac88f2350fd7999a7e7f078674cd006224caeb77b1f0f9d659398cd0899724b"
+    },
+    {
+      "from": "0.8.13",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.14/delta-0.8.14-from-0.8.13.zip",
+      "sha256": "e252e1d8102b802c934bbbc35330a0e438ff420f4cf70f106b860ddf97ba689e"
     }
   ]
 }
