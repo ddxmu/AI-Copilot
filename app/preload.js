@@ -12,9 +12,9 @@ contextBridge.exposeInMainWorld('api', {
   runReplace: (files, rules, saveMode, outputDir, baseDir, keepStructure) =>
     ipcRenderer.invoke('run-replace', { files, rules, saveMode, outputDir, baseDir, keepStructure }),
   selectOutputDir: () => ipcRenderer.invoke('select-output-dir'),
-  // 替换规则导入 / 导出（.xlsx / .csv）
-  rulesExport: (rules, format) => ipcRenderer.invoke('rules-export', { rules, format }),
-  rulesImport: () => ipcRenderer.invoke('rules-import'),
+  // 替换规则导入 / 导出（.xlsx / .csv），label 用于区分「替换规则 / 重命名规则」的弹窗标题
+  rulesExport: (rules, format, label) => ipcRenderer.invoke('rules-export', { rules, format, label }),
+  rulesImport: (label) => ipcRenderer.invoke('rules-import', { label }),
   revealInFolder: (filePath) => ipcRenderer.invoke('reveal-in-folder', filePath),
   renameFiles: (files, rules, saveMode, outputDir) =>
     ipcRenderer.invoke('rename-files', { files, rules, saveMode, outputDir }),

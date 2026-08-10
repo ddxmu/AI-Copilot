@@ -479,10 +479,11 @@ class McpConnectionSSE {
         headers: { 'Content-Type': 'application/json', ...headers },
         timeout: 60000,
       }, (res) => {
-        let respBody = '';
-        res.on('data', (c) => (respBody += c));
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
           // 部分实现会把 JSON-RPC 响应直接放在 POST 回包里；若有则优先使用
+          const respBody = Buffer.concat(chunks).toString('utf8');
           if (respBody) {
             try {
               const m = JSON.parse(respBody);

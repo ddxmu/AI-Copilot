@@ -76,9 +76,10 @@ function fetchJson(url) {
         return fetchJson(new URL(res.headers.location, url).href).then(resolve, reject);
       }
       if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)); }
-      let data = '';
-      res.on('data', (c) => (data += c));
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf8');
         try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
       });
     });

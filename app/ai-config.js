@@ -204,9 +204,10 @@ function fetchJson(urlStr, headers = {}, timeoutMs = 15000) {
         timeout: timeoutMs,
       },
       (res) => {
-        let body = '';
-        res.on('data', (c) => (body += c));
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
+          const body = Buffer.concat(chunks).toString('utf8');
           if (res.statusCode >= 200 && res.statusCode < 300) {
             try { resolve(JSON.parse(body)); }
             catch (e) { reject(new Error('响应不是有效 JSON')); }

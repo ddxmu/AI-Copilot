@@ -3212,6 +3212,103 @@ document.getElementById('rename-add-rule').addEventListener('click', () => {
   renderRnRules();
 });
 
+/* ---------- 重命名规则的导出 / 导入（.xlsx / .csv） ---------- */
+const rnRuleIoMsgEl = document.getElementById('rename-rule-io-msg');
+const rnRuleExportWrap = document.getElementById('rn-rule-export-wrap');
+const rnRuleExportMenu = document.getElementById('rn-rule-export-menu');
+
+let rnRuleIoMsgTimer = null;
+function showRnRuleIoMsg(text, kind) {
+  if (!rnRuleIoMsgEl) return;
+  rnRuleIoMsgEl.textContent = text;
+  rnRuleIoMsgEl.className = 'rule-io-msg show ' + (kind === 'err' ? 'err' : 'ok');
+  clearTimeout(rnRuleIoMsgTimer);
+  rnRuleIoMsgTimer = setTimeout(() => { rnRuleIoMsgEl.className = 'rule-io-msg'; }, 8000);
+}
+
+function closeRnRuleExportMenu() {
+  if (rnRuleExportWrap) rnRuleExportWrap.classList.remove('open');
+}
+
+if (rnRuleExportWrap) {
+  document.getElementById('btn-rn-rule-export').addEventListener('click', (e) => {
+    e.stopPropagation();
+    rnRuleExportWrap.classList.toggle('open');
+  });
+  document.addEventListener('click', closeRnRuleExportMenu);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeRnRuleExportMenu(); });
+  rnRuleExportMenu.addEventListener('click', (e) => e.stopPropagation());
+
+  rnRuleExportMenu.querySelectorAll('button[data-format]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const format = btn.dataset.format;
+      closeRnRuleExportMenu();
+      try {
+        const res = await window.api.rulesExport(
+          rn.rules.map((r) => ({ name: r.name, find: r.find, replace: r.replace, enabled: r.enabled })),
+          format,
+          '重命名规则'
+        );
+        if (!res || res.canceled) return;
+        if (!res.ok) { showRnRuleIoMsg('导出失败：' + (res.error || '未知错误'), 'err'); return; }
+        showRnRuleIoMsg(
+          res.count
+            ? `已导出 ${res.count} 条规则到 ${res.filePath}`
+            : `当前没有规则，已导出一份空白模板到 ${res.filePath}（填好后可再导入）`,
+          'ok'
+        );
+        try { window.api.revealInFolder(res.filePath); } catch (_) { /* 忽略 */ }
+      } catch (err) {
+        showRnRuleIoMsg('导出失败：' + (err.message || err), 'err');
+      }
+    });
+  });
+}
+
+const btnRnRuleImport = document.getElementById('btn-rn-rule-import');
+if (btnRnRuleImport) {
+  btnRnRuleImport.addEventListener('click', async () => {
+    try {
+      const res = await window.api.rulesImport('重命名规则');
+      if (!res || res.canceled) return;
+      if (!res.ok) { showRnRuleIoMsg('导入失败：' + (res.error || '未知错误'), 'err'); return; }
+
+      const incoming = res.rules || [];
+      if (!incoming.length) {
+        showRnRuleIoMsg('这个文件里没有解析到有效规则（「查找内容」列不能为空）。', 'err');
+        return;
+      }
+
+      let replaceAll = false;
+      if (rn.rules.length) {
+        replaceAll = window.confirm(
+          `表格里读到 ${incoming.length} 条规则，当前已有 ${rn.rules.length} 条。\n\n` +
+          '点「确定」＝ 清空现有规则后导入\n' +
+          '点「取消」＝ 保留现有规则，把新规则追加在后面'
+        );
+      }
+      if (replaceAll) rn.rules = [];
+
+      incoming.forEach((r) => {
+        rn.rules.push({
+          id: ++rnRuleSeq,
+          name: r.name || `规则 ${rn.rules.length + 1}`,
+          find: r.find,
+          replace: r.replace || '',
+          enabled: r.enabled !== false,
+        });
+      });
+
+      renderRnRules();
+      const parts = [`已${replaceAll ? '替换' : '追加'}导入 ${incoming.length} 条规则`];
+      if (res.skipped) parts.push(`跳过 ${res.skipped} 行空白/无效数据`);
+      showRnRuleIoMsg(parts.join('，') + '。', 'ok');
+    } catch (err) {
+      showRnRuleIoMsg('导入失败：' + (err.message || err), 'err');
+    }
+  });
+}
+
 function getRnSaveMode() { return document.querySelector('input[name="rename-save-mode"]:checked').value; }
 document.querySelectorAll('input[name="rename-save-mode"]').forEach((r) => {
   r.addEventListener('change', () => {

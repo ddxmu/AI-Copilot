@@ -1146,9 +1146,10 @@ const tools = {
           },
           timeout: 15000,
         }, (res) => {
-          let body = '';
-          res.on('data', (chunk) => body += chunk);
+          const chunks = [];
+          res.on('data', (chunk) => chunks.push(chunk));
           res.on('end', () => {
+            const body = Buffer.concat(chunks).toString('utf8');
             try {
               const results = [];
               const blocks = body.split(/<div class="result results_links[^"]*">/);
@@ -1219,9 +1220,10 @@ const tools = {
             res.resume();
             return resolve(this.run({ url: newUrl, max_length }));
           }
-          let body = '';
-          res.on('data', (chunk) => body += chunk);
+          const chunks = [];
+          res.on('data', (chunk) => chunks.push(chunk));
           res.on('end', () => {
+            const body = Buffer.concat(chunks).toString('utf8');
             try {
               // 去除 script/style 标签及内容
               let text = body
@@ -1275,13 +1277,14 @@ function httpPostJson(urlStr, headers, body, timeoutMs = 300000) {
         hostname: url.hostname,
         port: url.port || (url.protocol === 'http:' ? 80 : 443),
         path: url.pathname + url.search,
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), ...headers },
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), 'Accept-Encoding': 'identity', ...headers },
         timeout: timeoutMs,
       },
       (res) => {
-        let data = '';
-        res.on('data', (c) => (data += c));
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
+          const data = Buffer.concat(chunks).toString('utf8');
           if (res.statusCode >= 200 && res.statusCode < 300) {
             try { resolve(JSON.parse(data)); } catch (e) { reject(new Error('响应解析失败')); }
           } else {

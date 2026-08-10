@@ -19,7 +19,10 @@ function copyDirSync(src, dst) {
     else fs.copyFileSync(s, d);
   }
 }
-(function applyPendingUpdate() {
+// 注意：此函数必须在 app 已 ready 之后才调用。早前写成顶层 IIFE 在 app.ready() 之前执行，
+// 而 app.getPath('userData') 在 ready 前会抛错，导致整个覆盖被跳过、pending 永不被应用——
+// 表现就是「更新下载完、重启后还是老版本」。因此改为函数声明，在 app.whenReady().then() 内首行调用（见下方）。
+function applyPendingUpdate() {
   try {
     const exeDir = app.getPath('exe'); // .../Contents/MacOS
     const appRoot = path.resolve(exeDir, '..', '..', '..'); // .../AI Copilot.app
@@ -52,7 +55,7 @@ function copyDirSync(src, dst) {
     console.error('applyPendingUpdate failed:', e && e.message);
     // 替换失败：保留 pending 供下次启动重试，绝不阻断正常启动
   }
-})();
+}
 
 const updater = require('./updater');
 const https = require('https');
@@ -135,6 +138,7 @@ function checkUpdatesInBackground(force = false) {
 }
 
 app.whenReady().then(() => {
+  applyPendingUpdate(); // 升级后「退出后替换」：必须在 app ready 后、建窗前执行，把 pending-update 覆盖到 Resources/app
   migrateLegacyUserData();
   detectPdfEngines();
   createWindow();
@@ -408,13 +412,14 @@ ipcMain.handle('select-output-dir', async () => {
 });
 
 // ===== 替换规则的导出 / 导入（.xlsx / .csv）=====
-ipcMain.handle('rules-export', async (_e, { rules, format }) => {
+ipcMain.handle('rules-export', async (_e, { rules, format, label }) => {
   try {
+    const kind = label || '替换规则';
     const ext = format === 'csv' ? 'csv' : 'xlsx';
     const stamp = new Date().toISOString().slice(0, 10);
     const result = await dialog.showSaveDialog(mainWindow, {
-      title: '导出替换规则',
-      defaultPath: path.join(app.getPath('downloads'), `替换规则-${stamp}.${ext}`),
+      title: `导出${kind}`,
+      defaultPath: path.join(app.getPath('downloads'), `${kind}-${stamp}.${ext}`),
       filters: ext === 'csv'
         ? [{ name: 'CSV 文件', extensions: ['csv'] }]
         : [{ name: 'Excel 工作簿', extensions: ['xlsx'] }],
@@ -432,10 +437,11 @@ ipcMain.handle('rules-export', async (_e, { rules, format }) => {
   }
 });
 
-ipcMain.handle('rules-import', async () => {
+ipcMain.handle('rules-import', async (_e, { label }) => {
   try {
+    const kind = label || '替换规则';
     const result = await dialog.showOpenDialog(mainWindow, {
-      title: '导入替换规则',
+      title: `导入${kind}`,
       properties: ['openFile'],
       filters: [
         { name: '规则表格 (Excel / CSV)', extensions: ['xlsx', 'xlsm', 'csv'] },
@@ -862,9 +868,10 @@ function httpsGetJson(urlStr, redirects = 3) {
         res.resume();
         return resolve(httpsGetJson(res.headers.location, redirects - 1));
       }
-      let data = '';
-      res.on('data', (c) => (data += c));
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf8');
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try { resolve(JSON.parse(data)); } catch (e) { reject(new Error('响应解析失败')); }
         } else reject(new Error(`HTTP ${res.statusCode}: ${data.slice(0, 200)}`));
