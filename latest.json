@@ -1,16 +1,16 @@
 {
-  "version": "0.8.27",
-  "notes": "AI 助手支持读取老格式 .doc / .xls：.doc 用系统 textutil 转纯文本（离线秒级、UTF-8 保真），.xls 用 LibreOffice（soffice --headless --convert-to csv，macOS 默认 UTF-8、中文保真，多 sheet 自动拼接）。仅改读取入口，不动转换/替换逻辑。",
-  "pubDate": "2026-08-10T15:30:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.27/AI.Copilot-0.8.27-arm64.dmg",
-  "sha256": "0bbdbeee2c00f71182d713997c0c5baf10ca73a9e52c4d503cb71d10f6ad5985",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.27/AI.Copilot-0.8.27.zip",
-  "patchSha256": "bc23290636d1a44b59c4d0a1c097f490d780172f2d2063ff062d5ff948f5b1e2",
+  "version": "0.8.28",
+  "notes": "修复「点升级、装完、自动重启后仍是旧版本，需手动关闭再打开才生效」：升级脚本原先用 open 重启，macOS 在旧进程未注销时会把 open 当「激活已有实例」，导致重启后仍是旧代码；改为后台 bash 只复制新文件、主进程轮询完成后用 app.relaunch()+app.quit() 托管重启，从根本消除竞态。（无功能改动，仅升级重启机制）",
+  "pubDate": "2026-08-10T16:00:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.28/AI.Copilot-0.8.28-arm64.dmg",
+  "sha256": "202db19a7aa311add2dd2393734aaeb1ae8a0be074faa02ff3d6c743de770a27",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.28/AI.Copilot-0.8.28.zip",
+  "patchSha256": "0ec1eaeb8bd339812b124701e33bed9a7927e2447279f1c35c7092439483d001",
   "deltas": [
     {
-      "from": "0.8.26",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.27/AI.Copilot-0.8.27.zip",
-      "sha256": "bc23290636d1a44b59c4d0a1c097f490d780172f2d2063ff062d5ff948f5b1e2"
+      "from": "0.8.27",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.28/AI.Copilot-0.8.28.zip",
+      "sha256": "0ec1eaeb8bd339812b124701e33bed9a7927e2447279f1c35c7092439483d001"
     }
   ]
 }

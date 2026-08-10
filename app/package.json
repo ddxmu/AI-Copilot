@@ -1,7 +1,7 @@
 {
   "name": "ai-copilot",
   "productName": "AI Copilot",
-  "version": "0.8.27",
+  "version": "0.8.28",
   "description": "选择文件或文件夹，按规则批量替换文件内容",
   "main": "main.js",
   "license": "MIT",

@@ -3,14 +3,16 @@
 //   · 拉取 GitHub raw 上的 latest.json → 比对版本
 //   · 有通用增量包(patchUrl)则下载该 zip，解压覆盖 Resources/app（任何老版本都适用）
 //   · 否则下载完整 DMG → 挂载 → 拷贝新 .app 到 staging
-//   · 写独立 bash 脚本，app 退出后由脚本完成「整包替换」并重启
-//     （退出后替换，规避 macOS 禁止 app 运行时覆盖自身 bundle 的限制）
+//   · 写独立 bash 脚本在后台完成「整包替换」；重启改由主进程 app.relaunch() 托管
+//     （退出后替换，规避 macOS 禁止 app 运行时覆盖自身 bundle 的限制；
+//      用 relaunch() 而非手写 open，避免 open 把还没退出的旧实例「激活」导致重启后仍是旧版本）
 const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
+const os = require('os');
 const { app } = require('electron');
 const { readZipEntries } = require('./office-replace');
 
@@ -210,18 +212,37 @@ function copyApp(src, dest) {
   });
 }
 
-// 写独立安装脚本，脱离主进程在 app 退出后完成整包替换并重启（v0.7.0 机制）
+// 等待后台 bash 复制完成（写入 doneMarker）后，由主进程 app.relaunch()+app.quit()
+// 接管重启。relaunch() 是 Electron 内部向系统注册的「退出后重新启动」，
+// 不会像手写 open 那样把尚未退出的旧实例「激活」，从而消除重启后仍显示旧版本的竞态。
+function waitAndRelaunch(doneMarker, done) {
+  const start = Date.now();
+  const timer = setInterval(() => {
+    let ok = false;
+    try { ok = fs.existsSync(doneMarker); } catch (e) { ok = false; }
+    if (ok || Date.now() - start > 20000) {        // 复制完成 or 20s 超时兜底
+      clearInterval(timer);
+      try { fs.unlinkSync(doneMarker); } catch (e) { /* ignore */ }
+      try { app.relaunch(); } catch (e) { /* ignore */ }
+      app.quit();
+      if (done) done();
+    }
+  }, 150);
+}
+
+// 写独立安装脚本，脱离主进程在后台完成整包替换；重启由 waitAndRelaunch 托管（v0.7.0 机制升级版）
 function relaunchAndApply(staging) {
   return new Promise((resolve) => {
     const target = currentAppPath();
     const updateRoot = path.dirname(staging);
+    const doneMarker = path.join(os.tmpdir(), 'aic-apply-done');
     const script = `#!/bin/bash
-sleep 2
+sleep 1
 rm -rf "${target}"
 cp -R "${staging}" "${target}"
 xattr -dr com.apple.quarantine "${target}" 2>/dev/null
 rm -rf "${updateRoot}"
-open "${target}"
+touch "${doneMarker}"
 `;
     const sp = path.join(updateDir(), 'apply.sh');
     fs.mkdirSync(updateDir(), { recursive: true });
@@ -229,7 +250,7 @@ open "${target}"
     fs.chmodSync(sp, 0o755);
     const child = spawn('bash', [sp], { detached: true, stdio: 'ignore' });
     child.unref();
-    setTimeout(() => { app.quit(); resolve(); }, 400);
+    waitAndRelaunch(doneMarker, resolve);
   });
 }
 
@@ -257,7 +278,8 @@ async function checkForUpdates() {
   }
 }
 
-// 增量应用：解压 patch zip 到 staging，写 bash 脚本在退出后覆盖 Resources/app
+// 增量应用：解压 patch zip 到 staging，写 bash 脚本在后台覆盖 Resources/app；
+// 重启由 waitAndRelaunch 托管（app.relaunch + app.quit，规避 open 激活旧实例竞态）
 function applyDeltaAndRelaunch(deltaZipPath, cb) {
   const stagingDir = path.join(updateDir(), 'staging');
   fs.rmSync(stagingDir, { recursive: true, force: true });
@@ -280,23 +302,24 @@ function applyDeltaAndRelaunch(deltaZipPath, cb) {
   const target = currentAppPath();
   const appResDir = path.join(target, 'Contents', 'Resources', 'app');
   const updateRoot = updateDir();
+  const doneMarker = path.join(os.tmpdir(), 'aic-apply-done');
   const deleteCmds = deletedFiles.map((f) => `rm -f "${appResDir}/${f}" 2>/dev/null`).join('\n');
   const script = `#!/bin/bash
-sleep 2
+sleep 1
 # 覆盖变更文件
 cp -Rf "${stagingDir}/." "${appResDir}/"
 # 删除已移除文件
 ${deleteCmds}
 xattr -dr com.apple.quarantine "${target}" 2>/dev/null
 rm -rf "${updateRoot}"
-open "${target}"
+touch "${doneMarker}"
 `;
   const sp = path.join(updateDir(), 'apply.sh');
   fs.writeFileSync(sp, script);
   fs.chmodSync(sp, 0o755);
   const child = spawn('bash', [sp], { detached: true, stdio: 'ignore' });
   child.unref();
-  setTimeout(() => { app.quit(); }, 400);
+  waitAndRelaunch(doneMarker, () => { if (cb && cb.onStage) cb.onStage('即将重启…'); });
 }
 
 // cb: { onProgress({percent,written,total,speedBps}), onStage(text) }
