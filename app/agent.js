@@ -150,6 +150,19 @@ const BUILTIN_SKILLS = {
     description: '批量替换文件中的公司名/人名等实体，适用于成批文档的统一更名',
     body: `执行批量实体替换时：\n1. 先用 grep_files 确认旧名称在哪些文件中出现、出现多少次\n2. 用 add_replace_rule 建立规则\n3. 用 batch_replace 执行\n4. 汇报每个文件的替换处数`,
   },
+  /* ---- 默认技能（按规则替换框架）：智能文档/数据处理 ---- */
+  'system-data-intelligence': {
+    description: '智能文档/数据处理：理解 Office 文档（Word/Excel/PPT，含旧版 .doc/.xls）与表格结构，按规则智能替换、整理、转换内容；旧版二进制格式先转 OOXML 再处理。',
+    body: `执行「按规则替换文件」等文档/数据任务时：
+1. 读取替换规则（查找内容 → 替换内容）与各文件路径、用户指定的保存方式。
+2. 现代格式（docx/xlsx/pptx/txt/md/csv/json 等）：直接用 batch_replace / edit_file 按规则替换。
+3. 旧版二进制格式（.doc / .xls，OLE 复合文档，不可直接按文本读写）：先用转换引擎转成可编辑格式再处理——
+   - .doc → 用 textutil -convert docx 或 LibreOffice --headless --convert-to docx；
+   - .xls → 用 LibreOffice --headless --convert-to xlsx；
+   转换后按规则替换，再按需转回原格式写回。
+4. 复杂排版/表格优先用 convert_file 或 LibreOffice（需安装），保持结构与样式；不确定内容时先 read_file 确认。
+5. 按保存方式（输出到目录 / 覆盖原文件）写回；完成后简要汇报每个文件的替换处数。`,
+  },
   'polish-document': {
     description: '完善/润色文档内容：修正语病、统一格式、补充结构',
     body: `完善文档时：\n1. 先 read_file 通读全文\n2. 保持原文档的格式结构（标题层级、列表样式）\n3. 用 edit_file 逐处修改，不要整篇重写除非用户要求\n4. 修改后说明改了哪些地方`,

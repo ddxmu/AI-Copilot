@@ -451,12 +451,13 @@ async function executeReplaceByAI() {
       : '直接覆盖原文件（不传 output_dir）。';
     const rulesDesc = activeRules.map((r, i) => `${i + 1}. 把「${r.find}」替换成「${r.replace}」`).join('\n');
     const fileList = textFiles.slice(0, 300).join('\n');
-    const prompt =
+    const basePrompt =
       `请对以下 ${textFiles.length} 个文件执行批量文本替换。\n\n` +
       `替换规则：\n${rulesDesc}\n\n` +
       `保存方式：${saveDesc}\n\n` +
       `文件列表：\n${fileList}\n\n` +
       `请用 batch_replace 工具执行，完成后简要汇报处理结果。`;
+    const prompt = withAutoSkill(basePrompt, getReplaceSkillName(), '按规则替换');
 
     ensureActiveChat();
     addBubble('user', `【按规则替换】AI 处理 ${textFiles.length} 个文本文件（${activeRules.length} 条规则）`);
@@ -2399,10 +2400,48 @@ function getAutoSkillName() {
   return sel ? sel.value : '';
 }
 
+// 替换框架「技能选择（可选）」：默认 system-data-intelligence + 若干 Office 编写相关内置技能
+const REPLACE_SKILL_OFFICE = [
+  'system-data-intelligence', 'document-converter', 'format-convert',
+  'polish-document', 'reformat-document', 'pdf-to-office',
+];
+const REPLACE_SKILL_DEFAULT = 'system-data-intelligence';
+async function populateReplaceSkill() {
+  const sel = document.getElementById('replace-skill');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">（不指定技能，按默认流程）</option>';
+  const map = new Map();
+  try {
+    const { builtin = [], installed = [] } = await window.api.skillsList();
+    for (const b of builtin) {
+      if (REPLACE_SKILL_OFFICE.includes(b.name)) {
+        map.set(b.name, { name: b.name, desc: b.description || '', source: 'builtin' });
+      }
+    }
+    for (const i of installed) {
+      if (!map.has(i.name)) map.set(i.name, { name: i.name, desc: i.description || '', source: 'installed' });
+    }
+  } catch (e) { /* 拉取失败则只保留默认项 */ }
+  const list = [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  for (const s of list) {
+    const o = document.createElement('option');
+    o.value = s.name;
+    o.textContent = s.name + (s.source === 'installed' ? '（已安装）' : '（内置）');
+    sel.appendChild(o);
+  }
+  const hasDefault = [...sel.options].some((o) => o.value === REPLACE_SKILL_DEFAULT);
+  if (hasDefault) sel.value = REPLACE_SKILL_DEFAULT;
+}
+function getReplaceSkillName() {
+  const sel = document.getElementById('replace-skill');
+  return sel ? sel.value : '';
+}
+
 // 在提示词前追加「先加载该技能」的指令，交给 AI 代理按技能指引执行
-function withAutoSkill(prompt, skillName) {
+function withAutoSkill(prompt, skillName, taskName) {
   if (!skillName) return prompt;
-  return `请先调用 skill 工具加载「${skillName}」技能，获取其详细操作指引，并严格按指引执行本「文件自动化」任务。\n\n` + prompt;
+  const task = taskName || '文件自动化';
+  return `请先调用 skill 工具加载「${skillName}」技能，获取其详细操作指引，并严格按指引执行本「${task}」任务。\n\n` + prompt;
 }
 
 
@@ -4065,6 +4104,7 @@ renderRnFiles();
 renderRnRules();
 populateConvFormats();
 populateAutoSkill();
+populateReplaceSkill();
 populateWmSkill();
 populatePptSkill();
 renderCvFiles();
