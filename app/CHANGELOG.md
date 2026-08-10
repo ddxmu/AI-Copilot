@@ -1,3 +1,6 @@
+## v0.8.27 — 2026-08-10
+- **AI 助手支持读取老格式 `.doc` / `.xls`**：此前 `read_file` 直接按 UTF‑8 读这些 OLE 二进制复合文档会乱码、AI 读不懂内容。本版新增老格式提取层——`.doc` 用系统自带 `textutil -convert txt` 转纯文本（离线秒级、UTF‑8 保真）；`.xls` 用 LibreOffice（`soffice --headless --convert-to csv`，macOS 默认 UTF‑8、中文保真，多 sheet 自动拼接为多个 CSV）。仅改读取入口，不动转换/替换逻辑。
+
 ## v0.8.26 — 2026-08-10
 - **测试版（极小改动）**：仅升级版本号，用于验证「在线增量升级」机制是否真正生效。无功能改动。
 
