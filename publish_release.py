@@ -189,6 +189,56 @@ def build_delta(prev_tag, version):
     return data, sha
 
 
+def files_equal(a, b):
+    if os.path.getsize(a) != os.path.getsize(b):
+        return False
+    h1, h2 = hashlib.sha256(), hashlib.sha256()
+    with open(a, 'rb') as f1, open(b, 'rb') as f2:
+        for c1, c2 in zip(iter(lambda: f1.read(1024 * 1024), b''),
+                          iter(lambda: f2.read(1024 * 1024), b'')):
+            h1.update(c1); h2.update(c2)
+    return h1.digest() == h2.digest()
+
+
+def build_delta_from_dir(old_app_dir, version, from_v):
+    """对比 old_app_dir 与当前工作区 app/，生成增量 zip，返回 (bytes, sha256) 或 None。"""
+    cur_app = os.path.join(ROOT, 'app')
+    changed, deleted = [], []
+    cur_files = set()
+    for root, dirs, files in os.walk(cur_app):
+        for f in files:
+            full = os.path.join(root, f)
+            rel = os.path.relpath(full, cur_app)
+            cur_files.add(rel)
+            old_full = os.path.join(old_app_dir, rel)
+            if os.path.exists(old_full):
+                if not files_equal(full, old_full):
+                    changed.append(rel)
+            else:
+                changed.append(rel)
+    for root, dirs, files in os.walk(old_app_dir):
+        for f in files:
+            full = os.path.join(root, f)
+            rel = os.path.relpath(full, old_app_dir)
+            if rel not in cur_files:
+                deleted.append(rel)
+    if not changed and not deleted:
+        print(f'  {from_v} 无变更，跳过'); return None
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for rel in changed:
+            zf.write(os.path.join(cur_app, rel), rel)
+        if deleted:
+            zf.writestr('__deleted.txt', '\n'.join(deleted) + '\n')
+        zf.writestr('__delta_info.json', json.dumps({
+            'from': from_v, 'to': version, 'changed': len(changed), 'deleted': len(deleted),
+        }, ensure_ascii=False, indent=2))
+    data = buf.getvalue()
+    sha = hashlib.sha256(data).hexdigest()
+    print(f'  delta(from {from_v}) 构建: {len(changed)} 改动, {len(deleted)} 删除, {len(data)} bytes')
+    return data, sha
+
+
 def main():
     token = os.environ.get('GITHUB_TOKEN')
     if not token:
@@ -250,51 +300,68 @@ def main():
     # 5. git 提交 + 打 tag
     print('== git 提交 + tag ==')
     run(['git', '-C', ROOT, 'add', '-A'])
-    run(['git', '-C', ROOT, 'commit', '-m', f'release: v{version}'])
+    run(['git', '-C', ROOT, 'commit', '--allow-empty', '-m', f'release: v{version}'])
     if not git_tag_exists(tag):
         run(['git', '-C', ROOT, 'tag', tag])
 
     # 6. 构建增量包：为每个历史版本都生成「到当前版本」的独立 delta，
-    #    写入 latest.json 的 deltas 数组；同时保留「上一版本」的单 deltaUrl 以兼容旧版更新器
+    #    写入 latest.json 的 deltas 数组。完整包始终作为兜底，任何老版本都能升级。
     delta_url = None
     delta_sha = None
     delta_from = None
     deltas = []
-    if prev_version and prev_version != version:
-        prev_tag = 'v' + prev_version
-        # 收集历史 tag（< 当前版本，且 >= v0.8.0 以保证叠加安全），逐个生成 delta
-        hist_tags = [t for t in list_version_tags()
-                     if cmp_ver(t, tag) < 0 and cmp_ver(t, 'v0.8.0') >= 0]
-        # 确保紧邻上一版本也在列表内
-        if prev_tag not in hist_tags:
-            hist_tags.append(prev_tag)
-        hist_tags.sort(key=ver_tuple)
-        print(f'== 历史版本数：{len(hist_tags)}，逐个构建增量 ==')
-        for ht in hist_tags:
-            ht_v = ht[1:]  # 去掉 v 前缀
-            if not git_tag_exists(ht):
-                print(f'  跳过 {ht}（tag 不存在）'); continue
-            print(f'== 构建增量 {ht} → {tag} ==')
-            result = build_delta(ht, version)
-            if not result:
-                print(f'  {ht} 无变更，跳过'); continue
-            delta_data, delta_sha_i = result
-            dname = f'delta-{version}-from-{ht_v}.zip'
-            dpath = os.path.join(DELTA_DIR, dname)
-            with open(dpath, 'wb') as f:
-                f.write(delta_data)
-            print('== 上传 delta ==')
-            delete_existing_asset(token, rel, dname)
-            durl = upload_asset(token, rel_id, dname, filepath=dpath)
-            deltas.append({'from': ht_v, 'url': durl, 'sha256': delta_sha_i})
-            # 紧邻上一版本：同时作为单 deltaUrl（兼容旧更新器）
-            if ht_v == prev_version:
+    # 历史 tag（< 当前版本，且 >= v0.8.0）逐个生成 delta
+    hist_tags = [t for t in list_version_tags()
+                 if cmp_ver(t, tag) < 0 and cmp_ver(t, 'v0.8.0') >= 0]
+    hist_tags.sort(key=ver_tuple)
+    print(f'== 历史版本数：{len(hist_tags)}，逐个构建增量 ==')
+    for ht in hist_tags:
+        ht_v = ht[1:]  # 去掉 v 前缀
+        if not git_tag_exists(ht):
+            print(f'  跳过 {ht}（tag 不存在）'); continue
+        print(f'== 构建增量 {ht} → {tag} ==')
+        result = build_delta(ht, version)
+        if not result:
+            print(f'  {ht} 无变更，跳过'); continue
+        delta_data, delta_sha_i = result
+        dname = f'delta-{version}-from-{ht_v}.zip'
+        dpath = os.path.join(DELTA_DIR, dname)
+        with open(dpath, 'wb') as f:
+            f.write(delta_data)
+        print('== 上传 delta ==')
+        delete_existing_asset(token, rel, dname)
+        durl = upload_asset(token, rel_id, dname, filepath=dpath)
+        deltas.append({'from': ht_v, 'url': durl, 'sha256': delta_sha_i})
+        print('delta url:', durl, f'({len(delta_data)} bytes)')
+    # 6.5 额外处理无 git tag 的基线 v0.8.24（从本地 DMG 提取 app/ 对比当前工作区）
+    BASELINE_0824 = os.path.expanduser('~/Downloads/AI.Copilot-0.8.24-arm64.dmg')
+    if os.path.exists(BASELINE_0824):
+        print('== 为无 tag 的基线 v0.8.24 构建增量 ==')
+        mnt = '/tmp/mnt0824_baseline'
+        os.makedirs(mnt, exist_ok=True)
+        try:
+            subprocess.run(['hdiutil', 'attach', '-nobrowse', '-mountpoint', mnt, BASELINE_0824], check=True)
+            old_app = os.path.join(mnt, 'AI Copilot.app/Contents/Resources/app')
+            result = build_delta_from_dir(old_app, version, '0.8.24')
+            if result:
+                delta_data, delta_sha_i = result
+                dname = f'delta-{version}-from-0.8.24.zip'
+                dpath = os.path.join(DELTA_DIR, dname)
+                with open(dpath, 'wb') as f:
+                    f.write(delta_data)
+                print('== 上传 delta (0.8.24) ==')
+                delete_existing_asset(token, rel, dname)
+                durl = upload_asset(token, rel_id, dname, filepath=dpath)
+                deltas.append({'from': '0.8.24', 'url': durl, 'sha256': delta_sha_i})
+                # 兼容旧更新器的单 deltaUrl：以用户当前所在版本 0.8.24 作为主增量源
                 delta_url = durl
                 delta_sha = delta_sha_i
-                delta_from = ht_v
-            print('delta url:', durl, f'({len(delta_data)} bytes)')
+                delta_from = '0.8.24'
+                print('delta url:', durl, f'({len(delta_data)} bytes)')
+        finally:
+            subprocess.run(['hdiutil', 'detach', mnt], check=False)
     else:
-        print('无上一版本或同版本，跳过 delta')
+        print('警告：未找到 0.8.24 基线 DMG，跳过 0.8.24 delta')
 
     # 7. 写 latest.json
     print('== 写 latest.json ==')
