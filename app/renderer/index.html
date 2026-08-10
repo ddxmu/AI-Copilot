@@ -266,9 +266,22 @@
         </div>
 
         <div class="card">
-          <h2>已建规则 <span id="rename-rule-count" class="count">0</span></h2>
+          <div class="card-head">
+            <h2>已建规则 <span id="rename-rule-count" class="count">0</span></h2>
+            <div class="card-head-actions">
+              <div class="dropdown" id="rn-rule-export-wrap">
+                <button id="btn-rn-rule-export" class="btn small" title="把当前规则导出为表格文件">导出规则<span class="caret">▾</span></button>
+                <div class="dropdown-menu" id="rn-rule-export-menu">
+                  <button type="button" data-format="xlsx">Excel 工作簿（.xlsx）</button>
+                  <button type="button" data-format="csv">CSV 文件（.csv）</button>
+                </div>
+              </div>
+              <button id="btn-rn-rule-import" class="btn small" title="从 .xlsx / .csv 表格批量导入规则">导入规则</button>
+            </div>
+          </div>
           <ul id="rename-rule-list" class="rule-list"></ul>
-          <p id="rename-rule-empty" class="empty">还没有规则，先在上方添加一条。</p>
+          <p id="rename-rule-empty" class="empty">还没有规则，先在上方添加一条，或点右上角「导入规则」从表格批量导入。</p>
+          <p id="rename-rule-io-msg" class="rule-io-msg"></p>
         </div>
 
         <div class="card">
