@@ -1,16 +1,16 @@
 {
-  "version": "0.8.26",
-  "notes": "还原 v0.7.0 在线升级机制：升级改为「退出后由独立 bash 脚本替换整包 / 覆盖 Resources/app」，与 0.7.0 一致。版本判断改读 package.json（规避 Info.plist 版本号失真导致的判断错乱）；增量包通用化——任何老版本下载同一份 AI.Copilot-{version}.zip 覆盖即可升级。",
-  "pubDate": "2026-08-10T14:05:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.26/AI.Copilot-0.8.26-arm64.dmg",
-  "sha256": "a29d9e0b02c80e6702c9543660681fe60456c9e0a8c551f4e57d4498b4c2f4d2",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.26/AI.Copilot-0.8.26.zip",
-  "patchSha256": "749ea14eb7a9999da3a3d40be61c0468b2e773bb2faf9863d02051a74af411b2",
+  "version": "0.8.27",
+  "notes": "AI 助手支持读取老格式 .doc / .xls：.doc 用系统 textutil 转纯文本（离线秒级、UTF-8 保真），.xls 用 LibreOffice（soffice --headless --convert-to csv，macOS 默认 UTF-8、中文保真，多 sheet 自动拼接）。仅改读取入口，不动转换/替换逻辑。",
+  "pubDate": "2026-08-10T15:30:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.27/AI.Copilot-0.8.27-arm64.dmg",
+  "sha256": "0bbdbeee2c00f71182d713997c0c5baf10ca73a9e52c4d503cb71d10f6ad5985",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.27/AI.Copilot-0.8.27.zip",
+  "patchSha256": "bc23290636d1a44b59c4d0a1c097f490d780172f2d2063ff062d5ff948f5b1e2",
   "deltas": [
     {
-      "from": "0.8.25",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.26/AI.Copilot-0.8.26.zip",
-      "sha256": "749ea14eb7a9999da3a3d40be61c0468b2e773bb2faf9863d02051a74af411b2"
+      "from": "0.8.26",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.27/AI.Copilot-0.8.27.zip",
+      "sha256": "bc23290636d1a44b59c4d0a1c097f490d780172f2d2063ff062d5ff948f5b1e2"
     }
   ]
 }
