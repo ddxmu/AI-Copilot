@@ -1,7 +1,7 @@
 {
   "name": "ai-copilot",
   "productName": "AI Copilot",
-  "version": "0.8.22",
+  "version": "0.8.23",
   "description": "选择文件或文件夹，按规则批量替换文件内容",
   "main": "main.js",
   "license": "MIT",
@@ -64,6 +64,7 @@
       "agent.js",
       "filetypes.js",
       "office-replace.js",
+      "rules-io.js",
       "pdf-watermark.js",
       "updater.js",
       "CHANGELOG.md",

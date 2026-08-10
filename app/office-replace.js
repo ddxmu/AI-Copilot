@@ -159,4 +159,4 @@ function processOfficeFile(fileBuf, rules) {
   return { content: writeZipStore(newEntries), count: total };
 }
 
-module.exports = { processOfficeFile, readZipEntries };
+module.exports = { processOfficeFile, readZipEntries, writeZipStore };

@@ -394,6 +394,99 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* ===== 卡片标题行：左标题 + 右上角操作区 ===== */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.card-head h2 {
+  margin-bottom: 0;
+}
+
+.card-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.card-head-actions .caret {
+  margin-left: 5px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* ===== 轻量下拉菜单 ===== */
+.dropdown {
+  position: relative;
+}
+
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 190px;
+  padding: 5px;
+  background: var(--card-bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
+}
+
+.dropdown.open .dropdown-menu {
+  display: block;
+}
+
+.dropdown-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 11px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dropdown-menu button:hover {
+  background: var(--primary-bg);
+  color: var(--primary);
+}
+
+/* ===== 导入/导出结果提示 ===== */
+.rule-io-msg {
+  display: none;
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.rule-io-msg.show {
+  display: block;
+}
+
+.rule-io-msg.ok {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.rule-io-msg.err {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
 .card.hidden {
   display: none;
 }
