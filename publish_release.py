@@ -9,7 +9,7 @@ REPO = 'ddxmu/AI-Copilot'
 ROOT = os.path.dirname(os.path.abspath(__file__))
 APP_SRC = '/tmp/AIReplace/appbuild/AI Copilot.app/Contents/Resources/app'
 ASSETS = '/tmp/AIReplace/dmg-assets'
-MAKE_DMG = '/tmp/AIReplace/make_dmg.py'
+MAKE_DMG = '/Users/dingjunjie/Developer/AI-Copilot/make_dmg.py'
 PY = '/Users/dingjunjie/.workbuddy/binaries/python/versions/3.13.12/bin/python3'
 API = f'https://api.github.com/repos/{REPO}'
 UA = {'User-Agent': 'ai-copilot-publish'}
@@ -239,6 +239,19 @@ def build_delta_from_dir(old_app_dir, version, from_v):
     return data, sha
 
 
+def build_full_patch(out_path):
+    """通用增量包：把当前 app/ 整个目录打包成 zip（完整快照）。
+    任何老版本下载后解压覆盖 Resources/app/ 即升到最新。"""
+    cur_app = os.path.join(ROOT, 'app')
+    with zipfile.ZipFile(out_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(cur_app):
+            for f in files:
+                full = os.path.join(root, f)
+                rel = os.path.relpath(full, cur_app)
+                zf.write(full, rel)
+    print(f'通用增量包构建完成: {out_path} ({os.path.getsize(out_path)} bytes)')
+
+
 def main():
     token = os.environ.get('GITHUB_TOKEN')
     if not token:
@@ -290,7 +303,13 @@ def main():
     if not rel_id:
         print('无法获取 release id'); sys.exit(1)
 
-    # 4. 上传 DMG（流式，先删同名旧资产）
+    # 4. 清理旧增量资产（delta-*），保证 Release 最终只剩 dmg + 通用 patch zip
+    for a in rel.get('assets', []):
+        if a['name'].startswith('delta-'):
+            print('删除旧资产', a['name'])
+            api('DELETE', f'{API}/releases/assets/{a["id"]}', token)
+
+    # 上传 DMG（流式，先删同名旧资产）
     print('== 上传 DMG ==')
     delete_existing_asset(token, rel, gh_asset_name)
     dmg_url = upload_asset(token, rel_id, gh_asset_name, filepath=dmg_path)
@@ -304,64 +323,15 @@ def main():
     if not git_tag_exists(tag):
         run(['git', '-C', ROOT, 'tag', tag])
 
-    # 6. 构建增量包：为每个历史版本都生成「到当前版本」的独立 delta，
-    #    写入 latest.json 的 deltas 数组。完整包始终作为兜底，任何老版本都能升级。
-    delta_url = None
-    delta_sha = None
-    delta_from = None
-    deltas = []
-    # 历史 tag（< 当前版本，且 >= v0.8.0）逐个生成 delta
-    hist_tags = [t for t in list_version_tags()
-                 if cmp_ver(t, tag) < 0 and cmp_ver(t, 'v0.8.0') >= 0]
-    hist_tags.sort(key=ver_tuple)
-    print(f'== 历史版本数：{len(hist_tags)}，逐个构建增量 ==')
-    for ht in hist_tags:
-        ht_v = ht[1:]  # 去掉 v 前缀
-        if not git_tag_exists(ht):
-            print(f'  跳过 {ht}（tag 不存在）'); continue
-        print(f'== 构建增量 {ht} → {tag} ==')
-        result = build_delta(ht, version)
-        if not result:
-            print(f'  {ht} 无变更，跳过'); continue
-        delta_data, delta_sha_i = result
-        dname = f'delta-{version}-from-{ht_v}.zip'
-        dpath = os.path.join(DELTA_DIR, dname)
-        with open(dpath, 'wb') as f:
-            f.write(delta_data)
-        print('== 上传 delta ==')
-        delete_existing_asset(token, rel, dname)
-        durl = upload_asset(token, rel_id, dname, filepath=dpath)
-        deltas.append({'from': ht_v, 'url': durl, 'sha256': delta_sha_i})
-        print('delta url:', durl, f'({len(delta_data)} bytes)')
-    # 6.5 额外处理无 git tag 的基线 v0.8.24（从本地 DMG 提取 app/ 对比当前工作区）
-    BASELINE_0824 = os.path.expanduser('~/Downloads/AI.Copilot-0.8.24-arm64.dmg')
-    if os.path.exists(BASELINE_0824):
-        print('== 为无 tag 的基线 v0.8.24 构建增量 ==')
-        mnt = '/tmp/mnt0824_baseline'
-        os.makedirs(mnt, exist_ok=True)
-        try:
-            subprocess.run(['hdiutil', 'attach', '-nobrowse', '-mountpoint', mnt, BASELINE_0824], check=True)
-            old_app = os.path.join(mnt, 'AI Copilot.app/Contents/Resources/app')
-            result = build_delta_from_dir(old_app, version, '0.8.24')
-            if result:
-                delta_data, delta_sha_i = result
-                dname = f'delta-{version}-from-0.8.24.zip'
-                dpath = os.path.join(DELTA_DIR, dname)
-                with open(dpath, 'wb') as f:
-                    f.write(delta_data)
-                print('== 上传 delta (0.8.24) ==')
-                delete_existing_asset(token, rel, dname)
-                durl = upload_asset(token, rel_id, dname, filepath=dpath)
-                deltas.append({'from': '0.8.24', 'url': durl, 'sha256': delta_sha_i})
-                # 兼容旧更新器的单 deltaUrl：以用户当前所在版本 0.8.24 作为主增量源
-                delta_url = durl
-                delta_sha = delta_sha_i
-                delta_from = '0.8.24'
-                print('delta url:', durl, f'({len(delta_data)} bytes)')
-        finally:
-            subprocess.run(['hdiutil', 'detach', mnt], check=False)
-    else:
-        print('警告：未找到 0.8.24 基线 DMG，跳过 0.8.24 delta')
+    # 6. 构建通用增量包：完整 app 目录快照（任何老版本解压覆盖即最新）
+    patch_name = f'AI.Copilot-{version}.zip'
+    patch_path = os.path.join(DELTA_DIR, patch_name)
+    build_full_patch(patch_path)
+    patch_sha = stream_sha256(patch_path)
+    print('== 上传增量包 ==')
+    delete_existing_asset(token, rel, patch_name)
+    patch_url = upload_asset(token, rel_id, patch_name, filepath=patch_path)
+    print('patch url:', patch_url, f'({os.path.getsize(patch_path)} bytes)')
 
     # 7. 写 latest.json
     print('== 写 latest.json ==')
@@ -372,13 +342,13 @@ def main():
         'pubDate': datetime.datetime.now(tz8).isoformat(timespec='seconds'),
         'dmgUrl': dmg_url,
         'sha256': dmg_sha,
+        'patchUrl': patch_url,
+        'patchSha256': patch_sha,
     }
-    if delta_url:
-        latest['deltaUrl'] = delta_url
-        latest['deltaSha256'] = delta_sha
-        latest['deltaFromVersion'] = delta_from
-    if deltas:
-        latest['deltas'] = deltas
+    # 兼容旧更新器：把同一份通用增量包也登记为「前一版本」的 delta，
+    # 使其也能下 zip 而非完整 dmg（GitHub 资产仍只有 dmg + patch zip 两个文件）
+    if prev_version and prev_version != version:
+        latest['deltas'] = [{'from': prev_version, 'url': patch_url, 'sha256': patch_sha}]
     json.dump(latest, open(latest_path, 'w', encoding='utf-8'),
               ensure_ascii=False, indent=2)
 
@@ -389,8 +359,7 @@ def main():
     run(['git', '-C', ROOT, 'commit', '--amend', '--no-edit'])
     run(['git', '-C', ROOT, 'push', 'origin', 'main', '--tags', '--force'])
     print('完成。新版本', version, '已发布。')
-    if delta_url:
-        print(f'增量包: {delta_from} → {version}，App 端在线升级将只下载 delta。')
+    print(f'通用增量包: {patch_url}（{os.path.getsize(patch_path)} bytes，任何老版本适用）')
 
 
 if __name__ == '__main__':

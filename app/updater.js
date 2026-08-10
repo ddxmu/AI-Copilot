@@ -1,18 +1,16 @@
 // updater.js — AI Copilot 自动更新器（主进程，适配未签名 DMG 分发）
-// 流程：拉取 GitHub raw 上的 latest.json → 比对版本 → 下载 Release → 应用 → 重启
-//
-// 设计要点（修复历史升级失效）：
-// 1) 版本判断必须读 Resources/app/package.json，不能读 app.getVersion()——
-//    macOS 打包后 app.getVersion() 返回 Info.plist 的 CFBundleVersion（本应用恒为 0.7.2，
-//    增量更新不覆盖 Info.plist），否则版本判断错乱、增量永远不匹配、永远走完整包。
-// 2) 应用更新必须在主进程内「同步」完成（cp 覆盖文件），再用 app.relaunch()+app.exit(0) 重启。
-//    任何 detached bash / launchctl 子进程都会在 app 退出时被一起杀掉，导致 apply 永不执行。
+// 升级机制还原自 v0.7.0（经用户验证「在线升级正常」的版本）：
+//   · 拉取 GitHub raw 上的 latest.json → 比对版本
+//   · 有通用增量包(patchUrl)则下载该 zip，解压覆盖 Resources/app（任何老版本都适用）
+//   · 否则下载完整 DMG → 挂载 → 拷贝新 .app 到 staging
+//   · 写独立 bash 脚本，app 退出后由脚本完成「整包替换」并重启
+//     （退出后替换，规避 macOS 禁止 app 运行时覆盖自身 bundle 的限制）
 const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { execFile, execFileSync } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const { app } = require('electron');
 const { readZipEntries } = require('./office-replace');
 
@@ -29,30 +27,20 @@ const PROGRESS_THROTTLE_MS = 250;    // 进度事件最小间隔
 function userData() { return app.getPath('userData'); }
 function currentAppPath() { return path.resolve(app.getPath('exe'), '..', '..', '..'); }
 function updateDir() { return path.join(userData(), '.update'); }
-// Resources/app 目录（源码所在，增量更新只覆盖这里）
-function appResDirPath() { return path.join(currentAppPath(), 'Contents', 'Resources', 'app'); }
 
-// 诊断日志（写入 userData/.update/updater.log，便于日后排查升级问题）
-function log(...args) {
-  try {
-    const line = `[${new Date().toISOString()}] ` + args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ') + '\n';
-    fs.mkdirSync(updateDir(), { recursive: true });
-    fs.appendFileSync(path.join(updateDir(), 'updater.log'), line);
-  } catch (e) { /* 日志失败不影响升级 */ }
-}
-
-// 取得「真实」当前版本：直接读 Resources/app/package.json 的 version 字段
-// （见文件头说明：app.getVersion() 在本应用不可信）
+// 取得「真实」当前版本：直接读 Resources/app/package.json 的 version 字段。
+// 注意：本应用打包后 Info.plist 的 CFBundleVersion 失真（恒为 0.7.2，不随版本更新），
+// 若用 app.getVersion() 会让版本判断永远停留在 0.7.2，导致增量永远不匹配、升级紊乱。
 function getCurrentVersion() {
   try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(appResDirPath(), 'package.json'), 'utf8'));
+    const pkg = JSON.parse(fs.readFileSync(
+      path.join(currentAppPath(), 'Contents', 'Resources', 'app', 'package.json'), 'utf8'));
     return pkg.version || app.getVersion();
   } catch (e) {
     return app.getVersion();
   }
 }
 
-// ===== 工具 =====
 function compareVersions(a, b) {
   const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
   const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
@@ -155,9 +143,8 @@ function downloadFile(url, dest, opts = {}) {
       const doGet = (u, redirects) => {
         if (redirects > 10) return onFail(new Error('重定向次数过多'));
         const mod = u.startsWith('https') ? https : http;
-        const headers = { 'User-Agent': 'AI-Copilot-Updater/1.0' };
-        // 仅对原始请求（未发生重定向）携带 Range；GitHub 302 后的 SAS URL 带 Range 可能 403/416
-        if (redirects === 0 && startByte > 0) headers.Range = `bytes=${startByte}-`;
+        const headers = {};
+        if (startByte > 0) headers.Range = `bytes=${startByte}-`;
         const req = mod.get(u, { headers, timeout: 30000 }, (res) => {
           if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
             res.resume();
@@ -165,7 +152,6 @@ function downloadFile(url, dest, opts = {}) {
           }
           if (res.statusCode !== 200 && res.statusCode !== 206) {
             res.resume();
-            log('downloadFile HTTP 错误', res.statusCode, 'URL:', u);
             return onFail(new Error('下载失败 HTTP ' + res.statusCode));
           }
           total = parseInt(res.headers['content-length'] || '0', 10) + startByte;
@@ -201,12 +187,10 @@ function downloadFile(url, dest, opts = {}) {
 
 function attachDmg(dmg) {
   return new Promise((resolve, reject) => {
-    // 注意：必须用异步 execFile（带回调）。此前误写成 execFileSync 传回调，
-    // 导致回调永不执行、Promise 永久挂起，完整包路径直接卡死。
-    execFile('hdiutil', ['attach', '-nobrowse', '-noautoopen', dmg], { maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+    execFile('hdiutil', ['attach', '-nobrowse', '-noautoopen', dmg], (err, stdout) => {
       if (err) return reject(err);
-      const line = String(stdout).split('\n').find((l) => l.includes('/Volumes/'));
-      const vol = line ? line.trim().split(/\t/).pop().trim() : null;
+      const line = stdout.split('\n').find((l) => l.includes('/Volumes/'));
+      const vol = line ? line.trim().split(/\s+/).pop() : null;
       if (!vol || !fs.existsSync(vol)) return reject(new Error('找不到 DMG 挂载点'));
       resolve(vol);
     });
@@ -215,94 +199,66 @@ function attachDmg(dmg) {
 
 function detachDmg(vol) {
   return new Promise((resolve) => {
-    try { execFileSync('hdiutil', ['detach', '-force', vol]); } catch (e) {}
-    resolve();
+    execFile('hdiutil', ['detach', '-force', vol], () => resolve());
   });
 }
 
 function copyApp(src, dest) {
   return new Promise((resolve, reject) => {
     fs.rmSync(dest, { recursive: true, force: true });
-    // 用 -X 跳过扩展属性，避免运行中 .app 的 com.apple.provenance 导致 Operation not permitted
-    execFile('cp', ['-RX', src, dest], (err) => (err ? reject(err) : resolve()));
+    execFile('cp', ['-R', src, dest], (err) => (err ? reject(err) : resolve()));
   });
 }
 
-// 用 Node.js 逐文件复制（fallback，避开 cp 复制扩展属性时的权限问题）
-function copyTreeNodeSync(src, dst) {
-  if (!fs.existsSync(dst)) fs.mkdirSync(dst, { recursive: true });
-  for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
-    const s = path.join(src, ent.name);
-    const d = path.join(dst, ent.name);
-    if (ent.isDirectory()) {
-      copyTreeNodeSync(s, d);
-    } else {
-      fs.copyFileSync(s, d);
-    }
-  }
+// 写独立安装脚本，脱离主进程在 app 退出后完成整包替换并重启（v0.7.0 机制）
+function relaunchAndApply(staging) {
+  return new Promise((resolve) => {
+    const target = currentAppPath();
+    const updateRoot = path.dirname(staging);
+    const script = `#!/bin/bash
+sleep 2
+rm -rf "${target}"
+cp -R "${staging}" "${target}"
+xattr -dr com.apple.quarantine "${target}" 2>/dev/null
+rm -rf "${updateRoot}"
+open "${target}"
+`;
+    const sp = path.join(updateDir(), 'apply.sh');
+    fs.mkdirSync(updateDir(), { recursive: true });
+    fs.writeFileSync(sp, script);
+    fs.chmodSync(sp, 0o755);
+    const child = spawn('bash', [sp], { detached: true, stdio: 'ignore' });
+    child.unref();
+    setTimeout(() => { app.quit(); resolve(); }, 400);
+  });
 }
 
-// 把 src 目录内容覆盖到 dst 目录；优先用 cp -RfX（不复制扩展属性），
-// 失败则回退 Node.js 逐文件复制，避免 com.apple.provenance 等导致 Operation not permitted
-function copyIntoSync(src, dst) {
+// ===== 对外 API =====
+async function checkForUpdates() {
+  const cur = getCurrentVersion();
   try {
-    execFileSync('cp', ['-RfX', src + '/.', dst + '/']);
+    const m = await fetchJson(MANIFEST_URL);
+    return {
+      updateAvailable: compareVersions(m.version, cur) > 0,
+      currentVersion: cur,
+      version: m.version || '',
+      notes: m.notes || '',
+      pubDate: m.pubDate || '',
+      dmgUrl: m.dmgUrl || '',
+      sha256: m.sha256 || '',
+      patchUrl: m.patchUrl || '',
+      patchSha256: m.patchSha256 || '',
+      deltaUrl: m.deltaUrl || '',
+      deltaSha256: m.deltaSha256 || '',
+      deltaFromVersion: m.deltaFromVersion || '',
+    };
   } catch (e) {
-    log('cp -RfX 失败，回退 Node.js 复制:', e.message);
-    copyTreeNodeSync(src, dst);
+    return { updateAvailable: false, currentVersion: cur, error: e.message };
   }
 }
 
-// 把 Info.plist 的版本号同步为真实版本（增量更新只覆盖 Resources/app，
-// 否则 Info.plist 会永远停留在打包模板的旧版本号，导致系统「关于」显示错乱）
-function syncInfoPlistVersion(appPath, version) {
-  if (!version) return;
-  const plist = path.join(appPath, 'Contents', 'Info.plist');
-  if (!fs.existsSync(plist)) return;
-  for (const key of ['CFBundleShortVersionString', 'CFBundleVersion']) {
-    try {
-      execFileSync('plutil', ['-replace', key, '-string', version, plist]);
-    } catch (e) { log('syncInfoPlistVersion 失败', key, e.message); }
-  }
-}
-
-// 「退出后替换」机制：macOS 禁止在 app 运行时覆盖其自身 bundle 内的文件
-// （cp/fs 均报 Operation not permitted，且间歇性触发，无法稳定绕过——单文件偶尔可写、
-// 但递归覆盖必败）。因此绝不在 app 退出前覆盖自身文件，而是把待更新文件暂存到 app
-// 外部的 userData/pending-update，写标记后重启；由新进程启动最早期（main.js 顶部、
-// 任何业务模块加载前）执行真正的文件覆盖。这是 electron-updater 等成熟方案的标准做法。
-
-// pending 暂存目录（位于 userData 内，app 运行时可写，且不在 app bundle 内）
-function pendingDir() { return path.join(userData(), 'pending-update'); }
-
-// 安排「退出后替换」：把待覆盖的 app 目录（及可选 Info.plist）暂存到 pending，
-// 写标记，然后重启。真正的文件覆盖由新进程启动早期完成。
-function stageUpdate(stagingAppDir, { infoPlist, deletedFiles = [] } = {}) {
-  const pd = pendingDir();
-  fs.rmSync(pd, { recursive: true, force: true });
-  fs.mkdirSync(pd, { recursive: true });
-  // 复制待覆盖 app 目录到 pending/app（stagingAppDir 内即为 app 根，不含外层目录）
-  copyIntoSync(stagingAppDir, path.join(pd, 'app'));
-  // 完整包路径会附带 Info.plist，一并暂存
-  if (infoPlist && fs.existsSync(infoPlist)) {
-    const cdir = path.join(pd, 'Contents');
-    fs.mkdirSync(cdir, { recursive: true });
-    fs.copyFileSync(infoPlist, path.join(cdir, 'Info.plist'));
-  }
-  fs.writeFileSync(path.join(pd, 'meta.json'), JSON.stringify({
-    from: getCurrentVersion(),
-    deletedFiles,
-    hasInfoPlist: !!(infoPlist && fs.existsSync(infoPlist)),
-  }));
-  // 清理下载缓存（staging/dmg 等）
-  try { fs.rmSync(updateDir(), { recursive: true, force: true }); } catch (e) { /* ignore */ }
-  log('stageUpdate: 已暂存待替换文件，即将重启（退出后由新进程执行覆盖）');
-  app.relaunch();
-  app.exit(0);
-}
-
-// 应用增量包：解压 delta zip → 暂存 → 安排退出后替换（不在运行时覆盖自身文件）
-function applyDeltaAndRelaunch(deltaZipPath) {
+// 增量应用：解压 patch zip 到 staging，写 bash 脚本在退出后覆盖 Resources/app
+function applyDeltaAndRelaunch(deltaZipPath, cb) {
   const stagingDir = path.join(updateDir(), 'staging');
   fs.rmSync(stagingDir, { recursive: true, force: true });
   fs.mkdirSync(stagingDir, { recursive: true });
@@ -321,106 +277,73 @@ function applyDeltaAndRelaunch(deltaZipPath) {
     fs.writeFileSync(dest, e.data);
   }
 
-  const beforeVer = getCurrentVersion();
-  log('applyDelta: 解压完成 | 当前版本', beforeVer, '| 删除列表', deletedFiles);
-  // 暂存并安排退出后替换（关键：不在运行时覆盖自身文件）
-  stageUpdate(stagingDir, { deletedFiles });
+  const target = currentAppPath();
+  const appResDir = path.join(target, 'Contents', 'Resources', 'app');
+  const updateRoot = updateDir();
+  const deleteCmds = deletedFiles.map((f) => `rm -f "${appResDir}/${f}" 2>/dev/null`).join('\n');
+  const script = `#!/bin/bash
+sleep 2
+# 覆盖变更文件
+cp -Rf "${stagingDir}/." "${appResDir}/"
+# 删除已移除文件
+${deleteCmds}
+xattr -dr com.apple.quarantine "${target}" 2>/dev/null
+rm -rf "${updateRoot}"
+open "${target}"
+`;
+  const sp = path.join(updateDir(), 'apply.sh');
+  fs.writeFileSync(sp, script);
+  fs.chmodSync(sp, 0o755);
+  const child = spawn('bash', [sp], { detached: true, stdio: 'ignore' });
+  child.unref();
+  setTimeout(() => { app.quit(); }, 400);
 }
 
-// 完整 DMG 安装：下载 → 挂载 → 拷到 staging → 提取 Resources/app + Info.plist → 安排退出后替换
-function relaunchAndApply(staging) {
-  const beforeVer = getCurrentVersion();
-  log('relaunchAndApply: 准备提取更新文件 | 当前版本', beforeVer);
-  const srcRes = path.join(staging, 'Contents', 'Resources', 'app');
-  const srcPlist = path.join(staging, 'Contents', 'Info.plist');
-  const tmp = path.join(updateDir(), 'full-staging');
-  fs.rmSync(tmp, { recursive: true, force: true });
-  fs.mkdirSync(tmp, { recursive: true });
-  // 只提取纯数据文件（Resources/app）与 Info.plist，避免覆盖正在运行的二进制/Framework
-  if (fs.existsSync(srcRes)) copyIntoSync(srcRes, tmp);
-  let infoPlist = null;
-  if (fs.existsSync(srcPlist)) { infoPlist = path.join(tmp, 'Info.plist'); fs.copyFileSync(srcPlist, infoPlist); }
-  stageUpdate(tmp, { infoPlist });
-}
-
-// ===== 对外 API =====
-async function checkForUpdates() {
-  const cur = getCurrentVersion();
-  try {
-    const m = await fetchJson(MANIFEST_URL);
-    return {
-      updateAvailable: compareVersions(m.version, cur) > 0,
-      currentVersion: cur,
-      version: m.version || '',
-      notes: m.notes || '',
-      pubDate: m.pubDate || '',
-      dmgUrl: m.dmgUrl || '',
-      sha256: m.sha256 || '',
-      deltaUrl: m.deltaUrl || '',
-      deltaSha256: m.deltaSha256 || '',
-      deltaFromVersion: m.deltaFromVersion || '',
-      deltas: Array.isArray(m.deltas) ? m.deltas : [],
-    };
-  } catch (e) {
-    return { updateAvailable: false, currentVersion: cur, error: e.message };
-  }
-}
-
-// cb: { onProgress({percent,written,total,speedBps}), onStage(text), onError(msg) }
-// manifest 可以是字符串（dmgUrl，兼容旧调用）或对象（含 deltaUrl 等字段）
+// cb: { onProgress({percent,written,total,speedBps}), onStage(text) }
+// manifest 可以是字符串（dmgUrl，兼容旧调用）或对象（含 patchUrl/deltaUrl 等字段）
 async function downloadAndInstall(manifest, cb = {}) {
   fs.mkdirSync(updateDir(), { recursive: true });
-
-  // 判断走增量还是完整包
   const cur = getCurrentVersion();
   const info = typeof manifest === 'string' ? { dmgUrl: manifest } : manifest;
 
-  // 构造可用增量包列表：优先 latest.json 的 deltas 数组（多版本），
-  // 兼容旧版单一 deltaUrl/deltaFromVersion 字段
-  const allDeltas = Array.isArray(info.deltas) ? info.deltas.slice() : [];
-  if (info.deltaUrl && info.deltaFromVersion) {
-    allDeltas.push({ from: info.deltaFromVersion, url: info.deltaUrl, sha256: info.deltaSha256 });
-  }
-  // 选一个与当前运行版本精确匹配的增量包（不管当前是第几版，都能用 tiny delta）
-  const chosen = allDeltas.find(
-    (d) => d && d.from && d.url && compareVersions(d.from, cur) === 0
-  );
-
-  if (chosen) {
-    // === 增量更新路径 ===
-    const safeFrom = String(chosen.from).replace(/[^0-9.]/g, '') || 'latest';
-    const deltaPath = path.join(updateDir(), `delta-${safeFrom}.zip`);
+  // 通用增量包（patchUrl）：同一份 zip 适用于任何老版本，
+  // 下载后解压覆盖 Resources/app 即升到最新（发布时即打包完整 app 目录快照）。
+  if (info.patchUrl) {
+    const patchPath = path.join(updateDir(), 'patch.zip');
     if (cb.onStage) cb.onStage('下载增量更新包…');
-    await downloadFile(chosen.url, deltaPath, {
+    await downloadFile(info.patchUrl, patchPath, {
       onProgress: (p) => cb.onProgress && cb.onProgress(p),
       onStage: (s) => cb.onStage && cb.onStage(s),
     });
-    // sha256 校验
-    if (chosen.sha256) {
-      const actual = crypto.createHash('sha256').update(fs.readFileSync(deltaPath)).digest('hex');
-      if (actual.toLowerCase() !== String(chosen.sha256).toLowerCase()) {
+    if (info.patchSha256) {
+      const actual = crypto.createHash('sha256').update(fs.readFileSync(patchPath)).digest('hex');
+      if (actual.toLowerCase() !== String(info.patchSha256).toLowerCase()) {
         const msg = '增量包校验失败（sha256 不匹配），已取消更新';
         if (cb.onError) cb.onError(msg);
         throw new Error(msg);
       }
     }
     if (cb.onStage) cb.onStage('应用增量更新…');
-    try {
-      applyDeltaAndRelaunch(deltaPath); // 成功则内部 app.exit(0)，不会返回
-      return;
-    } catch (e) {
-      // 增量应用失败（如权限/文件占用）→ 不中断，自动回退到完整包
-      log('增量应用失败，回退完整包：', e.message);
-      if (cb.onStage) cb.onStage('增量更新失败，改用完整安装包…');
-    }
+    applyDeltaAndRelaunch(patchPath, cb); // 内部会 app.quit
+    return;
   }
 
-  // === 完整 DMG 更新路径（回退） ===
-  if (!info.dmgUrl) {
-    const msg = '未找到可用的更新包（既无增量也无完整包）';
-    if (cb.onError) cb.onError(msg);
-    throw new Error(msg);
+  // 兼容旧版 manifest 的单一 delta 字段（若有）
+  const canDelta = info.deltaUrl && info.deltaFromVersion &&
+    compareVersions(info.deltaFromVersion, cur) === 0;
+  if (canDelta) {
+    const deltaPath = path.join(updateDir(), 'delta.zip');
+    if (cb.onStage) cb.onStage('下载增量更新包…');
+    await downloadFile(info.deltaUrl, deltaPath, {
+      onProgress: (p) => cb.onProgress && cb.onProgress(p),
+      onStage: (s) => cb.onStage && cb.onStage(s),
+    });
+    if (cb.onStage) cb.onStage('应用增量更新…');
+    applyDeltaAndRelaunch(deltaPath, cb);
+    return;
   }
+
+  // === 完整 DMG 更新路径（任何老版本兜底）===
   const tmpDmg = path.join(updateDir(), 'update.dmg');
   if (cb.onStage) cb.onStage('下载完整安装包…');
   await downloadFile(info.dmgUrl, tmpDmg, {
@@ -435,7 +358,7 @@ async function downloadAndInstall(manifest, cb = {}) {
   await copyApp(srcApp, staging);
   await detachDmg(vol);
   if (cb.onStage) cb.onStage('准备安装…');
-  relaunchAndApply(staging); // 内部会 app.exit(0)
+  await relaunchAndApply(staging); // 内部会 app.quit，不会正常返回
 }
 
 module.exports = { checkForUpdates, downloadAndInstall, REPO, MANIFEST_URL };
