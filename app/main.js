@@ -407,6 +407,57 @@ ipcMain.handle('select-output-dir', async () => {
   return result.canceled ? null : result.filePaths[0];
 });
 
+// ===== 替换规则的导出 / 导入（.xlsx / .csv）=====
+ipcMain.handle('rules-export', async (_e, { rules, format }) => {
+  try {
+    const ext = format === 'csv' ? 'csv' : 'xlsx';
+    const stamp = new Date().toISOString().slice(0, 10);
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: '导出替换规则',
+      defaultPath: path.join(app.getPath('downloads'), `替换规则-${stamp}.${ext}`),
+      filters: ext === 'csv'
+        ? [{ name: 'CSV 文件', extensions: ['csv'] }]
+        : [{ name: 'Excel 工作簿', extensions: ['xlsx'] }],
+    });
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+
+    let target = result.filePath;
+    if (!path.extname(target)) target += '.' + ext;
+
+    const { exportRules } = require('./rules-io');
+    const r = exportRules(rules || [], target);
+    return { ok: true, count: r.count, filePath: target };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+ipcMain.handle('rules-import', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '导入替换规则',
+      properties: ['openFile'],
+      filters: [
+        { name: '规则表格 (Excel / CSV)', extensions: ['xlsx', 'xlsm', 'csv'] },
+        { name: 'Excel 工作簿', extensions: ['xlsx', 'xlsm'] },
+        { name: 'CSV 文件', extensions: ['csv'] },
+      ],
+    });
+    if (result.canceled || !result.filePaths.length) return { ok: false, canceled: true };
+
+    const { importRules } = require('./rules-io');
+    const r = importRules(result.filePaths[0]);
+    return { ok: true, rules: r.rules, skipped: r.skipped, filePath: r.filePath };
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+// 在访达中显示某个文件
+ipcMain.handle('reveal-in-folder', (_e, filePath) => {
+  try { shell.showItemInFolder(filePath); return true; } catch (_) { return false; }
+});
+
 // 批量重命名：对文件名（含扩展名）按规则做字符串替换。saveMode: 'inplace'(原地改名) | 'copy'(复制到 outputDir)
 ipcMain.handle('rename-files', (_e, { files, rules, saveMode, outputDir }) => {
   const results = [];

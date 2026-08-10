@@ -115,6 +115,110 @@ function truncate(s, n) {
   return one.length > n ? one.slice(0, n) + '…' : one;
 }
 
+/* ---------- 规则的导出 / 导入（.xlsx / .csv） ---------- */
+const ruleIoMsgEl = document.getElementById('rule-io-msg');
+const ruleExportWrap = document.getElementById('rule-export-wrap');
+const ruleExportMenu = document.getElementById('rule-export-menu');
+
+let ruleIoMsgTimer = null;
+function showRuleIoMsg(text, kind) {
+  if (!ruleIoMsgEl) return;
+  ruleIoMsgEl.textContent = text;
+  ruleIoMsgEl.className = 'rule-io-msg show ' + (kind === 'err' ? 'err' : 'ok');
+  clearTimeout(ruleIoMsgTimer);
+  ruleIoMsgTimer = setTimeout(() => { ruleIoMsgEl.className = 'rule-io-msg'; }, 8000);
+}
+
+// 规则变动后同步给 AI 助手（保持与 /rules 一致）
+function syncRulesToAgent() {
+  try { window.api.syncRules(state.rules); } catch (_) { /* 忽略 */ }
+}
+
+function closeRuleExportMenu() {
+  if (ruleExportWrap) ruleExportWrap.classList.remove('open');
+}
+
+if (ruleExportWrap) {
+  document.getElementById('btn-rule-export').addEventListener('click', (e) => {
+    e.stopPropagation();
+    ruleExportWrap.classList.toggle('open');
+  });
+  // 点击页面别处 / 按 Esc 收起菜单
+  document.addEventListener('click', closeRuleExportMenu);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeRuleExportMenu(); });
+  ruleExportMenu.addEventListener('click', (e) => e.stopPropagation());
+
+  ruleExportMenu.querySelectorAll('button[data-format]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const format = btn.dataset.format;
+      closeRuleExportMenu();
+      try {
+        const res = await window.api.rulesExport(
+          state.rules.map((r) => ({ name: r.name, find: r.find, replace: r.replace, enabled: r.enabled })),
+          format
+        );
+        if (!res || res.canceled) return;
+        if (!res.ok) { showRuleIoMsg('导出失败：' + (res.error || '未知错误'), 'err'); return; }
+        showRuleIoMsg(
+          res.count
+            ? `已导出 ${res.count} 条规则到 ${res.filePath}`
+            : `当前没有规则，已导出一份空白模板到 ${res.filePath}（填好后可再导入）`,
+          'ok'
+        );
+        try { window.api.revealInFolder(res.filePath); } catch (_) { /* 忽略 */ }
+      } catch (err) {
+        showRuleIoMsg('导出失败：' + (err.message || err), 'err');
+      }
+    });
+  });
+}
+
+const btnRuleImport = document.getElementById('btn-rule-import');
+if (btnRuleImport) {
+  btnRuleImport.addEventListener('click', async () => {
+    try {
+      const res = await window.api.rulesImport();
+      if (!res || res.canceled) return;
+      if (!res.ok) { showRuleIoMsg('导入失败：' + (res.error || '未知错误'), 'err'); return; }
+
+      const incoming = res.rules || [];
+      if (!incoming.length) {
+        showRuleIoMsg('这个文件里没有解析到有效规则（「查找内容」列不能为空）。', 'err');
+        return;
+      }
+
+      // 已有规则时让用户决定：替换还是追加
+      let replaceAll = false;
+      if (state.rules.length) {
+        replaceAll = window.confirm(
+          `表格里读到 ${incoming.length} 条规则，当前已有 ${state.rules.length} 条。\n\n` +
+          '点「确定」＝ 清空现有规则后导入\n' +
+          '点「取消」＝ 保留现有规则，把新规则追加在后面'
+        );
+      }
+      if (replaceAll) state.rules = [];
+
+      incoming.forEach((r) => {
+        state.rules.push({
+          id: ++ruleSeq,
+          name: r.name || `规则 ${state.rules.length + 1}`,
+          find: r.find,
+          replace: r.replace || '',
+          enabled: r.enabled !== false,
+        });
+      });
+
+      renderRules();
+      syncRulesToAgent();
+      const parts = [`已${replaceAll ? '替换' : '追加'}导入 ${incoming.length} 条规则`];
+      if (res.skipped) parts.push(`跳过 ${res.skipped} 行空白/无效数据`);
+      showRuleIoMsg(parts.join('，') + '。', 'ok');
+    } catch (err) {
+      showRuleIoMsg('导入失败：' + (err.message || err), 'err');
+    }
+  });
+}
+
 /* ================= 模块二：文件选择 ================= */
 const sourceInfoEl = document.getElementById('source-info');
 const extListEl = document.getElementById('ext-list');
