@@ -122,6 +122,11 @@
       "from": "0.8.23",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.25/delta-0.8.25-from-0.8.23.zip",
       "sha256": "92aa3af2b72b00e204799beabfb7d1eef418aa8dc8f40930d78c3db64576097e"
+    },
+    {
+      "from": "0.8.24",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.25/delta-0.8.25-from-0.8.24.zip",
+      "sha256": "d46083591fd5461fe98c630d3a6bdae13e34faf995a84529bef97389894cc775"
     }
   ]
 }
