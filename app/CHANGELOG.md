@@ -1,3 +1,6 @@
+## v0.8.30 — 2026-08-11
+- **恢复「代码级」老格式 `.doc`/`.xls` 处理（确定性，不依赖 AI 是否开启）**：v0.8.29 走的是「加技能、让 AI 按指引转格式」方案，结果依赖 AI 是否听懂并执行。本版把双向转换适配层直接做进替换引擎——`office-replace.js` 新增 `replaceInLegacyFile`：遇到 `.doc`/`.xls` 时，LibreOffice 转 OOXML（`.docx`/`.xlsx`）→ `processOfficeFile` 对内部 XML 做规则替换 → 再 LibreOffice 转回原格式，写回合法的老格式文件。三处入口都已打通：**替换框架 UI**（`main.js` 的 `processFile` 新增 `isLegacy` 分支）、**AI 的 `edit_file`**、**AI 的 `batch_replace`**。`grep_files` 仍按 OLE 二进制乱码搜、老格式不进文本搜索集（符合纪律，未动搜索可见性）。已用真实文件 round-trip 验证（`.doc` 张三→李四、`.xls` 测试→生产，转回后文件合法可读）。
+
 ## v0.8.29 — 2026-08-10
 - **「按规则替换文件」新增「技能选择（可选）」**：在替换框架规则下方加了一张可选技能卡，默认选中 **system-data-intelligence**（内置智能体技能）。该技能指引 AI 在替换/修改遇到老版二进制格式 `.doc`/`.xls` 时，先转 OOXML（`.docx`/`.xlsx`）再替换、改完转回，从而不再「像没看到一样」丢失文件。下拉其余可选 office 编写相关内置技能（document-converter、format-convert、polish-document、reformat-document、pdf-to-office）。选中技能仅在开启「AI 助手替换」时生效——执行时把「先加载该技能」写入提示词交给 AI 代理按指引执行；未开启时走原本地引擎，行为不变。
 - 注：放弃此前在替换引擎里直接做 `.doc`/`.xls` 双向转换（LibreOffice 适配层）的代码方案，改为「加技能、让 AI 按技能指引处理」的更轻方案。
