@@ -9,6 +9,7 @@ const https = require('https');
 const http = require('http');
 const { execFile, exec } = require('child_process');
 const { ALL_EXTS, ZIP_BASED_OFFICE } = require('./filetypes');
+const { LEGACY_OFFICE, replaceInLegacyFile } = require('./office-replace');
 
 /* ---------- 图片尺寸解析（纯 JS，无需外部依赖） ---------- */
 function imageDims(buf, ext) {
@@ -614,6 +615,19 @@ const tools = {
     permission: 'ask',
     async run({ path: p, old_string, new_string }, ctx) {
       if (!fs.existsSync(p)) return '错误：文件不存在 ' + p;
+      const ext = getExt(p).toLowerCase().replace(/^\./, '');
+      if (LEGACY_OFFICE.has(ext)) {
+        // .doc/.xls 老格式：走 LibreOffice 双向转换替换（确定性，不依赖 AI 是否开启）
+        if (!old_string) return '错误：old_string 不能为空';
+        let r;
+        try { r = replaceInLegacyFile(p, [{ find: old_string, replace: new_string ?? '' }]); }
+        catch (e) { return '错误：老格式处理失败：' + e.message; }
+        if (!r.content) return '错误：未找到匹配原文，请先 read_file 确认确切内容';
+        const ok = await ctx.confirm({ type: 'edit', title: '修改文件', desc: '修改文件（老格式）：' + p });
+        if (!ok) return '用户取消了该操作';
+        fs.writeFileSync(p, r.content);
+        return `已修改 ${p}`;
+      }
       const content = fs.readFileSync(p, 'utf8');
       const occurrences = content.split(old_string).length - 1;
       if (occurrences === 0) return '错误：未找到匹配原文，请先 read_file 确认确切内容';
@@ -752,6 +766,26 @@ const tools = {
       const results = [];
       let total = 0;
       for (const f of files) {
+        const ext = getExt(f).toLowerCase().replace(/^\./, '');
+        if (LEGACY_OFFICE.has(ext)) {
+          // .doc/.xls 老格式：走 LibreOffice 双向转换替换（确定性）
+          let r;
+          try { r = replaceInLegacyFile(f, rules); }
+          catch (e) { results.push(`老格式处理失败 ${f}：${e.message}`); continue; }
+          if (!r.content) { results.push(`— ${f}：无匹配`); continue; }
+          let target = f;
+          if (output_dir) {
+            const base = base_dir && f.startsWith(base_dir) ? base_dir : path.dirname(f);
+            target = path.join(output_dir, path.relative(base, f));
+          }
+          try {
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.writeFileSync(target, r.content);
+            total += r.count;
+            results.push(`✔ ${target}（老格式）：${r.count} 处`);
+          } catch (e) { results.push(`写入失败 ${f}：${e.message}`); }
+          continue;
+        }
         let content;
         try { content = fs.readFileSync(f, 'utf8'); } catch (e) { results.push(`读取失败 ${f}`); continue; }
         let count = 0, out = content;

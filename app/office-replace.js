@@ -2,6 +2,10 @@
 // 纯 Node 内置 zlib 实现：读 zip → 对 XML 条目做文本替换 → 以 STORE(不压缩) 方式重新打包
 // 说明：zip 容器不要求条目必须压缩，STORE 条目同样合法，Office 可正常打开。
 const zlib = require('zlib');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync } = require('child_process');
 
 const EOCD_SIG = 0x06054b50;
 const CEN_SIG = 0x02014b50;
@@ -159,4 +163,86 @@ function processOfficeFile(fileBuf, rules) {
   return { content: writeZipStore(newEntries), count: total };
 }
 
-module.exports = { processOfficeFile, readZipEntries, writeZipStore };
+/* ===================== 老格式（.doc/.xls）双向转换适配层 ===================== */
+// 老格式是 OLE 二进制复合文档（非 zip、非纯文本），无法直接按文本/XML 替换。
+// 方案：老格式 → LibreOffice 转 OOXML(.docx/.xlsx) → processOfficeFile 内部 XML 替换 → 再 LibreOffice 转回原格式。
+
+const LEGACY_OFFICE = new Set(['doc', 'xls']);
+
+function findSofficePath() {
+  const candidates = [
+    '/Applications/LibreOffice.app/Contents/MacOS/soffice',
+    '/usr/bin/soffice',
+    '/usr/local/bin/soffice',
+    '/opt/homebrew/bin/soffice',
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
+// 用 LibreOffice 把 srcPath 转成 fmt 格式（如 'docx' / 'xlsx'），返回输出文件路径
+function sofficeConvert(soffice, srcPath, fmt, outDir) {
+  const base = path.basename(srcPath, path.extname(srcPath));
+  fs.mkdirSync(outDir, { recursive: true });
+  try {
+    execFileSync(soffice, [
+      '--headless',
+      '--convert-to', fmt,
+      '--outdir', outDir,
+      srcPath,
+    ], {
+      env: { ...process.env, UserInstallation: `file://${os.tmpdir()}/aic-lo-profile` },
+      timeout: 120000,
+    });
+  } catch (e) {
+    throw new Error('LibreOffice 转换失败：' + e.message);
+  }
+  const outPath = path.join(outDir, base + '.' + fmt);
+  if (!fs.existsSync(outPath)) throw new Error('LibreOffice 未生成预期输出：' + outPath);
+  return outPath;
+}
+
+// 老格式 → OOXML
+function convertLegacyToOoxml(srcPath, legacyExt) {
+  const outDir = path.join(os.tmpdir(), 'aic-lo-' + Date.now() + '-' + Math.floor(Math.random() * 1e6));
+  const fmt = legacyExt === 'doc' ? 'docx' : 'xlsx';
+  return sofficeConvert(findSofficePath(), srcPath, fmt, outDir);
+}
+
+// OOXML → 老格式，返回 Buffer（调用方负责清理临时 ooxml 源）
+function convertOoxmlToLegacy(ooxmlPath, legacyExt) {
+  const outDir = path.join(os.tmpdir(), 'aic-lo-back-' + Date.now() + '-' + Math.floor(Math.random() * 1e6));
+  const fmt = legacyExt === 'doc' ? 'doc' : 'xls';
+  const out = sofficeConvert(findSofficePath(), ooxmlPath, fmt, outDir);
+  const buf = fs.readFileSync(out);
+  setTimeout(() => { try { fs.rmSync(outDir, { recursive: true, force: true }); } catch {} }, 8000);
+  return buf;
+}
+
+// 对老格式文件做规则替换，返回 { content: Buffer|null, count }
+function replaceInLegacyFile(filePath, rules) {
+  const ext = path.extname(filePath).toLowerCase().replace(/^\./, '');
+  if (!LEGACY_OFFICE.has(ext)) throw new Error('replaceInLegacyFile 仅支持 .doc/.xls，收到 .' + ext);
+  const soffice = findSofficePath();
+  if (!soffice) throw new Error('未找到 LibreOffice（soffice），无法处理老格式 .' + ext + ' 文件');
+  const ooxml = convertLegacyToOoxml(filePath, ext);
+  let r;
+  try {
+    r = processOfficeFile(fs.readFileSync(ooxml), rules);
+  } finally {
+    try { fs.rmSync(path.dirname(ooxml), { recursive: true, force: true }); } catch {}
+  }
+  if (!r || r.count === 0) return { content: null, count: 0 };
+  const outExt = ext === 'doc' ? 'docx' : 'xlsx';
+  const tmpOoxml = path.join(os.tmpdir(), `aic-lo-out-${Date.now()}-${Math.floor(Math.random() * 1e6)}.${outExt}`);
+  fs.writeFileSync(tmpOoxml, r.content);
+  try {
+    return { content: convertOoxmlToLegacy(tmpOoxml, ext), count: r.count };
+  } finally {
+    try { fs.rmSync(tmpOoxml, { force: true }); } catch {}
+  }
+}
+
+module.exports = { processOfficeFile, readZipEntries, writeZipStore, LEGACY_OFFICE, replaceInLegacyFile };

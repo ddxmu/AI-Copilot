@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const { execFile } = require('child_process');
 const { ALL_EXTS, PLAIN_TEXT_SAFE, ZIP_BASED_OFFICE } = require('./filetypes');
-const { processOfficeFile, readZipEntries } = require('./office-replace');
+const { processOfficeFile, readZipEntries, LEGACY_OFFICE, replaceInLegacyFile } = require('./office-replace');
 const { BUILTIN_SKILLS, RECOMMENDED_SKILLS, parseSkillMd } = require('./agent');
 const updater = require('./updater');
 const https = require('https');
@@ -154,6 +154,7 @@ function replaceInText(content, rules) {
 function processFile(filePath, rules, saveMode = 'overwrite', opts = {}) {
   const ext = getExt(filePath);
   const isOffice = ZIP_BASED_OFFICE.has(ext);
+  const isLegacy = LEGACY_OFFICE.has(ext);
 
   let newContent, count;
   if (isOffice) {
@@ -164,6 +165,17 @@ function processFile(filePath, rules, saveMode = 'overwrite', opts = {}) {
     let r;
     try { r = processOfficeFile(buf, rules); }
     catch (e) { return { status: 'error', replacements: 0, message: 'Office 解析失败：' + e.message }; }
+    if (r.count === 0) return { status: 'nochange', replacements: 0, message: '无匹配内容' };
+    newContent = r.content;
+    count = r.count;
+  } else if (isLegacy) {
+    // .doc/.xls 老格式：LibreOffice 转 OOXML → 内部替换 → 转回原格式
+    let buf;
+    try { buf = fs.readFileSync(filePath); }
+    catch (e) { return { status: 'error', replacements: 0, message: '读取失败' }; }
+    let r;
+    try { r = replaceInLegacyFile(filePath, rules); }
+    catch (e) { return { status: 'error', replacements: 0, message: '老格式处理失败：' + e.message }; }
     if (r.count === 0) return { status: 'nochange', replacements: 0, message: '无匹配内容' };
     newContent = r.content;
     count = r.count;
