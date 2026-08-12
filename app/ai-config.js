@@ -9,7 +9,7 @@ function configPath() {
   return path.join(app.getPath('userData'), 'ai-config.json');
 }
 
-const DEFAULT_STATE = { profiles: [], activeId: null, webAccess: false, mcpServers: [] };
+const DEFAULT_STATE = { profiles: [], activeId: null, webAccess: false, memoryEnabled: true, mcpServers: [] };
 
 function loadState() {
   try {
@@ -19,6 +19,7 @@ function loadState() {
       profiles: Array.isArray(data.profiles) ? data.profiles : [],
       activeId: data.activeId ?? null,
       webAccess: data.webAccess ?? false,
+      memoryEnabled: data.memoryEnabled ?? true,
       mcpServers: Array.isArray(data.mcpServers) ? data.mcpServers : [],
     };
   } catch (e) {
@@ -82,6 +83,17 @@ function setWebAccess(enabled) {
 
 function getWebAccess() {
   return loadState().webAccess ?? false;
+}
+
+function setMemoryEnabled(enabled) {
+  const state = loadState();
+  state.memoryEnabled = !!enabled;
+  saveState(state);
+  return state.memoryEnabled;
+}
+
+function getMemoryEnabled() {
+  return loadState().memoryEnabled ?? true;
 }
 
 /* ---------------- MCP 服务器配置 ---------------- */
@@ -283,6 +295,8 @@ module.exports = {
   getActiveProfile,
   setWebAccess,
   getWebAccess,
+  setMemoryEnabled,
+  getMemoryEnabled,
   getMcpServers,
   upsertMcpServer,
   deleteMcpServer,

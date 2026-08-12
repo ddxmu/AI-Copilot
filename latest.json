@@ -1,16 +1,16 @@
 {
-  "version": "0.9.3",
-  "notes": "修复 + 按钮选文件后聊天框不显示附件：主进程 pick-attachments 处理器误调不存在的 mimeFor()（正确定义为 mimeForExt()），每个文件处理中途抛错被静默吞掉、返回空数组。本版改为 mimeForExt()，+ 选任意文件/文件夹后立即在输入框上方显示附件条（缩略图/图标+文件名+大小+可移除）。拖拽、粘贴通路不受影响。",
-  "pubDate": "2026-08-12T10:25:47+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.3/AI.Copilot-0.9.3-arm64.dmg",
-  "sha256": "b5167e4f79b79e74b7a2e02eee56e910c100017d7cb8ad28fd0995b4585124bf",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.3/AI.Copilot-0.9.3.zip",
-  "patchSha256": "bd7d88acfcc8d80636a1afd5a0c5f5296af7c7ab9a2ef716d0df35d8fe0dd17b",
+  "version": "0.9.4",
+  "notes": "新增「生成对话记忆」（WorkBuddy 式长期记忆库）：AI 设置中新增开关（默认开启），开启后每次 AI 助手完成回复会自动提炼对话中的偏好/习惯/项目约定等事实，存入本机；后续对话系统提示词会注入这些记忆。支持在设置页查看和删除单条记忆。",
+  "pubDate": "2026-08-12T10:48:16+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.4/AI.Copilot-0.9.4-arm64.dmg",
+  "sha256": "18798c6508fc19d16c542ee3ea81a6973bd678905792d84948caab9a93a1c942",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.4/AI.Copilot-0.9.4.zip",
+  "patchSha256": "9e09a359c2f3f6482a111be479975315eeb546dfd90558e992c97d5110f767fd",
   "deltas": [
     {
-      "from": "0.9.2",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.3/AI.Copilot-0.9.3.zip",
-      "sha256": "bd7d88acfcc8d80636a1afd5a0c5f5296af7c7ab9a2ef716d0df35d8fe0dd17b"
+      "from": "0.9.3",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.4/AI.Copilot-0.9.4.zip",
+      "sha256": "9e09a359c2f3f6482a111be479975315eeb546dfd90558e992c97d5110f767fd"
     }
   ]
 }

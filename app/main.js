@@ -7,10 +7,12 @@ const { ALL_EXTS, PLAIN_TEXT_SAFE, ZIP_BASED_OFFICE } = require('./filetypes');
 const { processOfficeFile, readZipEntries, LEGACY_OFFICE, replaceInLegacyFile } = require('./office-replace');
 const { BUILTIN_SKILLS, RECOMMENDED_SKILLS, parseSkillMd } = require('./agent');
 const updater = require('./updater');
+const memory = require('./memory');
 const https = require('https');
 const pdfwm = require('./pdf-watermark');
 
 let mainWindow = null;
+let currentChatId = null; // 当前激活的对话 ID（用于对话级记忆）
 
 // 应用改名（AI文件自动替换 → AI Copilot）后，userData 目录随之改变。
 // 启动时做一次迁移：新目录无配置而旧目录有，则把旧配置复制过来，避免丢失已保存的模型/Key。
@@ -1656,12 +1658,15 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
     if (Array.isArray(attachments) && attachments.length) {
       resolvedAttachments = await Promise.all(attachments.map((a) => readAttachmentForAi(a)));
     }
+    const activeChatId = currentChatId || null;
     const result = await agent.runAgent(profile, history, text, {
       skillsDir: SKILLS_DIR,
       attachments: resolvedAttachments,
       webAccess: aiConfig.getWebAccess(),
       mcpEnabled: mcpEnabledMode,
       mcpServer: mcpSelectedServer,
+      chatId: activeChatId,
+      memoryEnabled: aiConfig.getMemoryEnabled(),
       onText: (t) => wc.send('ai-chat-text', t),
       onToolStart: (d) => wc.send('ai-chat-tool-start', d),
       onToolEnd: (d) => wc.send('ai-chat-tool-end', d),
@@ -1772,8 +1777,25 @@ ipcMain.handle('chat-load', () => {
 
 ipcMain.handle('chat-save', (_e, { chats, activeId }) => {
   try {
+    currentChatId = activeId || null;
     fs.mkdirSync(path.dirname(chatHistoryPath()), { recursive: true });
     fs.writeFileSync(chatHistoryPath(), JSON.stringify({ chats, activeId }, null, 2), 'utf8');
     return { ok: true };
   } catch (e) { return { ok: false, error: e.message }; }
 });
+
+/* ---------------- 长期记忆库 ---------------- */
+ipcMain.handle('memory-get', (_e, { scope, chatId }) => {
+  try { return memory.loadMemory(scope, chatId); }
+  catch (e) { return []; }
+});
+ipcMain.handle('memory-set', (_e, { scope, chatId, entries }) => {
+  try { memory.saveMemory(scope, chatId, entries); return { ok: true }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('memory-delete', (_e, { scope, chatId, id }) => {
+  try { memory.deleteMemoryEntry(scope, chatId, id); return { ok: true }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('memory-enabled-get', () => aiConfig.getMemoryEnabled());
+ipcMain.handle('memory-enabled-set', (_e, enabled) => aiConfig.setMemoryEnabled(enabled));

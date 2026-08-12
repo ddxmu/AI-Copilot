@@ -10,6 +10,7 @@ const http = require('http');
 const { execFile, exec } = require('child_process');
 const { ALL_EXTS, ZIP_BASED_OFFICE } = require('./filetypes');
 const { LEGACY_OFFICE, replaceInLegacyFile } = require('./office-replace');
+const memory = require('./memory');
 
 /* ---------- 图片尺寸解析（纯 JS，无需外部依赖） ---------- */
 function imageDims(buf, ext) {
@@ -1479,7 +1480,7 @@ async function callApi(profile, apiType, system, messages, toolList) {
 
 /* ================= 系统提示词 ================= */
 
-function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null) {
+function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatId = null) {
   const home = os.homedir();
   const skillList = Object.entries(SKILLS).map(([k, v]) => `- ${k}：${v.description}`).join('\n');
   // 推荐技能：尚未安装的列出来，提示模型可按需安装
@@ -1518,6 +1519,12 @@ function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null) {
       }
     } catch (e) { /* ignore */ }
   }
+  // 长期记忆注入：用户级 + 当前对话级
+  const userMem = memory.formatMemory('user', null, 30);
+  const chatMem = chatId ? memory.formatMemory('chat', chatId, 15) : '';
+  const memorySection = userMem || chatMem
+    ? `\n\n## 长期记忆（来自历史对话的总结）\n以下信息是从你与 AI 的历史对话中自动提炼的，回答时请参考，但不必复述给正在看的用户。\n${userMem ? userMem + '\n' : ''}${chatMem ? chatMem + '\n' : ''}`
+    : '';
   return `你是「AI Copilot」应用内嵌的智能体，运行在本机（macOS）。你可以自主查找、读取、修改、创建本机文件，帮助用户：替换内容、编写文件、修改文件、完善文件、排版文件。
 
 ## 环境
@@ -1547,7 +1554,30 @@ function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null) {
 - 一次性回复中最多 40 轮工具调用（系统限制），如超出请用普通文本回复用户当前进度，让用户说"继续"再续做。
 
 ## 技能包
-${skillList}${recommendedSection}${mcpSection}`;
+${skillList}${recommendedSection}${mcpSection}${memorySection}`;
+}
+
+async function extractMemoryFacts(profile, apiType, messages) {
+  if (!Array.isArray(messages) || messages.length < 3) return;
+  // 取最近 12 条（足够提炼，又不浪费 token）
+  const recent = messages.slice(-12).map((m) => {
+    const c = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+    return `[${m.role}] ${String(c).slice(0, 1500)}`;
+  }).join('\n\n');
+  const prompt = `请从以下最近对话中提炼关于用户的长期事实、偏好、习惯、项目约定或关键决策。\n输出严格 JSON，不要任何解释：\n{"facts":[{"category":"preference|habit|project|convention|decision|error|other","content":"简洁的一句话事实","confidence":0.0-1.0}]}\n\n对话记录：\n${recent}`;
+  try {
+    const r = await callApi(profile, apiType, '你是对话记忆提炼助手。只输出 JSON。', [{ role: 'user', content: prompt }], []);
+    const text = (r.text || '').trim();
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return;
+    const data = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(data.facts) || !data.facts.length) return;
+    const existing = memory.loadMemory('user');
+    const merged = memory.mergeMemory(existing, data.facts);
+    memory.saveMemory('user', null, merged);
+  } catch (e) {
+    // 记忆提炼失败不应影响主流程
+  }
 }
 
 function buildSubagentPrompt(type) {
@@ -1644,7 +1674,7 @@ function sanitizeMessages(messages, apiType) {
 /* ================= Agent Loop（核心，主对话与子代理共用） ================= */
 // opts: { system, allowedTools, maxTurns, isSubagent }
 async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
-  const system = opts.system || buildSystemPrompt(ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer);
+  const system = opts.system || buildSystemPrompt(ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer, ctx.chatId);
   const maxTurns = opts.maxTurns || MAX_TURNS;
   const toolList = buildToolList(opts.allowedTools, opts.isSubagent, ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer);
 
@@ -1781,6 +1811,8 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
     mcpServer: callbacks.mcpServer || null,    // 用户单选的服务器名（null=未指定）
     skillsDir: callbacks.skillsDir || null,
     attachments: callbacks.attachments || [],  // 本轮拖入对话框的附件（图片 base64 / 文档文本）
+    chatId: callbacks.chatId || null,          // 当前对话 ID（用于对话级记忆）
+    memoryEnabled: callbacks.memoryEnabled === true, // 是否自动生成对话记忆
     onInstallSkill: callbacks.onInstallSkill || null,
     setTodos: (todos) => { ctx.todos = todos; callbacks.onTodo && callbacks.onTodo(todos); },
     emit: (event, data) => {
@@ -1800,6 +1832,10 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
 
   try {
     const result = await runAgentLoop(profile, apiType, userText, ctx, {});
+    // 后台异步提炼长期记忆，不阻塞回复
+    if (ctx.memoryEnabled && Array.isArray(result.messages)) {
+      extractMemoryFacts(profile, apiType, result.messages).catch(() => {});
+    }
     return { ok: true, usage: result.usage, rules: ctx.rules, todos: ctx.todos, messages: result.messages, hitMaxTurns: result.hitMaxTurns };
   } catch (err) {
     return { ok: false, error: err.message };

@@ -46,6 +46,11 @@ contextBridge.exposeInMainWorld('api', {
   aiSetActive: (id, model) => ipcRenderer.invoke('ai-set-active', { id, model }),
   aiGetWebAccess: () => ipcRenderer.invoke('ai-get-web-access'),
   aiSetWebAccess: (enabled) => ipcRenderer.invoke('ai-set-web-access', enabled),
+  aiGetMemoryEnabled: () => ipcRenderer.invoke('memory-enabled-get'),
+  aiSetMemoryEnabled: (enabled) => ipcRenderer.invoke('memory-enabled-set', enabled),
+  memoryGet: (scope, chatId) => ipcRenderer.invoke('memory-get', { scope, chatId }),
+  memorySet: (scope, chatId, entries) => ipcRenderer.invoke('memory-set', { scope, chatId, entries }),
+  memoryDelete: (scope, chatId, id) => ipcRenderer.invoke('memory-delete', { scope, chatId, id }),
   aiFetchModels: (profile) => ipcRenderer.invoke('ai-fetch-models', profile),
   aiTestConnection: (profile) => ipcRenderer.invoke('ai-test-connection', profile),
   // MCP 服务器

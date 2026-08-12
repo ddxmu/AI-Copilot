@@ -773,7 +773,62 @@ async function initAiSettings() {
       if (webBadge) webBadge.classList.toggle('hidden', !webToggle.checked);
     });
   }
+  initMemorySettings();
   initMcpSettings();
+}
+
+/* ================= 长期记忆设置 ================= */
+function initMemorySettings() {
+  const toggle = document.getElementById('memory-toggle');
+  const btn = document.getElementById('btn-view-memory');
+  const modal = document.getElementById('memory-modal');
+  const close = document.getElementById('btn-memory-close');
+  const list = document.getElementById('memory-list');
+  if (!toggle) return;
+
+  window.api.aiGetMemoryEnabled().then((enabled) => { toggle.checked = !!enabled; });
+  toggle.addEventListener('change', async () => {
+    await window.api.aiSetMemoryEnabled(toggle.checked);
+  });
+
+  if (btn && modal && list) {
+    btn.addEventListener('click', async () => {
+      modal.classList.remove('hidden');
+      await renderMemoryList();
+    });
+  }
+  if (close && modal) {
+    close.addEventListener('click', () => modal.classList.add('hidden'));
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+  }
+
+  async function renderMemoryList() {
+    const entries = await window.api.memoryGet('user');
+    if (!entries || !entries.length) {
+      list.innerHTML = '<div class="empty">暂无自动提炼的记忆</div>';
+      return;
+    }
+    list.innerHTML = '';
+    entries.forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'memory-item';
+      const meta = [];
+      if (item.category) meta.push(item.category);
+      if (item.updatedAt) meta.push(new Date(item.updatedAt).toLocaleString());
+      row.innerHTML = `
+        <div class="memory-text">
+          <div>${escapeHtml(item.content)}</div>
+          <div class="memory-meta">${escapeHtml(meta.join(' · '))}</div>
+        </div>
+        <button class="memory-del">删除</button>
+      `;
+      row.querySelector('.memory-del').addEventListener('click', async () => {
+        await window.api.memoryDelete('user', null, item.id);
+        await renderMemoryList();
+      });
+      list.appendChild(row);
+    });
+  }
 }
 
 /* ================= MCP 服务器配置 ================= */
