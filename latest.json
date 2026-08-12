@@ -1,16 +1,16 @@
 {
-  "version": "0.9.2",
-  "notes": "修复拖拽/粘贴文件后聊天框不显示附件、AI 收不到文件的问题：打包的 Electron 43 已移除 File.path，拖拽（composer drop）与 Finder 复制粘贴（chatInput paste）拿到的 f.path 为空，被 addAttachment 静默丢弃，导致「选了但没显示」。本版改用官方替代 API webUtils.getPathForFile（经 preload 暴露），拖拽/粘贴均取真实路径，附件 chip（缩略图/图标+文件名+大小+移除按钮）正常显示，可单独发送也可加文字一起发；同时重排粘贴处理器，避免截图与 Finder 文件重复添加。AI 侧消费链路（图片多模态 / 文档注入正文）保持不变。",
-  "pubDate": "2026-08-12T10:17:18+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.2/AI.Copilot-0.9.2-arm64.dmg",
-  "sha256": "c5b9f0452dae9b017f9946ca15536afe892fb4d4eaa2c8b3870e8ae4997f6120",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.2/AI.Copilot-0.9.2.zip",
-  "patchSha256": "6882816b2b273176ca48b5e0b98b1aef82489a50c63ffee06562061c83596934",
+  "version": "0.9.3",
+  "notes": "修复 + 按钮选文件后聊天框不显示附件：主进程 pick-attachments 处理器误调不存在的 mimeFor()（正确定义为 mimeForExt()），每个文件处理中途抛错被静默吞掉、返回空数组。本版改为 mimeForExt()，+ 选任意文件/文件夹后立即在输入框上方显示附件条（缩略图/图标+文件名+大小+可移除）。拖拽、粘贴通路不受影响。",
+  "pubDate": "2026-08-12T10:25:47+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.3/AI.Copilot-0.9.3-arm64.dmg",
+  "sha256": "b5167e4f79b79e74b7a2e02eee56e910c100017d7cb8ad28fd0995b4585124bf",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.3/AI.Copilot-0.9.3.zip",
+  "patchSha256": "bd7d88acfcc8d80636a1afd5a0c5f5296af7c7ab9a2ef716d0df35d8fe0dd17b",
   "deltas": [
     {
-      "from": "0.9.1",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.2/AI.Copilot-0.9.2.zip",
-      "sha256": "6882816b2b273176ca48b5e0b98b1aef82489a50c63ffee06562061c83596934"
+      "from": "0.9.2",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.3/AI.Copilot-0.9.3.zip",
+      "sha256": "bd7d88acfcc8d80636a1afd5a0c5f5296af7c7ab9a2ef716d0df35d8fe0dd17b"
     }
   ]
 }

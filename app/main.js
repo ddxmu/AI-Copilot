@@ -362,9 +362,9 @@ ipcMain.handle('pick-attachments', async () => {
       const ext = fileExtOf(fp);
       let dataUrl = null;
       if (IMAGE_EXTS.has(ext)) {
-        try { dataUrl = 'data:' + mimeFor(ext) + ';base64,' + fs.readFileSync(fp).toString('base64'); } catch {}
+        try { dataUrl = 'data:' + mimeForExt(ext) + ';base64,' + fs.readFileSync(fp).toString('base64'); } catch {}
       }
-      out.push({ path: fp, name, size: st.size, dataUrl, mime: mimeFor(ext) });
+      out.push({ path: fp, name, size: st.size, dataUrl, mime: mimeForExt(ext) });
     } catch {}
   };
   for (const p of result.filePaths) {
