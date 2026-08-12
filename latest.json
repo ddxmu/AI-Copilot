@@ -1,16 +1,1 @@
-{
-  "version": "0.8.30",
-  "notes": "- **恢复「代码级」老格式 `.doc`/`.xls` 处理（确定性，不依赖 AI 是否开启）**：v0.8.29 走的是「加技能、让 AI 按指引转格式」方案，结果依赖 AI 是否听懂并执行。本版把双向转换适配层直接做进替换引擎——`office-replace.js` 新增 `replaceInLegacyFile`：遇到 `.doc`/`.xls` 时，LibreOffice 转 OOXML（`.docx`/`.xlsx`）→ `processOfficeFile` 对内部 XML 做规则替换 → 再 LibreOffice 转回原格式，写回合法的老格式文件。三处入口都已打通：**替换框架 UI**（`main.js` 的 `processFile` 新增 `isLegacy` 分支）、**AI 的 `edit_file`**、**AI 的 `batch_replace`**。`grep_files` 仍按 OLE 二进制乱码搜、老格式不进文本搜索集（符合纪律，未动搜索可见性）。已用真实文件 round-trip 验证（`.doc` 张三→李四、`.xls` 测试→生产，转回后文件合法可读）。",
-  "pubDate": "2026-08-11T09:40:45+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.30/AI.Copilot-0.8.30-arm64.dmg",
-  "sha256": "ef6ebe725999af5b63ad5c607c35a6779c35521964aa83f43f4011ba7c6cc0b3",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.30/AI.Copilot-0.8.30.zip",
-  "patchSha256": "a4a262dc3301119447c252354b23b199dab18b2c6af473443534a88c40f7103e",
-  "deltas": [
-    {
-      "from": "0.8.29",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.30/AI.Copilot-0.8.30.zip",
-      "sha256": "a4a262dc3301119447c252354b23b199dab18b2c6af473443534a88c40f7103e"
-    }
-  ]
-}
+{"version": "0.8.31", "notes": "AI 助手对话框支持「拖拽文件发送」：把图片/文档（docx、xlsx、pptx、pdf、txt/md/代码等）直接拖到输入框，松手后显示附件预览（图片缩略图/文件图标+名称+大小，可单独移除），点发送即随消息发给 AI。图片以多模态直接给模型看；文档（docx/xlsx/pptx/odt）用内置 zip 解析抽取正文、PDF 借 LibreOffice 转 txt 后读取，全文作为对话内容注入，AI 立即看到文档内容。", "pubDate": "2026-08-12T08:02:34+08:00", "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.31/AI.Copilot-0.8.31-arm64.dmg", "sha256": "e01736dece3568e783614e3b0bb7b4c743d546cba34bb37559f66c129f638fae", "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.31/AI.Copilot-0.8.31.zip", "patchSha256": "21aec9ddf1f5550248e55b90b2b02ab6c87d6c7ec73c31b66f7ca05b5f8b4180", "deltas": [{"from": "0.8.30", "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.31/AI.Copilot-0.8.31.zip", "sha256": "21aec9ddf1f5550248e55b90b2b02ab6c87d6c7ec73c31b66f7ca05b5f8b4180"}]}
