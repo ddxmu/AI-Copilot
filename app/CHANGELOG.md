@@ -1,3 +1,10 @@
+## v0.8.31 — 2026-08-11
+- **AI 助手对话框支持「拖拽文件发送」**：把图片 / 文档（docx、xlsx、pptx、pdf、txt/md/代码等）直接拖到输入框，松手后会在输入框上方显示附件预览（图片缩略图 / 文件图标 + 名称 + 大小，可单独移除），点发送即随消息一起发给 AI。
+  - **图片**：以多模态图片直接发送给模型（复用既有 vision 通路，OpenAI 走 `image_url`、Anthropic 走 `image` base64），AI 可直接「看」图。
+  - **文档（按用户拍板「直接注入文本内容」）**：发送前主进程提取正文——纯文本类直接读；docx/xlsx/pptx/odt 用内置 zip 解析（复用 `office-replace.js` 的 `readZipEntries`）抽取 XML 文本；PDF 借助 LibreOffice 转 txt 后读取。提取到的全文作为对话内容注入，AI 立即能看到文档内容。
+  - **历史持久化**：本轮附件的 user 消息会被清洗为「文本 + 附件元信息」再落盘，避免把大体积 base64 写进本地聊天记录；重新打开对话时仍会显示文件卡片。
+  - 拖拽仅监听 composer 区域，纯文本拖拽（如选中文字）不受影响；无附件且输入框为空时不发送。
+
 ## v0.8.30 — 2026-08-11
 - **恢复「代码级」老格式 `.doc`/`.xls` 处理（确定性，不依赖 AI 是否开启）**：v0.8.29 走的是「加技能、让 AI 按指引转格式」方案，结果依赖 AI 是否听懂并执行。本版把双向转换适配层直接做进替换引擎——`office-replace.js` 新增 `replaceInLegacyFile`：遇到 `.doc`/`.xls` 时，LibreOffice 转 OOXML（`.docx`/`.xlsx`）→ `processOfficeFile` 对内部 XML 做规则替换 → 再 LibreOffice 转回原格式，写回合法的老格式文件。三处入口都已打通：**替换框架 UI**（`main.js` 的 `processFile` 新增 `isLegacy` 分支）、**AI 的 `edit_file`**、**AI 的 `batch_replace`**。`grep_files` 仍按 OLE 二进制乱码搜、老格式不进文本搜索集（符合纪律，未动搜索可见性）。已用真实文件 round-trip 验证（`.doc` 张三→李四、`.xls` 测试→生产，转回后文件合法可读）。
 
