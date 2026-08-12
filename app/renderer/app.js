@@ -2526,7 +2526,11 @@ chatInput.addEventListener('keydown', (e) => {
     composer.classList.remove('drag-over');
     const files = e.dataTransfer && e.dataTransfer.files;
     if (files && files.length) {
-      for (const f of files) addAttachment({ path: f.path, name: f.name, type: f.type, size: f.size, file: f });
+      for (const f of files) {
+        // Electron 32+ 移除了 File.path，优先用 webUtils.getPathForFile 取真实路径
+        const p = (window.api.getPathForFile ? window.api.getPathForFile(f) : '') || f.path || '';
+        if (p) addAttachment({ path: p, name: f.name, type: f.type, size: f.size, file: f });
+      }
     }
   });
 })();
@@ -2547,21 +2551,22 @@ if (chatInput) {
     const cd = e.clipboardData;
     if (!cd) return;
     let handled = false;
-    // 1) 剪贴板直接复制的图片（截图等）
-    if (cd.items && cd.items.length) {
+    // 1) 从 Finder 复制的文件：有真实磁盘路径，优先直接作为附件
+    //    （Electron 32+ 移除了 File.path，须用 webUtils.getPathForFile 取路径）
+    if (cd.files && cd.files.length) {
+      for (const f of cd.files) {
+        const p = (window.api.getPathForFile ? window.api.getPathForFile(f) : '') || (f && f.path) || '';
+        if (p) { addAttachment({ path: p, name: f.name, type: f.type, size: f.size, file: f }); handled = true; }
+      }
+    }
+    // 2) 剪贴板直接复制的图片（截图等，无真实路径）：落临时文件后作为附件
+    if (!handled && cd.items && cd.items.length) {
       for (const it of cd.items) {
         if (it.kind === 'file' && it.type && it.type.startsWith('image/')) {
           const blob = it.getAsFile();
           if (blob) { await addPastedImage(blob); handled = true; }
         }
       }
-    }
-    // 2) 从 Finder 复制的文件（文件路径）
-    if (cd.files && cd.files.length) {
-      for (const f of cd.files) {
-        if (f && f.path) addAttachment({ path: f.path, name: f.name, type: f.type, size: f.size, file: f });
-      }
-      handled = true;
     }
     // 处理了图片/文件则阻止默认，避免把 [object File] 粘进文本框
     if (handled) e.preventDefault();

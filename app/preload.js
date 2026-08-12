@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   getSupportedExts: () => ipcRenderer.invoke('get-supported-exts'),
@@ -61,6 +61,8 @@ contextBridge.exposeInMainWorld('api', {
   pickAttachments: () => ipcRenderer.invoke('pick-attachments'),
   // 剪贴板粘贴图片落临时文件，返回路径
   saveTempFile: (base64, ext) => ipcRenderer.invoke('save-temp-file', { base64, ext }),
+  // 拖拽 / 粘贴得到的 File 对象取真实磁盘路径（Electron 32+ 移除了 File.path，须用 webUtils）
+  getPathForFile: (file) => { try { return webUtils.getPathForFile(file) || ''; } catch (e) { return ''; } },
   aiConfirmReply: (ok, remember) => ipcRenderer.invoke('ai-chat-confirm-reply', ok, remember),
   setPermissionMode: (mode) => ipcRenderer.invoke('set-permission-mode', mode),
   setMcpEnabled: (enabled) => ipcRenderer.invoke('set-mcp-enabled', enabled),
