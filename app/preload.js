@@ -56,7 +56,11 @@ contextBridge.exposeInMainWorld('api', {
   mcpTest: (server) => ipcRenderer.invoke('mcp-test', server),
   onMcpStatusChanged: (cb) => ipcRenderer.on('mcp-status-changed', (_e, s) => cb(s)),
   // AI 助手（智能体对话）
-  aiChat: (history, text) => ipcRenderer.invoke('ai-chat', { history, text }),
+  aiChat: (history, text, attachments) => ipcRenderer.invoke('ai-chat', { history, text, attachments }),
+  // 聊天框「＋」选文件 / 文件夹发给 AI
+  pickAttachments: () => ipcRenderer.invoke('pick-attachments'),
+  // 剪贴板粘贴图片落临时文件，返回路径
+  saveTempFile: (base64, ext) => ipcRenderer.invoke('save-temp-file', { base64, ext }),
   aiConfirmReply: (ok, remember) => ipcRenderer.invoke('ai-chat-confirm-reply', ok, remember),
   setPermissionMode: (mode) => ipcRenderer.invoke('set-permission-mode', mode),
   setMcpEnabled: (enabled) => ipcRenderer.invoke('set-mcp-enabled', enabled),

@@ -1544,6 +1544,10 @@ const chatHistory = [];   // 发给模型的简版历史 [{role, content}]
 let sessionUsage = { input: 0, output: 0 };
 let currentAssistantBubble = null;
 let sending = false;
+// 待发送附件（拖入对话框、尚未发送的文件）
+let pendingAttachments = [];
+let attachmentSeq = 0;
+let dragDepth = 0;
 
 /* ==================== AI 助手对话历史管理 ==================== */
 let chatList = [];          // 所有对话 [{id,title,messages,createdAt,updatedAt,archived}]
@@ -1657,7 +1661,7 @@ function renderHistoryMessage(m) {
     // user 消息可能是数组（包含图片），只取文本部分展示
     const text = typeof m.content === 'string' ? m.content
       : (Array.isArray(m.content) ? m.content.filter((b) => b && b.type === 'text').map((b) => b.text).join('\n') : '');
-    addBubble('user', text || '（图片）');
+    addUserMessage(text || '（图片）', m.attachments || null);
   } else if (m.role === 'assistant') {
     const text = typeof m.content === 'string' ? m.content
       : (Array.isArray(m.content) ? m.content.filter((b) => b && b.type === 'text').map((b) => b.text).join('\n') : '');
@@ -1824,15 +1828,6 @@ function autoGrow() {
   chatInput.style.height = h > 0 ? Math.min(h, 160) + 'px' : '';
 }
 chatInput.addEventListener('input', autoGrow);
-
-// 引用对话文件（＋）
-btnAttach.addEventListener('click', async () => {
-  const files = await window.api.selectFiles();
-  if (!files.length) return;
-  for (const f of files) if (!state.rawFiles.includes(f)) state.rawFiles.push(f);
-  await refilter();
-  addBubble('assistant', `已引用 ${files.length} 个文件，可直接让我对其操作（替换 / 排版 / 打开等）。`);
-});
 
 // 语音输入（Web Speech API）
 let recognizer = null, recognizing = false;
@@ -2236,23 +2231,176 @@ function ensureActiveChat() {
   renderChatList();
 }
 
+/* ================= 对话框附件（拖拽文件发送） ================= */
+const IMG_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'heic', 'ico'];
+function attachmentKindFromName(name) {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  return IMG_EXTS.includes(ext) ? 'image' : 'file';
+}
+function formatSize(n) {
+  if (!n) return '';
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+// 把附件视图（缩略图 / 文件图标 + 名称）追加到容器
+function appendAttachmentViews(container, attachments, showThumb) {
+  if (!attachments || !attachments.length) return;
+  const list = document.createElement('div');
+  list.className = 'att-list';
+  for (const a of attachments) {
+    const chip = document.createElement('div');
+    chip.className = 'att-chip' + (a.kind === 'image' ? ' att-img' : '');
+    if (a.kind === 'image' && showThumb && a.dataUrl) {
+      const img = document.createElement('img');
+      img.className = 'att-thumb'; img.src = a.dataUrl; chip.appendChild(img);
+    } else {
+      const ic = document.createElement('div');
+      ic.className = 'att-fileicon'; ic.textContent = '📄'; chip.appendChild(ic);
+    }
+    const meta = document.createElement('div');
+    meta.className = 'att-meta';
+    const nm = document.createElement('div');
+    nm.className = 'att-name'; nm.textContent = a.name || ''; nm.title = a.name || '';
+    meta.appendChild(nm);
+    chip.appendChild(meta);
+    list.appendChild(chip);
+  }
+  container.appendChild(list);
+}
+
+// 渲染用户消息气泡（含附件预览）
+function addUserMessage(text, attachments) {
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-msg user';
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble';
+  if (text) bubble.textContent = text;
+  wrap.appendChild(bubble);
+  if (attachments && attachments.length) appendAttachmentViews(wrap, attachments, true);
+  chatMessagesEl.appendChild(wrap);
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  return bubble;
+}
+
+// 把附件加入待发送列表。meta 形式：
+//   · 拖入的 File 对象：{ path, name, type, size, file }（file 用于本地读缩略图）
+//   · 文件框 / 粘贴图片：{ path, name, size, type/mime, dataUrl? }
+function addAttachment(meta) {
+  if (!meta || !meta.path) return;
+  const name = meta.name || meta.path.split('/').pop();
+  const kind = attachmentKindFromName(name);
+  const item = {
+    id: ++attachmentSeq,
+    name,
+    path: meta.path,
+    kind,
+    mime: meta.type || meta.mime || '',
+    size: meta.size || 0,
+    dataUrl: meta.dataUrl || null,
+  };
+  // 拖入的 File 对象：用 FileReader 读本地缩略图用于预览
+  if (kind === 'image' && !item.dataUrl && meta.file) {
+    const reader = new FileReader();
+    reader.onload = () => { item.dataUrl = reader.result; renderAttachmentPreview(); };
+    reader.readAsDataURL(meta.file);
+  }
+  pendingAttachments.push(item);
+  renderAttachmentPreview();
+}
+
+// 剪贴板粘贴的图片：先落临时文件（主进程读取用），再用 dataUrl 做预览
+async function addPastedImage(blob) {
+  try {
+    const ext = (blob.type.split('/')[1] || 'png').replace('+xml', '').replace('jpeg', 'jpg');
+    const dataUrl = await new Promise((res) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.readAsDataURL(blob);
+    });
+    const base64 = String(dataUrl).split(',')[1] || '';
+    const p = await window.api.saveTempFile(base64, ext);
+    if (p) addAttachment({ path: p, name: `粘贴图片.${ext}`, type: blob.type, size: blob.size, dataUrl });
+  } catch (e) { console.error('addPastedImage failed', e); }
+}
+
+function removeAttachment(id) {
+  pendingAttachments = pendingAttachments.filter((a) => a.id !== id);
+  renderAttachmentPreview();
+}
+
+function renderAttachmentPreview() {
+  const box = document.getElementById('attachment-preview');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!pendingAttachments.length) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  for (const a of pendingAttachments) {
+    const chip = document.createElement('div');
+    chip.className = 'att-chip' + (a.kind === 'image' ? ' att-img' : '');
+    if (a.kind === 'image' && a.dataUrl) {
+      const img = document.createElement('img');
+      img.className = 'att-thumb'; img.src = a.dataUrl; chip.appendChild(img);
+    } else {
+      const ic = document.createElement('div');
+      ic.className = 'att-fileicon'; ic.textContent = '📄'; chip.appendChild(ic);
+    }
+    const meta = document.createElement('div');
+    meta.className = 'att-meta';
+    const nm = document.createElement('div');
+    nm.className = 'att-name'; nm.textContent = a.name; nm.title = a.name;
+    const sz = document.createElement('div');
+    sz.className = 'att-size'; sz.textContent = formatSize(a.size);
+    meta.append(nm, sz);
+    const rm = document.createElement('button');
+    rm.className = 'att-remove'; rm.type = 'button'; rm.textContent = '×'; rm.title = '移除附件';
+    rm.addEventListener('click', () => removeAttachment(a.id));
+    chip.append(meta, rm);
+    box.appendChild(chip);
+  }
+}
+
+// 清洗历史：把含附件的 user content 数组压缩为「文本 + 附件元信息」，避免 base64 体积进入持久化历史
+function sanitizeHistoryForAttachments(messages, currentMeta) {
+  if (!Array.isArray(messages)) return messages;
+  let lastIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user' && Array.isArray(messages[i].content)) { lastIdx = i; break; }
+  }
+  return messages.map((m, i) => {
+    if (m.role === 'user' && Array.isArray(m.content)) {
+      let text = '';
+      for (const b of m.content) if (b && b.type === 'text') text += (text ? '\n' : '') + b.text;
+      const out = { role: 'user', content: text || '（图片）' };
+      if (i === lastIdx && currentMeta && currentMeta.length) out.attachments = currentMeta;
+      return out;
+    }
+    return m;
+  });
+}
+
 async function sendChat() {
   const text = chatInput.value.trim();
-  if (!text || sending) return;
+  // 允许「仅有附件、无文字」发送；文字和附件都没有则忽略
+  if ((!text && pendingAttachments.length === 0) || sending) return;
+  const attachmentsMeta = pendingAttachments.map((a) => ({ name: a.name, path: a.path, kind: a.kind, mime: a.mime, size: a.size }));
   chatInput.value = '';
   autoGrow();
 
-  // 斜杠命令本地处理
+  // 斜杠命令本地处理（不附带附件）
   if (text.startsWith('/')) {
+    pendingAttachments = [];
+    renderAttachmentPreview();
     handleSlashCommand(text);
     return;
   }
 
   ensureActiveChat();
   setSending(true);
-  addBubble('user', text);
+  addUserMessage(text, pendingAttachments);
   // 存完整消息（含 tool_calls/tool）以便下次续接；初版是简版文本
-  chatHistory.push({ role: 'user', content: text });
+  chatHistory.push({ role: 'user', content: text, attachments: attachmentsMeta });
   currentAssistantBubble = null;
   chatStatusEl.textContent = '智能体工作中…';
 
@@ -2266,8 +2414,8 @@ async function sendChat() {
     }
   }
 
-  // 传完整历史（含 tool_calls/tool）；agent loop 会正确清洗
-  const r = await window.api.aiChat(chatHistory.slice(0, -1), augmentedText);
+  // 传完整历史（含 tool_calls/tool）；agent loop 会正确清洗；本轮附件随附发送
+  const r = await window.api.aiChat(chatHistory.slice(0, -1), augmentedText, attachmentsMeta);
 
   chatStatusEl.textContent = '';
   if (!r.ok) {
@@ -2284,8 +2432,10 @@ async function sendChat() {
         break;
       }
     }
+    // 把本轮含附件的 user 消息压缩为「文本 + 附件元信息」，避免 base64 进入持久化历史
+    const cleaned = sanitizeHistoryForAttachments(finalMessages, attachmentsMeta);
     chatHistory.length = 0;
-    finalMessages.forEach((m) => chatHistory.push(m));
+    cleaned.forEach((m) => chatHistory.push(m));
   } else {
     // 兜底：旧逻辑
     const assistantTexts = [...chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble')];
@@ -2299,6 +2449,8 @@ async function sendChat() {
     chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
   }
   currentAssistantBubble = null;
+  pendingAttachments = [];
+  renderAttachmentPreview();
   setSending(false);
   removeEmptyAssistantBubbles();
   persistCurrentChat();
@@ -2349,6 +2501,72 @@ chatInput.addEventListener('keydown', (e) => {
     sendChat();
   }
 });
+
+// 对话框拖拽文件：拖到 composer 区域即加入待发送附件
+(function setupComposerDrop() {
+  const composer = document.querySelector('.composer');
+  if (!composer) return;
+  composer.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragDepth++;
+    composer.classList.add('drag-over');
+  });
+  composer.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  });
+  composer.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) composer.classList.remove('drag-over');
+  });
+  composer.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    composer.classList.remove('drag-over');
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) {
+      for (const f of files) addAttachment({ path: f.path, name: f.name, type: f.type, size: f.size, file: f });
+    }
+  });
+})();
+
+/* ================= 「＋」按钮：系统文件框选任意文件 / 文件夹 ================= */
+if (btnAttach) {
+  btnAttach.addEventListener('click', async () => {
+    try {
+      const files = await window.api.pickAttachments();
+      if (Array.isArray(files)) for (const f of files) addAttachment(f);
+    } catch (e) { console.error('pickAttachments failed', e); }
+  });
+}
+
+/* ================= 剪贴板粘贴：图片直接落附件，文件亦可 ================= */
+if (chatInput) {
+  chatInput.addEventListener('paste', async (e) => {
+    const cd = e.clipboardData;
+    if (!cd) return;
+    let handled = false;
+    // 1) 剪贴板直接复制的图片（截图等）
+    if (cd.items && cd.items.length) {
+      for (const it of cd.items) {
+        if (it.kind === 'file' && it.type && it.type.startsWith('image/')) {
+          const blob = it.getAsFile();
+          if (blob) { await addPastedImage(blob); handled = true; }
+        }
+      }
+    }
+    // 2) 从 Finder 复制的文件（文件路径）
+    if (cd.files && cd.files.length) {
+      for (const f of cd.files) {
+        if (f && f.path) addAttachment({ path: f.path, name: f.name, type: f.type, size: f.size, file: f });
+      }
+      handled = true;
+    }
+    // 处理了图片/文件则阻止默认，避免把 [object File] 粘进文本框
+    if (handled) e.preventDefault();
+  });
+}
 
 /* ================= 文件自动化 ================= */
 const auto = {

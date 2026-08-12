@@ -343,6 +343,65 @@ ipcMain.handle('scan-folder', (_e, { folderPath, exts }) => {
   return scanDir(folderPath, allowed);
 });
 
+// ============ 聊天框「＋」选文件发给 AI（任意文件 / 文件夹）============
+// 复用附件读取的 IMAGE_EXTS / fileExtOf / mimeFor（见下方 readAttachmentForAi 段）
+// 选中后返回附件清单（图片带 dataUrl 缩略图），渲染端直接加入待发送列表
+ipcMain.handle('pick-attachments', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '选择要发给 AI 的文件（可多选 / 选文件夹）',
+    properties: ['openFile', 'multiSelections', 'openDirectory'],
+  });
+  if (result.canceled || !result.filePaths.length) return [];
+  const MAX_FILES = 200;
+  const out = [];
+  const pushFile = (fp) => {
+    try {
+      const st = fs.statSync(fp);
+      if (!st.isFile()) return;
+      const name = path.basename(fp);
+      const ext = fileExtOf(fp);
+      let dataUrl = null;
+      if (IMAGE_EXTS.has(ext)) {
+        try { dataUrl = 'data:' + mimeFor(ext) + ';base64,' + fs.readFileSync(fp).toString('base64'); } catch {}
+      }
+      out.push({ path: fp, name, size: st.size, dataUrl, mime: mimeFor(ext) });
+    } catch {}
+  };
+  for (const p of result.filePaths) {
+    let st;
+    try { st = fs.statSync(p); } catch { continue; }
+    if (st.isDirectory()) {
+      // 递归收集文件夹内文件（限数量，避免一次塞太多）
+      const queue = [p];
+      while (queue.length && out.length < MAX_FILES) {
+        const dir = queue.shift();
+        let entries;
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+        for (const en of entries) {
+          const fp = path.join(dir, en.name);
+          if (en.isDirectory()) queue.push(fp);
+          else if (en.isFile() && out.length < MAX_FILES) pushFile(fp);
+        }
+      }
+    } else if (st.isFile()) {
+      pushFile(p);
+    }
+  }
+  return out;
+});
+
+// 把剪贴板粘贴的图片保存到临时目录，返回可读取的路径（供主进程 readAttachmentForAi 读）
+ipcMain.handle('save-temp-file', async (_e, { base64, ext }) => {
+  try {
+    const dir = path.join(app.getPath('userData'), 'clipboard-tmp');
+    fs.mkdirSync(dir, { recursive: true });
+    const name = `clip-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext || 'png'}`;
+    const fp = path.join(dir, name);
+    fs.writeFileSync(fp, Buffer.from(String(base64 || ''), 'base64'));
+    return fp;
+  } catch (e) { return null; }
+});
+
 // 过滤已有文件列表（手动选文件后按类型勾选过滤）
 ipcMain.handle('filter-files', (_e, { files, exts }) => {
   if (!Array.isArray(exts) || exts.length === 0) return files;
@@ -1489,14 +1548,117 @@ const agent = require('./agent');
 let sharedRules = [];
 ipcMain.on('sync-rules', (_e, rules) => { sharedRules = rules; });
 
-ipcMain.handle('ai-chat', async (event, { history, text }) => {
+/* ============ 附件读取（拖入对话框的文件，发送前解析为可给模型看的内容） ============ */
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'heic', 'ico']);
+const PLAIN_TEXT_EXTS = new Set(['txt', 'md', 'markdown', 'json', 'xml', 'html', 'htm', 'css', 'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'go', 'rs', 'rb', 'php', 'swift', 'kt', 'sql', 'sh', 'bat', 'ini', 'conf', 'cfg', 'yaml', 'yml', 'toml', 'log', 'tex', 'vue', 'csv', 'rtf']);
+
+function fileExtOf(p) { return (path.extname(p || '') || '').toLowerCase().replace(/^\./, ''); }
+function mimeForExt(ext) {
+  const map = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml', heic: 'image/heic', ico: 'image/x-icon' };
+  return map[ext] || 'application/octet-stream';
+}
+
+// 把 Office/ODF 的内部 XML 粗略转成纯文本（保留段落/换行）
+function xmlToText(xml) {
+  return xml
+    .replace(/<\/(w:p|text:p|a:p|p)>/g, '\n')
+    .replace(/<(w:br|text:line-break|br)\b[^>]*\/?>/g, '\n')
+    .replace(/<\/(tr|table:table-row)>/g, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+    .replace(/&nbsp;/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// 从 zip 类文档（docx/xlsx/pptx/odt/...）中提取文本
+function extractFromZip(buf, nameFilter) {
+  try {
+    const entries = readZipEntries(buf);
+    const wanted = entries.filter((e) => nameFilter(e.name));
+    if (!wanted.length) return '';
+    return wanted.map((e) => xmlToText(e.data.toString('utf8'))).join('\n\n').slice(0, 60000);
+  } catch (e) { return ''; }
+}
+
+// PDF → 文本（借助 LibreOffice，转 txt 后读取）
+async function pdfToText(srcPath) {
+  if (!pdfEngines.sofficePath) return null;
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aipdf-'));
+  const profile = path.join(os.tmpdir(), `lo-${process.pid}-${Date.now()}`);
+  try {
+    await execFileP(pdfEngines.sofficePath, [
+      '--headless', '--norestore', '--nolockcheck', '--nofirststartwizard',
+      '-env:UserInstallation=file://' + profile,
+      '--convert-to', 'txt:Text', '--outdir', outDir, srcPath,
+    ], { timeout: 120000 });
+    const files = fs.readdirSync(outDir).filter((f) => f.endsWith('.txt'));
+    if (!files.length) return null;
+    return fs.readFileSync(path.join(outDir, files[0]), 'utf8').slice(0, 80000);
+  } catch (e) { return null; }
+  finally { setTimeout(() => { try { fs.rmSync(outDir, { recursive: true, force: true }); } catch {} }, 8000); }
+}
+
+// 把单个拖入文件解析为模型可见内容：图片→base64，文档→提取文本
+async function readAttachmentForAi(item) {
+  const p = item && item.path;
+  const name = (item && item.name) || (p ? path.basename(p) : '');
+  if (!p || !fs.existsSync(p)) return { kind: 'other', name, error: '文件不存在' };
+  const ext = fileExtOf(p);
+  try {
+    if (IMAGE_EXTS.has(ext)) {
+      const buf = fs.readFileSync(p);
+      return { kind: 'image', name, mime: mimeForExt(ext), base64: buf.toString('base64'), size: buf.length };
+    }
+    if (PLAIN_TEXT_EXTS.has(ext)) {
+      return { kind: 'doc', name, text: fs.readFileSync(p, 'utf8').slice(0, 80000) };
+    }
+    if (['docx', 'docm', 'dotx', 'dotm'].includes(ext)) {
+      const txt = extractFromZip(fs.readFileSync(p), (n) => n === 'word/document.xml');
+      return { kind: 'doc', name, text: txt || '（无法从文档提取文本）' };
+    }
+    if (['xlsx', 'xlsm', 'xlsb', 'xltx', 'xltm'].includes(ext)) {
+      const txt = extractFromZip(fs.readFileSync(p), (n) => n === 'xl/sharedStrings.xml' || /^xl\/worksheets\/sheet\d+\.xml$/.test(n));
+      return { kind: 'doc', name, text: txt || '（无法从表格提取文本）' };
+    }
+    if (['pptx', 'pptm', 'ppsx', 'ppsm', 'potx', 'potm'].includes(ext)) {
+      const txt = extractFromZip(fs.readFileSync(p), (n) => /^ppt\/slides\/slide\d+\.xml$/.test(n));
+      return { kind: 'doc', name, text: txt || '（无法从演示文稿提取文本）' };
+    }
+    if (['odt', 'ods', 'odp'].includes(ext)) {
+      const txt = extractFromZip(fs.readFileSync(p), (n) => n === 'content.xml');
+      return { kind: 'doc', name, text: txt || '（无法从文档提取文本）' };
+    }
+    if (ext === 'pdf') {
+      const txt = await pdfToText(p);
+      return { kind: 'doc', name, text: txt || '（无法从 PDF 提取文本，可能已加密或 LibreOffice 未安装）' };
+    }
+    // 其它格式（含旧版 .doc/.xls/.ppt 二进制）：尽力按文本读，二进制则放弃
+    let raw = '';
+    try { raw = fs.readFileSync(p, 'utf8'); } catch { raw = ''; }
+    if (raw && raw.slice(0, 200).includes('\u0000')) raw = '';
+    return raw ? { kind: 'doc', name, text: raw.slice(0, 80000) } : { kind: 'other', name, error: '暂不支持该格式内联读取' };
+  } catch (e) {
+    return { kind: 'other', name, error: e.message };
+  }
+}
+
+ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
   const profile = aiConfig.getActiveProfile();
   if (!profile) return { ok: false, error: '请先在「AI 设置」中添加并启用一个 AI 配置' };
   if (!profile.model) return { ok: false, error: '当前 AI 配置未选择模型，请到「AI 设置」拉取并选择模型' };
   const wc = event.sender;
   try {
+    let resolvedAttachments = [];
+    if (Array.isArray(attachments) && attachments.length) {
+      resolvedAttachments = await Promise.all(attachments.map((a) => readAttachmentForAi(a)));
+    }
     const result = await agent.runAgent(profile, history, text, {
       skillsDir: SKILLS_DIR,
+      attachments: resolvedAttachments,
       webAccess: aiConfig.getWebAccess(),
       mcpEnabled: mcpEnabledMode,
       mcpServer: mcpSelectedServer,

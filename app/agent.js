@@ -1656,7 +1656,28 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
     if (m.tool_call_id) out.tool_call_id = m.tool_call_id;
     return out;
   }) : [];
-  messages.push({ role: 'user', content: userText });
+  // 本轮用户消息：若带附件则构建多模态 content 数组（图片→image，文档→文本块），否则纯文本
+  const atts = ctx.attachments || [];
+  let userContent;
+  if (atts.length) {
+    userContent = [{ type: 'text', text: userText || '（请查看附件）' }];
+    for (const a of atts) {
+      if (a.kind === 'image') {
+        if (apiType === 'anthropic') {
+          userContent.push({ type: 'image', source: { type: 'base64', media_type: a.mime || 'image/png', data: a.base64 } });
+        } else {
+          userContent.push({ type: 'image_url', image_url: { url: `data:${a.mime || 'image/png'};base64,${a.base64}` } });
+        }
+      } else if (a.kind === 'doc' && a.text) {
+        userContent.push({ type: 'text', text: `【附件「${a.name || '文档'}」内容】\n${a.text}` });
+      } else if (a.error) {
+        userContent.push({ type: 'text', text: `【附件「${a.name || '文件'}」无法读取：${a.error}】` });
+      }
+    }
+  } else {
+    userContent = userText;
+  }
+  messages.push({ role: 'user', content: userContent });
 
   let totalUsage = { input: 0, output: 0 };
   let finalText = '';
@@ -1759,6 +1780,7 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
     mcpEnabled: callbacks.mcpEnabled === true, // 默认关闭；用户在聊天栏开启后传 true
     mcpServer: callbacks.mcpServer || null,    // 用户单选的服务器名（null=未指定）
     skillsDir: callbacks.skillsDir || null,
+    attachments: callbacks.attachments || [],  // 本轮拖入对话框的附件（图片 base64 / 文档文本）
     onInstallSkill: callbacks.onInstallSkill || null,
     setTodos: (todos) => { ctx.todos = todos; callbacks.onTodo && callbacks.onTodo(todos); },
     emit: (event, data) => {

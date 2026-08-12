@@ -1,16 +1,16 @@
 {
-  "version": "0.8.30",
-  "notes": "- **恢复「代码级」老格式 `.doc`/`.xls` 处理（确定性，不依赖 AI 是否开启）**：v0.8.29 走的是「加技能、让 AI 按指引转格式」方案，结果依赖 AI 是否听懂并执行。本版把双向转换适配层直接做进替换引擎——`office-replace.js` 新增 `replaceInLegacyFile`：遇到 `.doc`/`.xls` 时，LibreOffice 转 OOXML（`.docx`/`.xlsx`）→ `processOfficeFile` 对内部 XML 做规则替换 → 再 LibreOffice 转回原格式，写回合法的老格式文件。三处入口都已打通：**替换框架 UI**（`main.js` 的 `processFile` 新增 `isLegacy` 分支）、**AI 的 `edit_file`**、**AI 的 `batch_replace`**。`grep_files` 仍按 OLE 二进制乱码搜、老格式不进文本搜索集（符合纪律，未动搜索可见性）。已用真实文件 round-trip 验证（`.doc` 张三→李四、`.xls` 测试→生产，转回后文件合法可读）。",
-  "pubDate": "2026-08-11T09:40:45+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.30/AI.Copilot-0.8.30-arm64.dmg",
-  "sha256": "ef6ebe725999af5b63ad5c607c35a6779c35521964aa83f43f4011ba7c6cc0b3",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.30/AI.Copilot-0.8.30.zip",
-  "patchSha256": "a4a262dc3301119447c252354b23b199dab18b2c6af473443534a88c40f7103e",
+  "version": "0.9.1",
+  "notes": "修复 ＋ 按钮「点一下弹两次 / 实际没把文件加成附件」：v0.9.0 里 btn-attach 被注册了两个 click 监听器（旧的 selectFiles 引用对话文件框架 + 新的 pickAttachments 聊天附件框架），两者同触发导致行为冲突、文件框弹两次且不进附件列表，表现为粘贴/拖拽/＋ 选文件「不能实现」。本版删除旧的 selectFiles 监听器，只保留 pickAttachments 一个，＋ 现在干净地打开系统文件框并把选中的文件/文件夹加入待发送附件，与拖拽、粘贴图片两条通路一致。拖拽（composer drop）、粘贴（chatInput paste，含剪贴板图片与 Finder 复制路径）、IPC 桥接（pick-attachments / save-temp-file）均保持原状未动。",
+  "pubDate": "2026-08-12T08:46:21+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.1/AI.Copilot-0.9.1-arm64.dmg",
+  "sha256": "28c208c83a45e5576f9d7c9d1db5368d398f5ff90b12b1bbee259a117946bf05",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.1/AI.Copilot-0.9.1.zip",
+  "patchSha256": "2cf36e9aeaf230fadc2cadffa16013afa5d65c9356f44dcf1d497f209a0e45ca",
   "deltas": [
     {
-      "from": "0.8.29",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.8.30/AI.Copilot-0.8.30.zip",
-      "sha256": "a4a262dc3301119447c252354b23b199dab18b2c6af473443534a88c40f7103e"
+      "from": "0.9.0",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.1/AI.Copilot-0.9.1.zip",
+      "sha256": "2cf36e9aeaf230fadc2cadffa16013afa5d65c9356f44dcf1d497f209a0e45ca"
     }
   ]
 }

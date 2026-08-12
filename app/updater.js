@@ -294,6 +294,7 @@ function applyDeltaAndRelaunch(deltaZipPath, cb) {
       continue;
     }
     if (e.name === '__delta_info.json') continue;
+    if (e.name.endsWith('/')) continue; // 跳过目录条目（如 renderer/），否则 fs.writeFileSync 会向目录路径 open 报 ENOENT
     const dest = path.join(stagingDir, e.name);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.writeFileSync(dest, e.data);
