@@ -1658,7 +1658,7 @@ function persistCurrentChat() {
   const chat = chatList.find((c) => c.id === activeChatId);
   if (!chat) return;
   chat.messages = chatHistory.slice();
-  chat.title = genChatTitle(chat.messages);
+  if (!chat.customTitle) chat.title = genChatTitle(chat.messages);
   chat.updatedAt = Date.now();
   renderChatList();
 }
@@ -1672,6 +1672,7 @@ function createNewChat() {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     archived: false,
+    customTitle: false,
   };
   chatList.unshift(chat);
   activeChatId = chat.id;
@@ -1806,6 +1807,7 @@ function showChatMenu(chat, anchorEl) {
     const newName = prompt('输入新名称：', chat.title || '新对话');
     if (newName && newName.trim()) {
       chat.title = newName.trim();
+      chat.customTitle = true;
       renderChatList();
       saveChats();
     }
@@ -2280,6 +2282,7 @@ function ensureActiveChat() {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     archived: false,
+    customTitle: false,
   };
   chatList.unshift(chat);
   activeChatId = chat.id;
