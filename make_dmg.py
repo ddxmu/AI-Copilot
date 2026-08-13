@@ -34,6 +34,29 @@ detach_all()
 for p in (TMP_DMG, OUT):
     if os.path.exists(p): os.remove(p)
 
+# 0.5 重新 ad-hoc 签名 app（rsync 后签名会失效，失效+quarantine 会被判「已损坏」）。
+#     正确顺序：先签所有 framework（--deep 签内部二进制）→ 签 helper apps → 签主 app。
+#     这样 spctl 评估为「rejected」（=无法验证开发者，用户右键→打开或系统设置→仍要打开），
+#     而非「sealed resource missing/invalid」（=已损坏，无法打开）。无 Developer ID 证书下
+#     最接近 WorkBuddy（正式签名）的安装体验。
+print("重新 ad-hoc 签名 app ...")
+_fw_dir = os.path.join(APP, "Contents", "Frameworks")
+if os.path.isdir(_fw_dir):
+    for _name in sorted(os.listdir(_fw_dir)):
+        _p = os.path.join(_fw_dir, _name)
+        if _name.endswith(".framework"):
+            subprocess.run(["codesign", "--force", "--deep", "--sign", "-", _p], capture_output=True)
+        elif _name.endswith(".app"):
+            subprocess.run(["codesign", "--force", "--sign", "-", _p], capture_output=True)
+subprocess.run(["codesign", "--force", "--sign", "-", APP], capture_output=True)
+# 用 spctl 判定：rejected 可接受（=无法验证开发者，可右键打开）；
+# sealed resource missing / invalid 不可接受（=已损坏）
+_ar = subprocess.run(["spctl", "-a", "-t", "exec", APP], capture_output=True, text=True)
+_assess = (_ar.stdout + _ar.stderr).lower()
+if "sealed resource" in _assess or "invalid" in _assess or "damaged" in _assess:
+    print("签名校验失败（仍判已损坏）："); print(_ar.stdout); print(_ar.stderr); sys.exit(1)
+print("app 签名完成（spctl:", (_ar.stdout + _ar.stderr).strip().splitlines()[-1] if (_ar.stdout + _ar.stderr).strip() else "ok", ")")
+
 # 1. 计算 app 大小，建足够大的可写 dmg
 size_mb = int(run(["du", "-sm", APP]).stdout.split()[0]) + 60
 print(f"app 大小 ~{size_mb-60}MB, dmg 分配 {size_mb}MB")
@@ -51,49 +74,6 @@ try:
     shutil.copy(os.path.join(ASSETS, "使用说明.html"), os.path.join(MOUNT, "使用说明.html"))
     os.symlink("/Applications", os.path.join(MOUNT, "Applications"))
 
-    # 3.5 安装引导脚本：未签名 app 别人下载后会提示「已损坏」，
-    #     双击此 .command 会弹原生安全确认（打开/取消），确认后自动拷到应用程序、去隔离、启动。
-    #     .command 是脚本不会被判「已损坏」，首次右键→打开即可执行。
-    install_cmd = '''#!/bin/bash
-# AI Copilot 首次安装引导（独立开发者作品，未经 Apple 公证）
-APP_NAME="AI Copilot"
-HERE="$(cd "$(dirname "$0")" && pwd)"
-SRC_APP="$HERE/$APP_NAME.app"
-
-ANSWER=$(osascript -e 'display dialog "即将把 AI Copilot 安装到「应用程序」文件夹并打开。\\n\\n该应用为独立开发者作品、未经 Apple 公证，本脚本会自动解除隔离属性后启动。是否继续？" buttons {"取消","打开"} default button "打开" with title "AI Copilot 安装"' 2>/dev/null)
-if [ $? -ne 0 ] || [[ "$ANSWER" != *打开* ]]; then
-  echo "已取消。"
-  exit 0
-fi
-
-if [ ! -d "$SRC_APP" ]; then
-  osascript -e "display notification \\"未找到 $APP_NAME.app，请确认本脚本与 app 在同一目录（DMG 根目录）。\\" with title \\"安装失败\\""
-  exit 1
-fi
-
-if [ -w "/Applications" ]; then
-  DEST_DIR="/Applications"
-else
-  DEST_DIR="$HOME/Applications"
-  mkdir -p "$DEST_DIR"
-fi
-DEST="$DEST_DIR/$APP_NAME.app"
-
-echo "正在安装到 $DEST ..."
-rm -rf "$DEST"
-cp -R "$SRC_APP" "$DEST"
-xattr -dr com.apple.quarantine "$DEST" 2>/dev/null
-xattr -dr com.apple.quarantine "$DEST_DIR" 2>/dev/null
-
-echo "正在启动 $APP_NAME ..."
-open "$DEST"
-'''
-    cmd_path = os.path.join(MOUNT, "双击安装.command")
-    with open(cmd_path, "w", encoding="utf-8") as f:
-        f.write(install_cmd)
-    os.chmod(cmd_path, 0o755)
-    print("双击安装.command 已写入")
-
     # 4. 背景图 + 卷标图标
     os.makedirs(os.path.join(MOUNT, ".background"), exist_ok=True)
     shutil.copy(os.path.join(ASSETS, "background.png"), os.path.join(MOUNT, ".background", "background.png"))
@@ -110,5 +90,7 @@ finally:
 # 6. 转 UDZO 压缩只读
 run(["hdiutil", "convert", TMP_DMG, "-format", "UDZO", "-imagekey", "zlib-level=9", "-o", OUT])
 os.remove(TMP_DMG)
+# 7. 给 DMG 本身 ad-hoc 签名（进一步降低被 Gatekeeper 判「已损坏」的概率）
+run(["codesign", "--force", "--sign", "-", OUT])
 print("完成:", OUT)
 print("大小: %.1f MB" % (os.path.getsize(OUT) / 1024 / 1024))

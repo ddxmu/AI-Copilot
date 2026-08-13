@@ -1,16 +1,16 @@
 {
-  "version": "0.9.5",
-  "notes": "新增 DMG「双击安装.command」引导：解决把安装包发给别人后对方提示「已损坏，无法打开」的问题。对方双击 DMG 里的「双击安装.command」，弹安全确认（打开/取消），点「打开」后自动拷到应用程序、解除隔离属性并启动。.command 是脚本不会被判「已损坏」，首次若提示无法验证，右键→打开即可。",
-  "pubDate": "2026-08-13T11:50:18+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.5/AI.Copilot-0.9.5-arm64.dmg",
-  "sha256": "1c3d974b3556fc7b95892056f413f798377c443d5897911a714e344683f5d223",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.5/AI.Copilot-0.9.5.zip",
-  "patchSha256": "971b24eb1d0c08542f0fd69cef4be4fafd7c55130b27d35b365aec2a50b0065d",
+  "version": "0.9.6",
+  "notes": "删除「双击安装.command」引导，改用 ad-hoc 签名方式（更接近 WorkBuddy 原生安装体验）。根因：app 的 ad-hoc 签名在 rsync 后失效，失效+quarantine 会被判「已损坏」。现在 make_dmg.py 每次打包前按正确顺序重新 ad-hoc 签名（framework --deep → helpers → 主 app）+ 签 DMG，签名后别人下载打开只会提示「无法验证开发者」（不再「已损坏」），用户右键→打开或系统设置→隐私与安全性点「仍要打开」即可。安装回到标准方式：打开 DMG → 拖到应用程序 → 首次打开确认。",
+  "pubDate": "2026-08-13T12:04:12+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.6/AI.Copilot-0.9.6-arm64.dmg",
+  "sha256": "9519b6432da2b9b2ec506f9b0dc4ff075f1b0c496a5090059ae777f6040a5fcc",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.6/AI.Copilot-0.9.6.zip",
+  "patchSha256": "bdc723234932b158540b88713e83fe0ecfd7a32d935180ef11e2e742f0c02cf5",
   "deltas": [
     {
-      "from": "0.9.4",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.5/AI.Copilot-0.9.5.zip",
-      "sha256": "971b24eb1d0c08542f0fd69cef4be4fafd7c55130b27d35b365aec2a50b0065d"
+      "from": "0.9.5",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.6/AI.Copilot-0.9.6.zip",
+      "sha256": "bdc723234932b158540b88713e83fe0ecfd7a32d935180ef11e2e742f0c02cf5"
     }
   ]
 }
