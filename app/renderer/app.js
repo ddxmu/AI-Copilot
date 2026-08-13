@@ -2707,8 +2707,7 @@ async function populateReplaceSkill() {
     o.textContent = s.name + (s.source === 'installed' ? '（已安装）' : '（内置）');
     sel.appendChild(o);
   }
-  const hasDefault = [...sel.options].some((o) => o.value === REPLACE_SKILL_DEFAULT);
-  if (hasDefault) sel.value = REPLACE_SKILL_DEFAULT;
+  // 默认保持第一项「（不指定技能，按默认流程）」（2026-08-13 用户指定）
 }
 function getReplaceSkillName() {
   const sel = document.getElementById('replace-skill');
