@@ -51,6 +51,49 @@ try:
     shutil.copy(os.path.join(ASSETS, "使用说明.html"), os.path.join(MOUNT, "使用说明.html"))
     os.symlink("/Applications", os.path.join(MOUNT, "Applications"))
 
+    # 3.5 安装引导脚本：未签名 app 别人下载后会提示「已损坏」，
+    #     双击此 .command 会弹原生安全确认（打开/取消），确认后自动拷到应用程序、去隔离、启动。
+    #     .command 是脚本不会被判「已损坏」，首次右键→打开即可执行。
+    install_cmd = '''#!/bin/bash
+# AI Copilot 首次安装引导（独立开发者作品，未经 Apple 公证）
+APP_NAME="AI Copilot"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SRC_APP="$HERE/$APP_NAME.app"
+
+ANSWER=$(osascript -e 'display dialog "即将把 AI Copilot 安装到「应用程序」文件夹并打开。\\n\\n该应用为独立开发者作品、未经 Apple 公证，本脚本会自动解除隔离属性后启动。是否继续？" buttons {"取消","打开"} default button "打开" with title "AI Copilot 安装"' 2>/dev/null)
+if [ $? -ne 0 ] || [[ "$ANSWER" != *打开* ]]; then
+  echo "已取消。"
+  exit 0
+fi
+
+if [ ! -d "$SRC_APP" ]; then
+  osascript -e "display notification \\"未找到 $APP_NAME.app，请确认本脚本与 app 在同一目录（DMG 根目录）。\\" with title \\"安装失败\\""
+  exit 1
+fi
+
+if [ -w "/Applications" ]; then
+  DEST_DIR="/Applications"
+else
+  DEST_DIR="$HOME/Applications"
+  mkdir -p "$DEST_DIR"
+fi
+DEST="$DEST_DIR/$APP_NAME.app"
+
+echo "正在安装到 $DEST ..."
+rm -rf "$DEST"
+cp -R "$SRC_APP" "$DEST"
+xattr -dr com.apple.quarantine "$DEST" 2>/dev/null
+xattr -dr com.apple.quarantine "$DEST_DIR" 2>/dev/null
+
+echo "正在启动 $APP_NAME ..."
+open "$DEST"
+'''
+    cmd_path = os.path.join(MOUNT, "双击安装.command")
+    with open(cmd_path, "w", encoding="utf-8") as f:
+        f.write(install_cmd)
+    os.chmod(cmd_path, 0o755)
+    print("双击安装.command 已写入")
+
     # 4. 背景图 + 卷标图标
     os.makedirs(os.path.join(MOUNT, ".background"), exist_ok=True)
     shutil.copy(os.path.join(ASSETS, "background.png"), os.path.join(MOUNT, ".background", "background.png"))

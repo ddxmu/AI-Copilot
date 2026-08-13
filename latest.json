@@ -1,16 +1,16 @@
 {
-  "version": "0.9.4",
-  "notes": "新增「生成对话记忆」（WorkBuddy 式长期记忆库）：AI 设置中新增开关（默认开启），开启后每次 AI 助手完成回复会自动提炼对话中的偏好/习惯/项目约定等事实，存入本机；后续对话系统提示词会注入这些记忆。支持在设置页查看和删除单条记忆。",
-  "pubDate": "2026-08-12T10:48:16+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.4/AI.Copilot-0.9.4-arm64.dmg",
-  "sha256": "18798c6508fc19d16c542ee3ea81a6973bd678905792d84948caab9a93a1c942",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.4/AI.Copilot-0.9.4.zip",
-  "patchSha256": "9e09a359c2f3f6482a111be479975315eeb546dfd90558e992c97d5110f767fd",
+  "version": "0.9.5",
+  "notes": "新增 DMG「双击安装.command」引导：解决把安装包发给别人后对方提示「已损坏，无法打开」的问题。对方双击 DMG 里的「双击安装.command」，弹安全确认（打开/取消），点「打开」后自动拷到应用程序、解除隔离属性并启动。.command 是脚本不会被判「已损坏」，首次若提示无法验证，右键→打开即可。",
+  "pubDate": "2026-08-13T11:50:18+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.5/AI.Copilot-0.9.5-arm64.dmg",
+  "sha256": "1c3d974b3556fc7b95892056f413f798377c443d5897911a714e344683f5d223",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.5/AI.Copilot-0.9.5.zip",
+  "patchSha256": "971b24eb1d0c08542f0fd69cef4be4fafd7c55130b27d35b365aec2a50b0065d",
   "deltas": [
     {
-      "from": "0.9.3",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.4/AI.Copilot-0.9.4.zip",
-      "sha256": "9e09a359c2f3f6482a111be479975315eeb546dfd90558e992c97d5110f767fd"
+      "from": "0.9.4",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.5/AI.Copilot-0.9.5.zip",
+      "sha256": "971b24eb1d0c08542f0fd69cef4be4fafd7c55130b27d35b365aec2a50b0065d"
     }
   ]
 }
