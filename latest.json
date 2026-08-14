@@ -1,16 +1,16 @@
 {
-  "version": "0.9.10",
-  "notes": "修复历史记录「串台」与内容丢失：AI 任务绑定所属会话，流式输出与结果只写回发起会话，切换/新建会话前自动保存，各会话完全隔离；功能任务（替换/自动化/PPT/格式转换/去水印）调用 AI 时自动生成独立会话，同一时间只运行一个 AI 任务；修复历史记录「改名」无效（Electron 不支持 window.prompt），改为行内输入框编辑，回车/失焦确认、Esc 取消。",
-  "pubDate": "2026-08-14T15:00:27+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.10/AI.Copilot-0.9.10-arm64.dmg",
-  "sha256": "a92dd4861028801ec5449b10dd5a8dd0b9b544d737dac4109b3262845b2fb4b4",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.10/AI.Copilot-0.9.10.zip",
-  "patchSha256": "60608071dbed7d499abf3b2fe9fd6dd42d0ab9d09b4d1def3d59220f33574cdd",
+  "version": "0.9.11",
+  "notes": "修复 AI 纯文本回答切回会话后丢失：此前问纯知识类问题（AI 不调用工具）时，回答只在界面上临时显示，切到其他会话/功能再切回，AI 回答就不见了。根因是 agent 循环在「无工具调用的纯文本回复」时直接退出、没把 assistant 回复写入返回的会话历史。现已改为每次 API 调用后都落库 assistant 回复（纯文本与工具调用两种场景一致），历史完整、切换后正常渲染。",
+  "pubDate": "2026-08-14T17:14:03+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.11/AI.Copilot-0.9.11-arm64.dmg",
+  "sha256": "614a4524646c887c9d17978787d6e99d064ad8e69106710a790d96aba078c918",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.11/AI.Copilot-0.9.11.zip",
+  "patchSha256": "aea465b7dcd39899948e3fb3eb2bc3903df255abff119dc3d818febadfba443a",
   "deltas": [
     {
-      "from": "0.9.9",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.10/AI.Copilot-0.9.10.zip",
-      "sha256": "60608071dbed7d499abf3b2fe9fd6dd42d0ab9d09b4d1def3d59220f33574cdd"
+      "from": "0.9.10",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.11/AI.Copilot-0.9.11.zip",
+      "sha256": "aea465b7dcd39899948e3fb3eb2bc3903df255abff119dc3d818febadfba443a"
     }
   ]
 }

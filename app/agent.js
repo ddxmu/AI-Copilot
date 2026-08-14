@@ -1735,6 +1735,9 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
     if (r.usage) { totalUsage.input += r.usage.input; totalUsage.output += r.usage.output; }
     if (r.text) { finalText = r.text; ctx.emit('text', r.text); }
 
+    // 每次调用后都记录 assistant 的回复（纯文本回答也必须落库，否则返回的 messages 里只有用户问题、会话历史缺 AI 回答，切回会话后看不到）
+    messages.push(r.assistantMessage);
+
     if (!r.toolCalls.length) break;
 
     const results = [];
@@ -1759,7 +1762,6 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
     }
 
     if (apiType === 'anthropic') {
-      messages.push(r.assistantMessage);
       messages.push(r.makeToolResults(results));
       for (const img of pendingImages) {
         messages.push({ role: 'user', content: [
@@ -1768,7 +1770,6 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
         ] });
       }
     } else {
-      messages.push(r.assistantMessage);
       for (const res of results) {
         messages.push({ role: 'tool', tool_call_id: res.id, content: String(res.result).slice(0, 30000) });
       }
