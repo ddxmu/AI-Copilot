@@ -415,6 +415,7 @@ async function executeReplace() {
 
 // AI 助手替换：自动分流——Office 文件走本地引擎，文本文件走 AI 智能体
 async function executeReplaceByAI() {
+  if (sending) { document.getElementById('step3-msg').textContent = 'AI 正在执行其他任务，请等它完成后再试'; return; }
   const activeRules = state.rules.filter((r) => r.enabled && r.find);
   const saveMode = getSaveMode();
   const keepStructure = document.getElementById('keep-structure').checked;
@@ -433,15 +434,24 @@ async function executeReplaceByAI() {
   switchPanel('ai');
   setSending(true);
 
+  // 有文本文件要走 AI：先开一条独立会话（不污染当前聊天），office 提示也进该会话
+  let runChatId = null;
+  if (textFiles.length) {
+    runChatId = beginFeatureChat();
+    runningChatId = runChatId;
+    resetRunSegments();
+  }
+  const uiVisible = () => !runChatId || runChatId === activeChatId;
+
   // ① Office 文件走本地引擎
   let officeSummary = null;
   if (officeFiles.length) {
-    addBubble('assistant', `检测到 ${officeFiles.length} 个 Office 文件（docx/pptx/xlsx 等），由本地替换引擎处理…`);
+    if (uiVisible()) addBubble('assistant', `检测到 ${officeFiles.length} 个 Office 文件（docx/pptx/xlsx 等），由本地替换引擎处理…`);
     const { summary } = await window.api.runReplace(
       officeFiles, activeRules, saveMode, outputDir, state.sourceFolder, keepStructure
     );
     officeSummary = summary;
-    addBubble('assistant', `Office 文件处理完成：共 ${summary.total} 个，成功替换 ${summary.done} 个，累计替换 ${summary.replaced} 处。`);
+    if (uiVisible()) addBubble('assistant', `Office 文件处理完成：共 ${summary.total} 个，成功替换 ${summary.done} 个，累计替换 ${summary.replaced} 处。`);
   }
 
   // ② 文本文件走 AI 智能体
@@ -459,34 +469,33 @@ async function executeReplaceByAI() {
       `请用 batch_replace 工具执行，完成后简要汇报处理结果。`;
     const prompt = withAutoSkill(basePrompt, getReplaceSkillName(), '按规则替换');
 
-    ensureActiveChat();
     addBubble('user', `【按规则替换】AI 处理 ${textFiles.length} 个文本文件（${activeRules.length} 条规则）`);
-    chatHistory.push({ role: 'user', content: prompt });
+    pushToChat(runChatId, { role: 'user', content: prompt });
     currentAssistantBubble = null;
     chatStatusEl.textContent = 'AI 正在执行替换…';
 
     const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
 
     chatStatusEl.textContent = '';
+    const stillActive = runChatId === activeChatId;
     if (!r.ok) {
-      addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+      if (stillActive) addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+      pushToChat(runChatId, { role: 'assistant', content: '出错了：' + (r.error || '未知错误') });
     } else {
-      const bubbles = [...chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble')];
-      const last = bubbles[bubbles.length - 1];
-      chatHistory.push({ role: 'assistant', content: last ? last.textContent : '' });
+      pushToChat(runChatId, { role: 'assistant', content: lastSegText });
       if (r.usage) {
         sessionUsage.input += r.usage.input;
         sessionUsage.output += r.usage.output;
-        chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
+        if (stillActive) chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
       }
     }
     currentAssistantBubble = null;
+    runningChatId = null;
   } else if (officeSummary) {
     addBubble('assistant', '全部文件均为 Office 格式，已由本地引擎处理完毕。');
   }
 
   setSending(false);
-  persistCurrentChat();
   saveChats();
 }// 切换左侧模块（供 AI 替换跳转用）
 function switchPanel(name) {
@@ -1599,6 +1608,13 @@ const chatHistory = [];   // 发给模型的简版历史 [{role, content}]
 let sessionUsage = { input: 0, output: 0 };
 let currentAssistantBubble = null;
 let sending = false;
+// 正在执行 AI 任务的会话 ID：流式事件 / 结果落库都路由到该会话，切换界面不影响
+let runningChatId = null;
+// 本次任务的 AI 文本段累积（按工具调用切分；最后一段用于功能任务落库）
+let segOpen = false;
+let curSegText = '';
+let lastSegText = '';
+function resetRunSegments() { segOpen = false; curSegText = ''; lastSegText = ''; }
 // 待发送附件（拖入对话框、尚未发送的文件）
 let pendingAttachments = [];
 let attachmentSeq = 0;
@@ -1663,8 +1679,43 @@ function persistCurrentChat() {
   renderChatList();
 }
 
+// 更新会话标题/时间并刷新列表（不触发保存，由调用方统一 saveChats）
+function touchChatMeta(chat) {
+  if (!chat.customTitle) chat.title = genChatTitle(chat.messages);
+  chat.updatedAt = Date.now();
+  renderChatList();
+}
+
+// 向指定会话追加消息；若该会话正活跃则同步到界面数组
+function pushToChat(chatId, msg) {
+  const chat = chatList.find((c) => c.id === chatId);
+  if (!chat) return;
+  chat.messages.push(msg);
+  if (chatId === activeChatId) chatHistory.push(msg);
+  touchChatMeta(chat);
+}
+
+// 用完整消息列表覆盖指定会话；若该会话正活跃则同步界面数组
+function replaceChatMessages(chatId, messages) {
+  const chat = chatList.find((c) => c.id === chatId);
+  if (!chat) return;
+  chat.messages = messages.slice();
+  if (chatId === activeChatId) {
+    chatHistory.length = 0;
+    messages.forEach((m) => chatHistory.push(m));
+  }
+  touchChatMeta(chat);
+}
+
+// 功能面板（替换/自动化/PPT/格式转换/去水印）调用 AI 前：总是开一条独立会话，互不污染
+function beginFeatureChat() {
+  createNewChat();
+  return activeChatId;
+}
+
 // 新建对话
 function createNewChat() {
+  persistCurrentChat(); // 先保存当前会话（含可能正在进行的任务内容），避免丢失
   const chat = {
     id: genChatId(),
     title: '新对话',
@@ -1691,10 +1742,13 @@ function createNewChat() {
 function switchToChat(chatId) {
   const chat = chatList.find((c) => c.id === chatId);
   if (!chat) return;
+  if (chatId === activeChatId) { switchPanel('ai'); return; }
+  persistCurrentChat(); // 切换前保存当前会话（含可能正在进行的任务内容）
   activeChatId = chatId;
   // 恢复消息到界面
   chatHistory.length = 0;
   sessionUsage = { input: 0, output: 0 };
+  currentAssistantBubble = null; // 进行中的气泡属于上一个会话，丢弃引用避免写串
   chatMessagesEl.innerHTML = '';
   todoPanel.classList.add('hidden');
   chatUsageEl.textContent = '';
@@ -1763,6 +1817,7 @@ function renderChatList() {
   const renderItem = (chat) => {
     const item = document.createElement('div');
     item.className = 'chat-history-item' + (chat.id === activeChatId ? ' active' : '') + (chat.archived ? ' archived' : '');
+    item.dataset.chatId = chat.id;
     const title = document.createElement('span');
     title.className = 'chat-history-item-title';
     title.textContent = chat.title || '新对话';
@@ -1792,6 +1847,41 @@ function renderChatList() {
   }
 }
 
+// 行内改名：把列表项标题替换成输入框（Electron 不支持 window.prompt）
+function startChatRename(chat) {
+  const item = chatHistoryListEl.querySelector(`.chat-history-item[data-chat-id="${chat.id}"]`);
+  if (!item) return;
+  const titleEl = item.querySelector('.chat-history-item-title');
+  if (!titleEl) return;
+  const input = document.createElement('input');
+  input.className = 'chat-rename-input';
+  input.type = 'text';
+  input.value = chat.title || '';
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (commit) => {
+    if (done) return;
+    done = true;
+    const v = input.value.trim();
+    if (commit && v) {
+      chat.title = v;
+      chat.customTitle = true; // 手动改名后不再被自动标题覆盖
+      chat.updatedAt = Date.now();
+    }
+    renderChatList();
+    saveChats();
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('click', (e) => e.stopPropagation());
+}
+
 // 弹出操作菜单
 let currentMenuPopup = null;
 function showChatMenu(chat, anchorEl) {
@@ -1799,18 +1889,12 @@ function showChatMenu(chat, anchorEl) {
   if (currentMenuPopup) { currentMenuPopup.remove(); currentMenuPopup = null; }
   const popup = document.createElement('div');
   popup.className = 'chat-history-menu-popup';
-  // 改名
+  // 改名（行内编辑：标题变为输入框，Enter/失焦确认，Esc 取消）
   const btnRename = document.createElement('button');
   btnRename.textContent = '改名';
   btnRename.addEventListener('click', () => {
     popup.remove(); currentMenuPopup = null;
-    const newName = prompt('输入新名称：', chat.title || '新对话');
-    if (newName && newName.trim()) {
-      chat.title = newName.trim();
-      chat.customTitle = true;
-      renderChatList();
-      saveChats();
-    }
+    startChatRename(chat);
   });
   // 归档/取消归档
   const btnArchive = document.createElement('button');
@@ -2174,12 +2258,20 @@ function toolSummary(name, input) {
 
 // 智能体事件
 window.api.onAiText((t) => {
+  // 文本段累积（与界面解耦，切走会话后内容仍能正确落库）
+  if (!segOpen) { segOpen = true; curSegText = ''; }
+  curSegText += (curSegText ? '\n' : '') + t;
+  lastSegText = curSegText;
+  // 用户已切到其他会话：只累积内容，不往当前界面渲染（隔离）
+  if (runningChatId && activeChatId !== runningChatId) return;
   if (!currentAssistantBubble) currentAssistantBubble = addBubble('assistant', '');
   currentAssistantBubble.textContent += (currentAssistantBubble.textContent ? '\n' : '') + t;
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 });
 
 window.api.onAiToolStart(({ name, input }) => {
+  segOpen = false; // 工具调用打断当前文本段
+  if (runningChatId && activeChatId !== runningChatId) return;
   // 助手只调用工具没出文字时，把空文字气泡清掉，避免留下空条
   if (currentAssistantBubble && !currentAssistantBubble.textContent.trim()) {
     const emptyWrap = currentAssistantBubble.closest('.chat-msg');
@@ -2190,6 +2282,7 @@ window.api.onAiToolStart(({ name, input }) => {
 });
 
 window.api.onAiToolEnd(({ name, result }) => {
+  if (runningChatId && activeChatId !== runningChatId) return;
   addToolLine(name + ' ✓', result.slice(0, 200) + (result.length > 200 ? '…' : ''));
 });
 
@@ -2455,6 +2548,9 @@ async function sendChat() {
   }
 
   ensureActiveChat();
+  const runChatId = activeChatId; // 本任务归属会话（结果路由用）
+  runningChatId = runChatId;
+  resetRunSegments();
   setSending(true);
   addUserMessage(text, pendingAttachments);
   // 存完整消息（含 tool_calls/tool）以便下次续接；初版是简版文本
@@ -2476,11 +2572,12 @@ async function sendChat() {
   const r = await window.api.aiChat(chatHistory.slice(0, -1), augmentedText, attachmentsMeta);
 
   chatStatusEl.textContent = '';
+  const stillActive = runChatId === activeChatId; // 运行期间用户可能切去了别的会话
   if (!r.ok) {
-    addBubble('assistant', '出错了：' + (r.error || '未知错误'));
-    chatHistory.push({ role: 'assistant', content: '出错了：' + (r.error || '未知错误') });
+    if (stillActive) addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    pushToChat(runChatId, { role: 'assistant', content: '出错了：' + (r.error || '未知错误') });
   } else if (r.messages && r.messages.length) {
-    // 完整消息回传：用整轮 messages 覆盖 chatHistory（去掉末尾注入的 augmentedText）
+    // 完整消息回传：用整轮 messages 覆盖发起会话的历史（去掉末尾注入的 augmentedText）
     // 找到原始 user text 位置，保留其之前的全部历史 + 完整 agent 输出
     const finalMessages = r.messages;
     // 把简版的 user 消息替换为原始 text（避免被 augmentedText 污染持久化）
@@ -2492,26 +2589,23 @@ async function sendChat() {
     }
     // 把本轮含附件的 user 消息压缩为「文本 + 附件元信息」，避免 base64 进入持久化历史
     const cleaned = sanitizeHistoryForAttachments(finalMessages, attachmentsMeta);
-    chatHistory.length = 0;
-    cleaned.forEach((m) => chatHistory.push(m));
+    replaceChatMessages(runChatId, cleaned);
   } else {
-    // 兜底：旧逻辑
-    const assistantTexts = [...chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble')];
-    const last = assistantTexts[assistantTexts.length - 1];
-    chatHistory.push({ role: 'assistant', content: last ? last.textContent : '' });
+    // 兜底：用本次累积的 AI 文本段
+    pushToChat(runChatId, { role: 'assistant', content: lastSegText });
   }
 
   if (r.usage) {
     sessionUsage.input += r.usage.input;
     sessionUsage.output += r.usage.output;
-    chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
+    if (stillActive) chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
   }
   currentAssistantBubble = null;
+  runningChatId = null;
   pendingAttachments = [];
   renderAttachmentPreview();
   setSending(false);
-  removeEmptyAssistantBubbles();
-  persistCurrentChat();
+  if (stillActive) removeEmptyAssistantBubbles();
   saveChats();
   chatInput.focus();
 }
@@ -2972,6 +3066,7 @@ function buildAutomationPrompt() {
 
 document.getElementById('auto-start').addEventListener('click', async () => {
   setAutoMsg('');
+  if (sending) { setAutoMsg('AI 正在执行其他任务，请等它完成后再试'); return; }
   if (!auto.template) { setAutoMsg('请先选择模版文件或模版文件夹'); return; }
   if (!auto.files.length) { setAutoMsg('请先选择需编写文件'); return; }
   if (getAutoSaveMode() === 'output' && !autoOutputDir) { setAutoMsg('请先选择输出文件夹'); return; }
@@ -2980,30 +3075,32 @@ document.getElementById('auto-start').addEventListener('click', async () => {
   const prompt = withAutoSkill(buildAutomationPrompt(), getAutoSkillName());
   switchPanel('ai');
   setSending(true);
-  ensureActiveChat();
+  const runChatId = beginFeatureChat(); // 功能任务开独立会话
+  runningChatId = runChatId;
+  resetRunSegments();
   addBubble('user', `【文件自动化】按模版 + 规范处理 ${auto.files.length} 个文件`);
-  chatHistory.push({ role: 'user', content: prompt });
+  pushToChat(runChatId, { role: 'user', content: prompt });
   currentAssistantBubble = null;
   chatStatusEl.textContent = 'AI 正在按模版与规范编写文件…';
 
   const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
 
   chatStatusEl.textContent = '';
+  const stillActive = runChatId === activeChatId;
   if (!r.ok) {
-    addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    if (stillActive) addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    pushToChat(runChatId, { role: 'assistant', content: '出错了：' + (r.error || '未知错误') });
   } else {
-    const bubbles = [...chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble')];
-    const last = bubbles[bubbles.length - 1];
-    chatHistory.push({ role: 'assistant', content: last ? last.textContent : '' });
+    pushToChat(runChatId, { role: 'assistant', content: lastSegText });
     if (r.usage) {
       sessionUsage.input += r.usage.input;
       sessionUsage.output += r.usage.output;
-      chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
+      if (stillActive) chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
     }
   }
   currentAssistantBubble = null;
+  runningChatId = null;
   setSending(false);
-  persistCurrentChat();
   saveChats();
 });
 
@@ -3058,6 +3155,7 @@ document.getElementById('auto-convert').addEventListener('click', async () => {
 /* ---- AI 协助转换：先本地转换，再由 AI 核对文件完整性 ---- */
 document.getElementById('auto-ai-convert').addEventListener('click', async () => {
   setAutoMsg('');
+  if (sending) { setAutoMsg('AI 正在执行其他任务，请等它完成后再试'); return; }
   if (!auto.files.length) { setAutoMsg('请先选择需编写文件'); return; }
   const layout = document.getElementById('auto-layout').value;
   if (layout === 'template' && (!auto.template || auto.template.kind !== 'folder')) {
@@ -3137,30 +3235,32 @@ document.getElementById('auto-ai-convert').addEventListener('click', async () =>
 
   switchPanel('ai');
   setSending(true);
-  ensureActiveChat();
+  const runChatId = beginFeatureChat(); // 功能任务开独立会话
+  runningChatId = runChatId;
+  resetRunSegments();
   addBubble('user', `【AI 协助转换】${summary.matched} 个匹配 + ${summary.skipped} 个跳过`);
-  chatHistory.push({ role: 'user', content: prompt });
+  pushToChat(runChatId, { role: 'user', content: prompt });
   currentAssistantBubble = null;
   chatStatusEl.textContent = 'AI 正在核对文件摆放完整性…';
 
   const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
 
   chatStatusEl.textContent = '';
+  const stillActive = runChatId === activeChatId;
   if (!r.ok) {
-    addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    if (stillActive) addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    pushToChat(runChatId, { role: 'assistant', content: '出错了：' + (r.error || '未知错误') });
   } else {
-    const bubbles = [...chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble')];
-    const last = bubbles[bubbles.length - 1];
-    chatHistory.push({ role: 'assistant', content: last ? last.textContent : '' });
+    pushToChat(runChatId, { role: 'assistant', content: lastSegText });
     if (r.usage) {
       sessionUsage.input += r.usage.input;
       sessionUsage.output += r.usage.output;
-      chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
+      if (stillActive) chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
     }
   }
   currentAssistantBubble = null;
+  runningChatId = null;
   setSending(false);
-  persistCurrentChat();
   saveChats();
 });
 
@@ -3225,12 +3325,13 @@ document.getElementById('ppt-new-start').addEventListener('click', async () => {
   lines.push('请先告诉我：你想编写什么主题的 PPT？大概需要多少页？包含哪些章节或内容要点？');
 
   const prompt = withPptSkill(lines.join('\n'), getPptNewSkillName());
-  switchPanel('ai');
+  const runChatId = beginFeatureChat(); // 独立会话（内部已切到 AI 面板）
   addBubble('user', '【新编写 PPT】选择模版，AI 按模版风格从零编写新 PPT');
+  pushToChat(runChatId, { role: 'user', content: '【新编写 PPT】选择模版，AI 按模版风格从零编写新 PPT' });
   addBubble('assistant', prompt);
+  pushToChat(runChatId, { role: 'assistant', content: prompt });
   currentAssistantBubble = null;
   setSending(false);
-  persistCurrentChat();
   saveChats();
 });
 
@@ -3392,6 +3493,7 @@ function buildPptPrompt() {
 /* ---- AI 助手编辑保存 ---- */
 document.getElementById('ppt-ai-save').addEventListener('click', async () => {
   setPptMsg('');
+  if (sending) { setPptMsg('AI 正在执行其他任务，请等它完成后再试'); return; }
   if (!ppt.files.length) { setPptMsg('请先选择需编写的 PPT 文件'); return; }
   if (getPptSaveMode() === 'output' && !pptOutputDir) { setPptMsg('请先选择输出文件夹'); return; }
   if (!(aiState.profiles.length && aiState.activeId)) { setPptMsg('请先在「AI 设置」中配置并启用一个模型'); return; }
@@ -3399,30 +3501,32 @@ document.getElementById('ppt-ai-save').addEventListener('click', async () => {
   const prompt = withPptSkill(buildPptPrompt(), getPptEditSkillName());
   switchPanel('ai');
   setSending(true);
-  ensureActiveChat();
+  const runChatId = beginFeatureChat(); // 功能任务开独立会话
+  runningChatId = runChatId;
+  resetRunSegments();
   addBubble('user', `【PPT 写手】依据模版编写 ${ppt.files.length} 个 PPT 文件`);
-  chatHistory.push({ role: 'user', content: prompt });
+  pushToChat(runChatId, { role: 'user', content: prompt });
   currentAssistantBubble = null;
   chatStatusEl.textContent = 'AI 正在了解你的 PPT 修改需求…';
 
   const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
 
   chatStatusEl.textContent = '';
+  const stillActive = runChatId === activeChatId;
   if (!r.ok) {
-    addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    if (stillActive) addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    pushToChat(runChatId, { role: 'assistant', content: '出错了：' + (r.error || '未知错误') });
   } else {
-    const bubbles = [...chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble')];
-    const last = bubbles[bubbles.length - 1];
-    chatHistory.push({ role: 'assistant', content: last ? last.textContent : '' });
+    pushToChat(runChatId, { role: 'assistant', content: lastSegText });
     if (r.usage) {
       sessionUsage.input += r.usage.input;
       sessionUsage.output += r.usage.output;
-      chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
+      if (stillActive) chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
     }
   }
   currentAssistantBubble = null;
+  runningChatId = null;
   setSending(false);
-  persistCurrentChat();
   saveChats();
 });
 
@@ -3810,6 +3914,7 @@ document.getElementById('conv-start').addEventListener('click', async () => {
 /* ---- 技能驱动转换：用选定技能经 AI 代理执行转换 ---- */
 async function aiConvertWithSkill(skillName) {
   setCvMsg('');
+  if (sending) { setCvMsg('AI 正在执行其他任务，请等它完成后再试'); return; }
   if (!cv.files.length) { setCvMsg('请先选择要转换的文件'); return; }
   const saveMode = getCvSaveMode();
   if (saveMode === 'output' && !cv.outputDir) { setCvMsg('请先选择输出文件夹'); return; }
@@ -3832,29 +3937,32 @@ async function aiConvertWithSkill(skillName) {
     `全部转换完成后，简要汇报处理了几个文件、分别输出到哪里、是否遇到无法转换的文件。`;
   switchPanel('ai');
   setSending(true);
-  ensureActiveChat();
+  const runChatId = beginFeatureChat(); // 功能任务开独立会话
+  runningChatId = runChatId;
+  resetRunSegments();
   addBubble('user', `【AI 格式转换 · ${skillName}】${cv.files.length} 个文件 ${srcDesc} → ${dstDesc}`);
-  chatHistory.push({ role: 'user', content: prompt });
+  pushToChat(runChatId, { role: 'user', content: prompt });
   currentAssistantBubble = null;
   chatStatusEl.textContent = 'AI 正在转换文件…';
   const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
   chatStatusEl.textContent = '';
+  const stillActive = runChatId === activeChatId;
   if (!r.ok) {
-    addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    if (stillActive) addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    pushToChat(runChatId, { role: 'assistant', content: '出错了：' + (r.error || '未知错误') });
   } else {
-    const bubbles = [...chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble')];
-    const last = bubbles[bubbles.length - 1];
-    chatHistory.push({ role: 'assistant', content: last ? last.textContent : '' });
+    pushToChat(runChatId, { role: 'assistant', content: lastSegText });
   }
   currentAssistantBubble = null;
+  runningChatId = null;
   setSending(false);
-  persistCurrentChat();
   saveChats();
 }
 
 /* ---- AI 助手转换 ---- */
 document.getElementById('conv-ai-start').addEventListener('click', async () => {
   setCvMsg('');
+  if (sending) { setCvMsg('AI 正在执行其他任务，请等它完成后再试'); return; }
   if (!cv.files.length) { setCvMsg('请先选择要转换的文件'); return; }
   const saveMode = getCvSaveMode();
   if (saveMode === 'output' && !cv.outputDir) { setCvMsg('请先选择输出文件夹'); return; }
@@ -3876,23 +3984,25 @@ document.getElementById('conv-ai-start').addEventListener('click', async () => {
     `全部转换完成后，简要汇报处理了几个文件、分别输出到哪里。`;
   switchPanel('ai');
   setSending(true);
-  ensureActiveChat();
+  const runChatId = beginFeatureChat(); // 功能任务开独立会话
+  runningChatId = runChatId;
+  resetRunSegments();
   addBubble('user', `【AI 格式转换】${cv.files.length} 个文件 ${srcDesc} → ${dstDesc}`);
-  chatHistory.push({ role: 'user', content: prompt });
+  pushToChat(runChatId, { role: 'user', content: prompt });
   currentAssistantBubble = null;
   chatStatusEl.textContent = 'AI 正在转换文件…';
   const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
   chatStatusEl.textContent = '';
+  const stillActive = runChatId === activeChatId;
   if (!r.ok) {
-    addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    if (stillActive) addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    pushToChat(runChatId, { role: 'assistant', content: '出错了：' + (r.error || '未知错误') });
   } else {
-    const bubbles = [...chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble')];
-    const last = bubbles[bubbles.length - 1];
-    chatHistory.push({ role: 'assistant', content: last ? last.textContent : '' });
+    pushToChat(runChatId, { role: 'assistant', content: lastSegText });
   }
   currentAssistantBubble = null;
+  runningChatId = null;
   setSending(false);
-  persistCurrentChat();
   saveChats();
 });
 
@@ -4039,6 +4149,7 @@ document.getElementById('wm-analyze').addEventListener('click', async () => {
 // AI 分析：启发式预勾选 + 交给 AI 给出判断
 document.getElementById('wm-ai-analyze').addEventListener('click', async () => {
   if (!wm.files.length) { setWmMsg('请先选择 PDF 文件'); return; }
+  if (sending) { setWmMsg('AI 正在执行其他任务，请等它完成后再试'); return; }
   setWmMsg('正在分析水印…');
   try {
     if (!wm.candidates.length) {
@@ -4064,22 +4175,25 @@ document.getElementById('wm-ai-analyze').addEventListener('click', async () => {
     const prompt = `我从 PDF 中提取到以下文本片段，请判断哪些最可能是需要删除的“水印”文字（如机密/内部/样品/draft 等标记），哪些可能是正文应保留。请只输出一个“应删除”的清单（每行一条原文），没有就说“无”。\n\n${list}`;
     switchPanel('ai');
     setSending(true);
-    ensureActiveChat();
+    const runChatId = beginFeatureChat(); // 功能任务开独立会话
+    runningChatId = runChatId;
+    resetRunSegments();
     addBubble('user', '【PDF去水印】请帮我判断哪些是水印');
-    chatHistory.push({ role: 'user', content: prompt });
+    pushToChat(runChatId, { role: 'user', content: prompt });
     currentAssistantBubble = null;
     chatStatusEl.textContent = 'AI 正在分析水印…';
     const r2 = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
     chatStatusEl.textContent = '';
-    if (!r2.ok) addBubble('assistant', '出错了：' + (r2.error || '未知错误'));
-    else {
-      const bubbles = [...chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble')];
-      const last = bubbles[bubbles.length - 1];
-      chatHistory.push({ role: 'assistant', content: last ? last.textContent : '' });
+    const stillActive = runChatId === activeChatId;
+    if (!r2.ok) {
+      if (stillActive) addBubble('assistant', '出错了：' + (r2.error || '未知错误'));
+      pushToChat(runChatId, { role: 'assistant', content: '出错了：' + (r2.error || '未知错误') });
+    } else {
+      pushToChat(runChatId, { role: 'assistant', content: lastSegText });
     }
     currentAssistantBubble = null;
+    runningChatId = null;
     setSending(false);
-    persistCurrentChat();
     saveChats();
   } catch (e) {
     console.error('AI 分析水印失败', e);
@@ -4121,6 +4235,7 @@ document.getElementById('wm-start').addEventListener('click', async () => {
 /* ---- AI 去水印：加载所选技能，由 AI 代理按技能指引移除 PDF 水印 ---- */
 document.getElementById('wm-ai-remove').addEventListener('click', async () => {
   setWmMsg('');
+  if (sending) { setWmMsg('AI 正在执行其他任务，请等它完成后再试'); return; }
   if (!wm.files.length) { setWmMsg('请先选择 PDF 文件'); return; }
   if (!wm.outputDir) { setWmMsg('请先选择输出文件夹'); return; }
   if (!(aiState.profiles.length && aiState.activeId)) { setWmMsg('请先在「AI 设置」中配置并启用一个模型'); return; }
@@ -4144,28 +4259,30 @@ document.getElementById('wm-ai-remove').addEventListener('click', async () => {
   const full = withWmSkill(prompt, skillName);
   switchPanel('ai');
   setSending(true);
-  ensureActiveChat();
+  const runChatId = beginFeatureChat(); // 功能任务开独立会话
+  runningChatId = runChatId;
+  resetRunSegments();
   addBubble('user', `【AI 去水印】${wm.files.length} 个 PDF → ${wm.outputDir}${skillName ? ' · ' + skillName : ''}`);
-  chatHistory.push({ role: 'user', content: full });
+  pushToChat(runChatId, { role: 'user', content: full });
   currentAssistantBubble = null;
   chatStatusEl.textContent = 'AI 正在去水印…';
   const r = await window.api.aiChat(chatHistory.slice(0, -1), full);
   chatStatusEl.textContent = '';
+  const stillActive = runChatId === activeChatId;
   if (!r.ok) {
-    addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    if (stillActive) addBubble('assistant', '出错了：' + (r.error || '未知错误'));
+    pushToChat(runChatId, { role: 'assistant', content: '出错了：' + (r.error || '未知错误') });
   } else {
-    const bubbles = [...chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble')];
-    const last = bubbles[bubbles.length - 1];
-    chatHistory.push({ role: 'assistant', content: last ? last.textContent : '' });
+    pushToChat(runChatId, { role: 'assistant', content: lastSegText });
     if (r.usage) {
       sessionUsage.input += r.usage.input;
       sessionUsage.output += r.usage.output;
-      chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
+      if (stillActive) chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
     }
   }
   currentAssistantBubble = null;
+  runningChatId = null;
   setSending(false);
-  persistCurrentChat();
   saveChats();
 });
 
