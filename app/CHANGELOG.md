@@ -1,3 +1,6 @@
+## v0.9.23 — 2026-08-15
+- **彻底修复麦克风语音识别 404（ASR）**：此前 `ai-voice-stt` 的 minimax 分支把请求发到 `api.minimaxi.com/v1/audio/asr`（JSON 格式），该路径并不存在，恒返回 `404 page not found`。经核实，MiniMax 语音识别是 OpenAI 兼容接口，正确地址为 `api.minimax.chat/v1/audio/transcriptions`（与 TTS 同域名，使用 multipart 表单：`file` + `language`）。现已改正：去掉错误的 `api.minimaxi.com` 域名映射与 JSON body，改为在用户配置的「接口地址」后拼接 `/audio/transcriptions` 并以表单提交录音（渲染进程已先把录音转成 16kHz WAV）。仍要注意：MiniMax Token Plan（`sk-cp-` 开头）Key 仅含 TTS 权限、无 ASR 权限，会返回 401/403，需改用含 ASR 权限的按量付费 Key。
+
 ## v0.9.22 — 2026-08-15
 - **修复 AI 语音「拉取音色」假成功**：此前 `fetchMinimaxVoices` 在官方接口全部失败后，会默默返回 10 个默认公开音色，UI 显示「已拉取 10 个音色」，导致用户误以为配置正确。现已改为：接口拉取失败时明确返回错误，渲染进程显示真实失败原因（如 HTTP 404、地址无效等），同时仅把默认音色作为 fallback 加载并明确提示「拉取失败，已加载默认音色」，避免误导。
 

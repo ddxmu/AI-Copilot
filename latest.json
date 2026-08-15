@@ -1,16 +1,16 @@
 {
-  "version": "0.9.22",
-  "notes": "修复 AI 语音「拉取音色」假成功：接口失败时不再假装已拉取 10 个音色，改为明确提示失败原因并仅加载默认音色作为 fallback。",
-  "pubDate": "2026-08-15T20:15:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.22/AI.Copilot-0.9.22-arm64.dmg",
-  "sha256": "3ee785977bd03041a76f848092ae53632ce592abeed581ec5deaeeefcdf027b6",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.22/AI.Copilot-0.9.22.zip",
-  "patchSha256": "b8d7c09dae9a87ce0193f8b03498363a4695040f12b65e71fd2f0d00d3a96d53",
+  "version": "0.9.23",
+  "notes": "修复麦克风语音识别 ASR 404：MiniMax 语音识别是 OpenAI 兼容接口 /audio/transcriptions（与 TTS 同域名 api.minimax.chat/v1，使用 multipart 表单），此前错误地请求 api.minimaxi.com/audio/asr 导致恒返回 404。现改走正确的接口（渲染进程已先把录音转成 16kHz WAV 上传）。注意：MiniMax Token Plan（sk-cp- 开头）Key 仅含 TTS 权限、无 ASR 权限，会返回 401/403，需改用含 ASR 权限的按量付费 Key。",
+  "pubDate": "2026-08-15T20:40:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.23/AI.Copilot-0.9.23-arm64.dmg",
+  "sha256": "e26958876f6f471b5a68b9551d07eb44d3e6ef75f4693d9c4ce19f5dd540bbc0",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.23/AI.Copilot-0.9.23.zip",
+  "patchSha256": "323fff1b897f9137c94703e1967197162d75ef302af4767597691f28b847be7a",
   "deltas": [
     {
-      "from": "0.9.21",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.22/AI.Copilot-0.9.22.zip",
-      "sha256": "b8d7c09dae9a87ce0193f8b03498363a4695040f12b65e71fd2f0d00d3a96d53"
+      "from": "0.9.22",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.23/AI.Copilot-0.9.23.zip",
+      "sha256": "323fff1b897f9137c94703e1967197162d75ef302af4767597691f28b847be7a"
     }
   ]
 }
