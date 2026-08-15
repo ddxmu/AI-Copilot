@@ -878,227 +878,224 @@
       </section>
 
       <!-- 模块三：AI 设置 -->
-      <section id="panel-ai-settings" class="panel">
-        <header class="panel-header">
-          <h1>AI 设置</h1>
-          <p class="hint">添加 AI 配置（API 地址、Key），从服务商拉取可用模型，保存后供 AI 助手使用。配置保存在本机。</p>
-        </header>
-
-        <div class="card">
-          <h2>外观</h2>
-          <p class="hint" style="margin: 4px 0 12px">切换界面主题（深色在长时间使用和夜间更护眼）。选择会立即生效并自动保存。</p>
-          <div class="theme-segment" id="theme-segment" role="tablist" aria-label="外观主题">
-            <button class="theme-opt active" data-theme="light" role="tab" aria-selected="true">
-              <span class="theme-icon">☀️</span><span>浅色</span>
-            </button>
-            <button class="theme-opt" data-theme="dark" role="tab" aria-selected="false">
-              <span class="theme-icon">🌙</span><span>深色</span>
-            </button>
-            <span class="theme-thumb" aria-hidden="true"></span>
-          </div>
-        </div>
-
-        <!-- AI 助手联网开关 -->
-        <div class="card">
-          <div class="card-title-row">
-            <h2>AI 助手联网</h2>
-            <label class="switch" id="web-access-switch-wrap">
-              <input type="checkbox" id="web-access-toggle" />
-              <span class="slider"></span>
-            </label>
-          </div>
-          <p class="hint" style="margin: 4px 0 0">开启后，AI 助手可以使用「联网搜索」和「读取网页」工具，帮你查最新信息、技术文档、新闻等。关闭时 AI 助手只能操作本机文件。设置自动保存。</p>
-        </div>
-
-        <!-- AI 助手生成对话记忆开关 -->
-        <div class="card">
-          <div class="card-title-row">
-            <h2>生成对话记忆</h2>
-            <label class="switch" id="memory-switch-wrap">
-              <input type="checkbox" id="memory-toggle" />
-              <span class="slider"></span>
-            </label>
-          </div>
-          <p class="hint" style="margin: 4px 0 12px">开启后，AI 助手会自动从对话中提炼你的偏好、习惯、项目约定等长期信息，并在后续对话中参考，让回复更连贯、更个性化。记忆只保存在本机。</p>
-          <button id="btn-view-memory" class="btn">查看记忆</button>
-        </div>
-
-        <!-- 软件更新 -->
-        <div class="card" id="update-card">
-          <div class="card-title-row">
-            <h2>软件更新</h2>
-            <span id="update-version" class="tag-chip">v0.0.0</span>
-          </div>
-          <p class="hint" style="margin: 4px 0 12px">自动从 GitHub（ddxmu/AI-Copilot）检查新版本。开启应用时静默检查，也可手动检查并一键安装。完整安装包约 340MB，网络较慢时请耐心等待或手动下载。</p>
-          <div class="update-row">
-            <button id="btn-check-update" class="btn">检查更新</button>
-            <button id="btn-install-update" class="btn primary hidden">下载并安装</button>
-          </div>
-          <div id="update-status" class="update-status"></div>
-          <div id="update-progress-wrap" class="hidden">
-            <div class="progress-bar"><div id="update-progress-bar" class="progress-fill"></div></div>
-            <div id="update-progress-text" class="hint"></div>
-          </div>
-          <div id="update-manual-wrap" class="hidden" style="margin-top:10px">
-            <a id="update-manual-link" href="#" target="_blank" class="link-btn">GitHub 下载太慢？点击手动下载 DMG</a>
-          </div>
-          <div id="update-notes" class="update-notes hidden"></div>
-        </div>
-
-        <div class="card">
-          <h2>AI 配置 <span id="profile-count" class="count">0</span></h2>
-          <div class="form-row" style="margin-bottom:14px">
-            <label>当前使用</label>
-            <select id="active-profile"></select>
-          </div>
-          <ul id="profile-list" class="profile-list"></ul>
-          <p id="profile-empty" class="empty">还没有 AI 配置，点击下方「新增配置」开始。</p>
-          <button id="btn-new-profile" class="btn primary">＋ 新增配置</button>
-        </div>
-
-        <div id="profile-editor" class="card hidden">
-          <div class="card-title-row">
-            <h2 id="editor-title">新增配置</h2>
-            <span class="hint">配置模型地址、API Key 后可拉取模型并选择</span>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-cell">
-              <label>模型提供商</label>
-              <select id="p-provider"></select>
+      <section id="panel-ai-settings" class="panel settings-modal hidden">
+        <div class="settings-modal-backdrop">
+          <div class="settings-window">
+            <div class="settings-header">
+              <h1>设置</h1>
+              <button class="settings-close" id="btn-settings-close" aria-label="关闭">×</button>
             </div>
-            <div class="form-cell">
-              <label>模型地址</label>
-              <input id="p-baseurl" type="text" placeholder="https://api.deepseek.com/v1" />
-            </div>
-            <div class="form-cell">
-              <label>API Key</label>
-              <input id="p-apikey" type="password" placeholder="sk-..." />
-              <div id="key-hint" class="field-hint hidden">已保存，留空则保留原 Key</div>
-            </div>
-            <div class="form-cell">
-              <label>模型名称</label>
-              <select id="p-model">
-                <option value="">（先拉取模型）</option>
-              </select>
-            </div>
-          </div>
+            <div class="settings-body">
+              <aside class="settings-sidebar">
+                <button class="settings-nav active" data-target="settings-appearance">外观</button>
+                <button class="settings-nav" data-target="settings-network">联网</button>
+                <button class="settings-nav" data-target="settings-ai-config">AI配置</button>
+                <button class="settings-nav" data-target="settings-memory">记忆</button>
+                <button class="settings-nav" data-target="settings-mcp">MCP服务器</button>
+                <button class="settings-nav" data-target="settings-skills">智能体技能</button>
+                <button class="settings-nav" data-target="settings-update">更新日志</button>
+              </aside>
+              <div class="settings-content" id="settings-content">
 
-          <div id="model-price" class="model-price"></div>
-          <div id="fetch-status" class="fetch-status"></div>
-
-          <div class="btn-group" style="margin-top:18px">
-            <button id="btn-fetch-models" class="btn">拉取模型</button>
-            <button id="btn-test-conn" class="btn ghost">测试连接</button>
-            <button id="btn-save-profile" class="btn primary">保存模型配置</button>
-            <button id="btn-cancel-edit" class="btn ghost">取消</button>
-          </div>
-        </div>
-
-        <!-- MCP 服务器 -->
-        <div class="card">
-          <div class="card-title-row">
-            <h2>MCP 服务器 <span id="mcp-count" class="count">0</span></h2>
-            <button id="btn-mcp-refresh" class="btn ghost small">↻ 重新连接</button>
-          </div>
-          <p class="hint" style="margin-bottom:14px">
-            接入 MCP（Model Context Protocol）服务器后，其提供的工具会自动出现在 AI 助手的工具集中，调用前仍会请求你的授权。
-          </p>
-
-          <ul id="mcp-list" class="mcp-list"></ul>
-          <p id="mcp-empty" class="empty">还没有 MCP 服务器，点击下方「新增服务器」接入。</p>
-
-          <div class="btn-group" style="margin-top:6px">
-            <button id="btn-new-mcp" class="btn primary">＋ 新增服务器</button>
-            <button id="btn-mcp-market" class="btn">🏪 从市场添加</button>
-            <button id="btn-mcp-json" class="btn">{ } 从 JSON 导入</button>
-          </div>
-        </div>
-
-        <!-- MCP 编辑器 -->
-        <div id="mcp-editor" class="card hidden">
-          <div class="card-title-row">
-            <h2 id="mcp-editor-title">新增 MCP 服务器</h2>
-            <span class="hint">stdio：本地命令启动　|　SSE：远程服务地址（如阿里云百炼）</span>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-cell">
-              <label>服务器名称</label>
-              <input id="m-name" type="text" placeholder="github（仅字母数字下划线）" />
-              <div class="field-hint">用作工具名前缀：mcp__名称__工具名</div>
-            </div>
-            <div class="form-cell">
-              <label>传输方式</label>
-              <select id="m-transport">
-                <option value="stdio">stdio（本地命令）</option>
-                <option value="sse">SSE（远程服务地址）</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- stdio 字段 -->
-          <div id="m-stdio-fields">
-            <div class="form-grid" style="margin-top:14px">
-              <div class="form-cell">
-                <label>启动命令</label>
-                <input id="m-command" type="text" placeholder="npx" />
-                <div class="field-hint">如 npx / uvx / node / python3</div>
-              </div>
-              <div class="form-cell">
-                <label>工作目录（可选）</label>
-                <div class="param-input-row">
-                  <input id="m-cwd" type="text" placeholder="留空则使用用户主目录" />
-                  <button type="button" id="btn-mcp-browse-cwd" class="btn small">浏览…</button>
+                <!-- 外观 -->
+                <div class="settings-section" id="settings-appearance">
+                  <div class="card">
+                    <h2>外观</h2>
+                    <p class="hint" style="margin: 4px 0 12px">切换界面主题（深色在长时间使用和夜间更护眼）。选择会立即生效并自动保存。</p>
+                    <div class="theme-segment" id="theme-segment" role="tablist" aria-label="外观主题">
+                      <button class="theme-opt active" data-theme="light" role="tab" aria-selected="true">
+                        <span class="theme-icon">☀️</span><span>浅色</span>
+                      </button>
+                      <button class="theme-opt" data-theme="dark" role="tab" aria-selected="false">
+                        <span class="theme-icon">🌙</span><span>深色</span>
+                      </button>
+                      <span class="theme-thumb" aria-hidden="true"></span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div class="form-cell" style="margin-top:14px">
-              <label>启动参数（每行一个）</label>
-              <textarea id="m-args" rows="4" placeholder="-y&#10;@modelcontextprotocol/server-fetch"></textarea>
-            </div>
-          </div>
 
-          <!-- sse 字段 -->
-          <div id="m-sse-fields" class="hidden">
-            <div class="form-cell" style="margin-top:14px">
-              <label>服务地址 (baseUrl)</label>
-              <input id="m-baseurl" type="text" placeholder="https://example.com/mcp/sse" />
-              <div class="field-hint">以 /sse 结尾的远程 MCP 服务地址</div>
-            </div>
-            <div class="form-cell" style="margin-top:14px">
-              <label>请求头（每行一行为 <code>Header: Value</code>，支持 ${KEY} 占位）</label>
-              <textarea id="m-headers" rows="3" placeholder="Authorization: Bearer ${DASHSCOPE_API_KEY}"></textarea>
-            </div>
-          </div>
+                <!-- 联网 -->
+                <div class="settings-section" id="settings-network">
+                  <div class="card">
+                    <div class="card-title-row">
+                      <h2>AI 助手联网</h2>
+                      <label class="switch" id="web-access-switch-wrap">
+                        <input type="checkbox" id="web-access-toggle" />
+                        <span class="slider"></span>
+                      </label>
+                    </div>
+                    <p class="hint" style="margin: 4px 0 0">开启后，AI 助手可以使用「联网搜索」和「读取网页」工具，帮你查最新信息、技术文档、新闻等。关闭时 AI 助手只能操作本机文件。设置自动保存。</p>
+                  </div>
+                </div>
 
-          <!-- 公共：环境变量 -->
-          <div class="form-cell" style="margin-top:14px">
-            <label>环境变量（每行 <code>KEY=VALUE</code>）</label>
-            <div class="field-hint">stdio：传给本地进程；SSE：用于替换上面 ${KEY} 占位符（如 API Key）</div>
-            <textarea id="m-env" rows="3" placeholder="DASHSCOPE_API_KEY=sk-..."></textarea>
-          </div>
+                <!-- AI 配置 -->
+                <div class="settings-section" id="settings-ai-config">
+                  <div class="card">
+                    <h2>AI 配置 <span id="profile-count" class="count">0</span></h2>
+                    <div class="form-row" style="margin-bottom:14px">
+                      <label>当前使用</label>
+                      <select id="active-profile"></select>
+                    </div>
+                    <ul id="profile-list" class="profile-list"></ul>
+                    <p id="profile-empty" class="empty">还没有 AI 配置，点击下方「新增配置」开始。</p>
+                    <button id="btn-new-profile" class="btn primary">＋ 新增配置</button>
+                  </div>
 
-          <label style="margin-top:12px;display:flex;align-items:center;gap:8px;font-weight:400">
-            <input id="m-enabled" type="checkbox" checked style="width:auto" /> 启用该服务器
-          </label>
+                  <div id="profile-editor" class="card hidden">
+                    <div class="card-title-row">
+                      <h2 id="editor-title">新增配置</h2>
+                      <span class="hint">配置模型地址、API Key 后可拉取模型并选择</span>
+                    </div>
 
-          <div id="mcp-test-status" class="fetch-status"></div>
+                    <div class="form-grid">
+                      <div class="form-cell">
+                        <label>模型提供商</label>
+                        <select id="p-provider"></select>
+                      </div>
+                      <div class="form-cell">
+                        <label>模型地址</label>
+                        <input id="p-baseurl" type="text" placeholder="https://api.deepseek.com/v1" />
+                      </div>
+                      <div class="form-cell">
+                        <label>API Key</label>
+                        <input id="p-apikey" type="password" placeholder="sk-..." />
+                        <div id="key-hint" class="field-hint hidden">已保存，留空则保留原 Key</div>
+                      </div>
+                      <div class="form-cell">
+                        <label>模型名称</label>
+                        <select id="p-model">
+                          <option value="">（先拉取模型）</option>
+                        </select>
+                      </div>
+                    </div>
 
-          <div class="btn-group" style="margin-top:18px">
-            <button id="btn-mcp-test" class="btn">测试连接</button>
-            <button id="btn-mcp-save" class="btn primary">保存并连接</button>
-            <button id="btn-mcp-cancel" class="btn ghost">取消</button>
-          </div>
-        </div>
+                    <div id="model-price" class="model-price"></div>
+                    <div id="fetch-status" class="fetch-status"></div>
 
-        <!-- MCP JSON 导入 -->
-        <div id="mcp-json-editor" class="card hidden">
-          <div class="card-title-row">
-            <h2>从 JSON 导入</h2>
-            <span class="hint">兼容 Claude Desktop 与 Cherry Studio 的 mcpServers 配置（支持 stdio 与 sse）</span>
-          </div>
-          <textarea id="m-json" rows="12" placeholder='{
+                    <div class="btn-group" style="margin-top:18px">
+                      <button id="btn-fetch-models" class="btn">拉取模型</button>
+                      <button id="btn-test-conn" class="btn ghost">测试连接</button>
+                      <button id="btn-save-profile" class="btn primary">保存模型配置</button>
+                      <button id="btn-cancel-edit" class="btn ghost">取消</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 记忆 -->
+                <div class="settings-section" id="settings-memory">
+                  <div class="card">
+                    <div class="card-title-row">
+                      <h2>生成对话记忆</h2>
+                      <label class="switch" id="memory-switch-wrap">
+                        <input type="checkbox" id="memory-toggle" />
+                        <span class="slider"></span>
+                      </label>
+                    </div>
+                    <p class="hint" style="margin: 4px 0 12px">开启后，AI 助手会自动从对话中提炼你的偏好、习惯、项目约定等长期信息，并在后续对话中参考，让回复更连贯、更个性化。记忆只保存在本机。</p>
+                    <button id="btn-view-memory" class="btn">查看记忆</button>
+                  </div>
+                </div>
+
+                <!-- MCP 服务器 -->
+                <div class="settings-section" id="settings-mcp">
+                  <div class="card">
+                    <div class="card-title-row">
+                      <h2>MCP 服务器 <span id="mcp-count" class="count">0</span></h2>
+                      <button id="btn-mcp-refresh" class="btn ghost small">↻ 重新连接</button>
+                    </div>
+                    <p class="hint" style="margin-bottom:14px">
+                      接入 MCP（Model Context Protocol）服务器后，其提供的工具会自动出现在 AI 助手的工具集中，调用前仍会请求你的授权。
+                    </p>
+
+                    <ul id="mcp-list" class="mcp-list"></ul>
+                    <p id="mcp-empty" class="empty">还没有 MCP 服务器，点击下方「新增服务器」接入。</p>
+
+                    <div class="btn-group" style="margin-top:6px">
+                      <button id="btn-new-mcp" class="btn primary">＋ 新增服务器</button>
+                      <button id="btn-mcp-market" class="btn">🏪 从市场添加</button>
+                      <button id="btn-mcp-json" class="btn">{ } 从 JSON 导入</button>
+                    </div>
+                  </div>
+
+                  <div id="mcp-editor" class="card hidden">
+                    <div class="card-title-row">
+                      <h2 id="mcp-editor-title">新增 MCP 服务器</h2>
+                      <span class="hint">stdio：本地命令启动　|　SSE：远程服务地址（如阿里云百炼）</span>
+                    </div>
+
+                    <div class="form-grid">
+                      <div class="form-cell">
+                        <label>服务器名称</label>
+                        <input id="m-name" type="text" placeholder="github（仅字母数字下划线）" />
+                        <div class="field-hint">用作工具名前缀：mcp__名称__工具名</div>
+                      </div>
+                      <div class="form-cell">
+                        <label>传输方式</label>
+                        <select id="m-transport">
+                          <option value="stdio">stdio（本地命令）</option>
+                          <option value="sse">SSE（远程服务地址）</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div id="m-stdio-fields">
+                      <div class="form-grid" style="margin-top:14px">
+                        <div class="form-cell">
+                          <label>启动命令</label>
+                          <input id="m-command" type="text" placeholder="npx" />
+                          <div class="field-hint">如 npx / uvx / node / python3</div>
+                        </div>
+                        <div class="form-cell">
+                          <label>工作目录（可选）</label>
+                          <div class="param-input-row">
+                            <input id="m-cwd" type="text" placeholder="留空则使用用户主目录" />
+                            <button type="button" id="btn-mcp-browse-cwd" class="btn small">浏览…</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="form-cell" style="margin-top:14px">
+                        <label>启动参数（每行一个）</label>
+                        <textarea id="m-args" rows="4" placeholder="-y&#10;@modelcontextprotocol/server-fetch"></textarea>
+                      </div>
+                    </div>
+
+                    <div id="m-sse-fields" class="hidden">
+                      <div class="form-cell" style="margin-top:14px">
+                        <label>服务地址 (baseUrl)</label>
+                        <input id="m-baseurl" type="text" placeholder="https://example.com/mcp/sse" />
+                        <div class="field-hint">以 /sse 结尾的远程 MCP 服务地址</div>
+                      </div>
+                      <div class="form-cell" style="margin-top:14px">
+                        <label>请求头（每行一行为 <code>Header: Value</code>，支持 ${KEY} 占位）</label>
+                        <textarea id="m-headers" rows="3" placeholder="Authorization: Bearer ${DASHSCOPE_API_KEY}"></textarea>
+                      </div>
+                    </div>
+
+                    <div class="form-cell" style="margin-top:14px">
+                      <label>环境变量（每行 <code>KEY=VALUE</code>）</label>
+                      <div class="field-hint">stdio：传给本地进程；SSE：用于替换上面 ${KEY} 占位符（如 API Key）</div>
+                      <textarea id="m-env" rows="3" placeholder="DASHSCOPE_API_KEY=sk-..."></textarea>
+                    </div>
+
+                    <label style="margin-top:12px;display:flex;align-items:center;gap:8px;font-weight:400">
+                      <input id="m-enabled" type="checkbox" checked style="width:auto" /> 启用该服务器
+                    </label>
+
+                    <div id="mcp-test-status" class="fetch-status"></div>
+
+                    <div class="btn-group" style="margin-top:18px">
+                      <button id="btn-mcp-test" class="btn">测试连接</button>
+                      <button id="btn-mcp-save" class="btn primary">保存并连接</button>
+                      <button id="btn-mcp-cancel" class="btn ghost">取消</button>
+                    </div>
+                  </div>
+
+                  <div id="mcp-json-editor" class="card hidden">
+                    <div class="card-title-row">
+                      <h2>从 JSON 导入</h2>
+                      <span class="hint">兼容 Claude Desktop 与 Cherry Studio 的 mcpServers 配置（支持 stdio 与 sse）</span>
+                    </div>
+                    <textarea id="m-json" rows="12" placeholder='{
   "mcpServers": {
     "fetch": {
       "command": "npx",
@@ -1111,86 +1108,112 @@
     }
   }
 }'></textarea>
-          <div id="mcp-json-status" class="fetch-status"></div>
-          <div class="btn-group" style="margin-top:14px">
-            <button id="btn-mcp-json-save" class="btn primary">导入并连接</button>
-            <button id="btn-mcp-json-cancel" class="btn ghost">取消</button>
-          </div>
-        </div>
+                    <div id="mcp-json-status" class="fetch-status"></div>
+                    <div class="btn-group" style="margin-top:14px">
+                      <button id="btn-mcp-json-save" class="btn primary">导入并连接</button>
+                      <button id="btn-mcp-json-cancel" class="btn ghost">取消</button>
+                    </div>
+                  </div>
 
-        <!-- MCP 市场 -->
-        <div id="mcp-market" class="card hidden">
-          <div class="card-title-row">
-            <h2>MCP 市场</h2>
-            <span class="hint">选择常用服务器模板，自动填充启动命令，只需填必要参数</span>
-          </div>
-          <div class="mcp-market-search">
-            <input id="mcp-market-search" type="text" placeholder="搜索服务器，如：github / fetch / 文件" />
-            <select id="mcp-market-category">
-              <option value="">全部分类</option>
-              <option value="常用">常用</option>
-              <option value="搜索">搜索</option>
-              <option value="开发">开发</option>
-              <option value="数据库">数据库</option>
-            </select>
-          </div>
-          <div id="mcp-market-list" class="mcp-market-list"></div>
-          <div id="mcp-market-params" class="mcp-market-params hidden">
-            <div class="card-title-row" style="margin:18px 0 10px">
-              <h3 id="mcp-market-params-title">配置服务器</h3>
+                  <div id="mcp-market" class="card hidden">
+                    <div class="card-title-row">
+                      <h2>MCP 市场</h2>
+                      <span class="hint">选择常用服务器模板，自动填充启动命令，只需填必要参数</span>
+                    </div>
+                    <div class="mcp-market-search">
+                      <input id="mcp-market-search" type="text" placeholder="搜索服务器，如：github / fetch / 文件" />
+                      <select id="mcp-market-category">
+                        <option value="">全部分类</option>
+                        <option value="常用">常用</option>
+                        <option value="搜索">搜索</option>
+                        <option value="开发">开发</option>
+                        <option value="数据库">数据库</option>
+                      </select>
+                    </div>
+                    <div id="mcp-market-list" class="mcp-market-list"></div>
+                    <div id="mcp-market-params" class="mcp-market-params hidden">
+                      <div class="card-title-row" style="margin:18px 0 10px">
+                        <h3 id="mcp-market-params-title">配置服务器</h3>
+                      </div>
+                      <div id="mcp-market-params-body"></div>
+                      <div id="mcp-market-status" class="fetch-status"></div>
+                      <div class="btn-group" style="margin-top:14px">
+                        <button id="btn-mcp-market-add" class="btn primary">添加并连接</button>
+                        <button id="btn-mcp-market-params-cancel" class="btn ghost">取消</button>
+                      </div>
+                    </div>
+                    <div class="btn-group" style="margin-top:18px">
+                      <button id="btn-mcp-market-cancel" class="btn ghost">关闭市场</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 智能体技能 -->
+                <div class="settings-section" id="settings-skills">
+                  <div class="card">
+                    <h2>智能体技能 <span id="skill-count" class="count">0</span></h2>
+                    <p class="hint" style="margin-bottom:14px">技能是智能体的专项能力包。安装后 AI 助手会自动调用对应技能（格式转换 / 看图 / 终端命令等）。</p>
+
+                    <div class="skill-section-title">已安装技能</div>
+                    <ul id="skill-list" class="skill-list"></ul>
+
+                    <div class="skill-section-title" style="margin-top:18px">推荐技能 <span class="count" style="font-size:12px;color:var(--text-3)">点击安装即用</span></div>
+                    <ul id="skill-recommended-list" class="skill-list"></ul>
+
+                    <div class="skill-section-title" style="margin-top:18px">在线查找技能（GitHub）</div>
+                    <div class="skill-search-row">
+                      <input id="skill-search-input" type="text" placeholder="输入技能类别，如：pdf / image / excel / 格式转换" />
+                      <button id="skill-search-btn" class="btn primary">🔍 搜索 GitHub</button>
+                    </div>
+                    <div id="skill-search-status" class="field-hint"></div>
+                    <ul id="skill-search-list" class="skill-list"></ul>
+
+                    <div class="skill-section-title" style="margin-top:18px">本地源码包技能（Claude Code 源码）</div>
+                    <div class="skill-search-row">
+                      <input id="skill-local-dir" type="text" readonly placeholder="选择源码包目录（含 src/skills/bundled）" />
+                      <button id="skill-pick-dir" class="btn">选择目录</button>
+                      <button id="skill-scan-local" class="btn primary">扫描技能</button>
+                    </div>
+                    <ul id="skill-local-list" class="skill-list"></ul>
+                  </div>
+                </div>
+
+                <!-- 更新日志 -->
+                <div class="settings-section" id="settings-update">
+                  <div class="card" id="update-card">
+                    <div class="card-title-row">
+                      <h2>软件更新</h2>
+                      <span id="update-version" class="tag-chip">v0.0.0</span>
+                    </div>
+                    <p class="hint" style="margin: 4px 0 12px">自动从 GitHub（ddxmu/AI-Copilot）检查新版本。开启应用时静默检查，也可手动检查并一键安装。完整安装包约 340MB，网络较慢时请耐心等待或手动下载。</p>
+                    <div class="update-row">
+                      <button id="btn-check-update" class="btn">检查更新</button>
+                      <button id="btn-install-update" class="btn primary hidden">下载并安装</button>
+                    </div>
+                    <div id="update-status" class="update-status"></div>
+                    <div id="update-progress-wrap" class="hidden">
+                      <div class="progress-bar"><div id="update-progress-bar" class="progress-fill"></div></div>
+                      <div id="update-progress-text" class="hint"></div>
+                    </div>
+                    <div id="update-manual-wrap" class="hidden" style="margin-top:10px">
+                      <a id="update-manual-link" href="#" target="_blank" class="link-btn">GitHub 下载太慢？点击手动下载 DMG</a>
+                    </div>
+                    <div id="update-notes" class="update-notes hidden"></div>
+                  </div>
+
+                  <div class="card">
+                    <div class="card-title-row">
+                      <h2>更新日志</h2>
+                      <span class="tag-chip">近期版本</span>
+                    </div>
+                    <p class="hint" style="margin: 4px 0 12px">AI Copilot 近期版本的升级内容（按版本倒序，取自本机 CHANGELOG.md）。</p>
+                    <div id="changelog-list" class="changelog-list"></div>
+                  </div>
+                </div>
+
+              </div>
             </div>
-            <div id="mcp-market-params-body"></div>
-            <div id="mcp-market-status" class="fetch-status"></div>
-            <div class="btn-group" style="margin-top:14px">
-              <button id="btn-mcp-market-add" class="btn primary">添加并连接</button>
-              <button id="btn-mcp-market-params-cancel" class="btn ghost">取消</button>
-            </div>
           </div>
-          <div class="btn-group" style="margin-top:18px">
-            <button id="btn-mcp-market-cancel" class="btn ghost">关闭市场</button>
-          </div>
-        </div>
-
-        <!-- 智能体技能 -->
-        <div class="card">
-          <h2>智能体技能 <span id="skill-count" class="count">0</span></h2>
-          <p class="hint" style="margin-bottom:14px">技能是智能体的专项能力包。安装后 AI 助手会自动调用对应技能（格式转换 / 看图 / 终端命令等）。</p>
-
-          <!-- 已安装技能 -->
-          <div class="skill-section-title">已安装技能</div>
-          <ul id="skill-list" class="skill-list"></ul>
-
-          <!-- 推荐技能（一键安装） -->
-          <div class="skill-section-title" style="margin-top:18px">推荐技能 <span class="count" style="font-size:12px;color:var(--text-3)">点击安装即用</span></div>
-          <ul id="skill-recommended-list" class="skill-list"></ul>
-
-          <!-- 在线查找 -->
-          <div class="skill-section-title" style="margin-top:18px">在线查找技能（GitHub）</div>
-          <div class="skill-search-row">
-            <input id="skill-search-input" type="text" placeholder="输入技能类别，如：pdf / image / excel / 格式转换" />
-            <button id="skill-search-btn" class="btn primary">🔍 搜索 GitHub</button>
-          </div>
-          <div id="skill-search-status" class="field-hint"></div>
-          <ul id="skill-search-list" class="skill-list"></ul>
-
-          <!-- 本地源码包技能 -->
-          <div class="skill-section-title" style="margin-top:18px">本地源码包技能（Claude Code 源码）</div>
-          <div class="skill-search-row">
-            <input id="skill-local-dir" type="text" readonly placeholder="选择源码包目录（含 src/skills/bundled）" />
-            <button id="skill-pick-dir" class="btn">选择目录</button>
-            <button id="skill-scan-local" class="btn primary">扫描技能</button>
-          </div>
-          <ul id="skill-local-list" class="skill-list"></ul>
-        </div>
-
-        <!-- 更新日志 -->
-        <div class="card">
-          <div class="card-title-row">
-            <h2>更新日志</h2>
-            <span class="tag-chip">近期版本</span>
-          </div>
-          <p class="hint" style="margin: 4px 0 12px">AI Copilot 近期版本的升级内容（按版本倒序，取自本机 CHANGELOG.md）。</p>
-          <div id="changelog-list" class="changelog-list"></div>
         </div>
       </section>
 

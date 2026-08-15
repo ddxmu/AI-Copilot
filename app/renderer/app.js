@@ -26,6 +26,10 @@ let ruleSeq = 0;
 document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => {
     if (btn.classList.contains('disabled')) return;
+    if (btn.dataset.panel === 'ai-settings') {
+      openSettingsModal();
+      return;
+    }
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'));
     document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
     btn.classList.add('active');
@@ -506,6 +510,49 @@ function switchPanel(name) {
   document.getElementById('panel-' + name).classList.add('active');
   autoGrow(); // 面板切换后重新测量输入框高度
 }
+
+/* ================= 设置弹窗 ================= */
+const settingsModal = document.getElementById('panel-ai-settings');
+
+function openSettingsModal(targetId) {
+  settingsModal.classList.remove('hidden');
+  // 默认打开「外观」或传入的分类
+  const target = targetId || 'settings-appearance';
+  activateSettingsNav(target);
+  requestAnimationFrame(() => {
+    const section = document.getElementById(target);
+    if (section) section.scrollIntoView({ behavior: 'instant', block: 'start' });
+  });
+}
+
+function closeSettingsModal() {
+  settingsModal.classList.add('hidden');
+}
+
+function activateSettingsNav(targetId) {
+  document.querySelectorAll('.settings-nav').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.target === targetId);
+  });
+}
+
+document.getElementById('btn-settings-close').addEventListener('click', closeSettingsModal);
+
+settingsModal.addEventListener('click', (e) => {
+  if (e.target === settingsModal || e.target.classList.contains('settings-modal-backdrop')) {
+    closeSettingsModal();
+  }
+});
+
+document.querySelectorAll('.settings-nav').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.target;
+    activateSettingsNav(target);
+    const section = document.getElementById(target);
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
 
 const resultCard = document.getElementById('result-card');
 const resultSummaryEl = document.getElementById('result-summary');
@@ -2204,7 +2251,7 @@ modelInfoEl.addEventListener('click', (e) => {
   const p = aiState.profiles.find((x) => x.id === aiState.activeId);
   if (!p || !p.model) {
     // 未配置 → 跳设置
-    switchPanel('ai-settings');
+    openSettingsModal('settings-ai-config');
   } else {
     toggleModelMenu();
   }
