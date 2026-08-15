@@ -718,6 +718,11 @@ body {
   display: block;
 }
 
+/* 收起左侧功能栏时，AI 聊天界面自动撑满内容区 */
+.sidebar.collapsed ~ .content #panel-ai {
+  max-width: none;
+}
+
 .panel-header {
   margin-bottom: 28px;
 }
@@ -1874,39 +1879,6 @@ body {
 }
 
 /* ========== AI 语音设置 ========== */
-input[type="range"]#voice-speed {
-  width: 100%;
-  height: 6px;
-  margin: 10px 0 6px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: var(--border);
-  border-radius: 3px;
-  outline: none;
-}
-
-input[type="range"]#voice-speed::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--primary);
-  cursor: pointer;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
-}
-
-input[type="range"]#voice-speed::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--primary);
-  cursor: pointer;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
-}
-
 #voice-test-status {
   margin-top: 10px;
 }

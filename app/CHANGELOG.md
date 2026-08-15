@@ -1,3 +1,14 @@
+## v0.9.29 — 2026-08-16
+- **AI 语音改为通用 OpenAI 兼容（清空旧的 MiniMax 逻辑）**：
+  - 删干净旧的 MiniMax 专用数据：默认接口地址（`https://api.minimax.chat/v1`）、`voiceId` / `voiceName` 音色字段、`speed` 语速、内置 12 条 MiniMax 系统音色、`fetchMinimaxVoices` 拉取接口，以及本地持久化的旧字段全部清空。
+  - 新设置面板：**API Key + API 地址 + 语音模型下拉 + 「拉取模型」按钮 + 保存 + 测试语音**，去掉「音色 / 语速」。
+  - 点「拉取模型」走 `GET {base}/v1/models`（不带回退到 `{base}/models`），复用 AI 模型拉取的候选兜底逻辑，列出接口可用模型。
+  - 朗读与麦克风识别统一走 OpenAI 兼容接口：`POST {base}/audio/speech` 发声、`POST {base}/audio/transcriptions` 识别，适配 OpenAI / SiliconFlow / 任意兼容服务。
+  - 自动朗读仍由 enabled 开关控制；测试语音不受 enabled 限制，可直接试听。
+
+- **收起左侧功能栏，聊天界面自动变宽**：
+  - 新增 `.sidebar.collapsed ~ .content #panel-ai { max-width:none }`，左侧功能栏收起时 AI 聊天区撑满内容区，自适应整体页面宽度。
+
 ## v0.9.28 — 2026-08-15
 - **AI 助手「工作完成」自动列表（右栏）**：
   - 新增右栏第二个标签页「工作完成」：当 AI 助手编写/修改一个文件、打开一个文件，或打开一个网页（`write_file` / `edit_file` / `open_file` / `open_url`），都会自动在右栏以**列表形式**展示已完成的文件与网页。

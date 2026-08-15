@@ -1804,17 +1804,14 @@ ipcMain.handle('memory-enabled-get', () => aiConfig.getMemoryEnabled());
 ipcMain.handle('memory-enabled-set', (_e, enabled) => aiConfig.setMemoryEnabled(enabled));
 ipcMain.handle('ai-voice-config-get', () => aiConfig.getVoiceConfig());
 ipcMain.handle('ai-voice-config-set', (_e, cfg) => aiConfig.setVoiceConfig(cfg));
-ipcMain.handle('ai-voice-fetch-voices', async (_e, { apiKey, baseUrl }) => {
+ipcMain.handle('ai-voice-fetch-models', async (_e, { apiKey, baseUrl }) => {
   try {
-    const voices = await aiConfig.fetchMinimaxVoices(apiKey, baseUrl);
-    return { ok: true, voices };
+    const models = await aiConfig.fetchVoiceModels({ apiKey, baseUrl });
+    return { ok: true, models };
   } catch (e) {
     return { ok: false, error: e && e.message ? e.message : String(e) };
   }
 });
-
-// 内置推荐音色（真实可用的 MiniMax 系统音色 ID，保证下拉框始终可发声）
-ipcMain.handle('ai-voice-default-voices', () => aiConfig.DEFAULT_MINIMAX_VOICE_IDS || []);
 
 /* ---------------- AI 语音网络请求（走主进程，绕过 CSP） ---------------- */
 // 先读原始文本再解析 JSON，避免接口返回 HTML/空字符串时直接抛出 JSON.parse 错误
@@ -1835,35 +1832,44 @@ async function readJsonResponse(resp) {
 ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
   try {
     const key = String(config.apiKey || '').trim();
-    if (!key) throw new Error('请先填写 MiniMax API Key 并保存');
-    const baseUrl = String(config.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
-    const model = String(config.model || 'speech-01-turbo').trim();
-    const voiceId = String(config.voiceId || '').trim();
-    if (!voiceId) throw new Error('请先选择 MiniMax 音色');
-    const speed = Number(config.speed) || 1.0;
+    if (!key) throw new Error('请先填写 API Key 并保存');
+    const baseUrl = String(config.baseUrl || '').replace(/\/$/, '');
+    if (!baseUrl) throw new Error('请先填写 API 地址并保存');
+    const model = String(config.model || '').trim();
+    if (!model) throw new Error('请先拉取并选择 TTS 模型');
     const body = {
       model,
-      text,
-      stream: false,
-      voice_setting: { voice_id: voiceId, speed: Math.max(0.5, Math.min(2, speed)) },
-      audio_setting: { sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 1 },
+      input: text,
+      voice: 'alloy',
+      response_format: 'mp3',
+      speed: 1.0,
     };
-    const resp = await fetch(`${baseUrl}/t2a_v2`, {
+    const resp = await fetch(`${baseUrl}/audio/speech`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
       body: JSON.stringify(body),
     });
-    const { status, data } = await readJsonResponse(resp);
-    if (status < 200 || status >= 300 || (data && data.base_resp && data.base_resp.status_code !== 0)) {
-      throw new Error((data && data.base_resp && data.base_resp.status_msg) || `HTTP ${status}`);
+    if (resp.status < 200 || resp.status >= 300) {
+      let msg = `HTTP ${resp.status}`;
+      try {
+        const t = await resp.text();
+        if (t && t.trim()) {
+          const d = JSON.parse(t);
+          if (d && d.error && d.error.message) msg = d.error.message;
+          else if (typeof d === 'string') msg = d;
+        }
+      } catch (e) { /* 忽略解析错误，保留 HTTP 状态 */ }
+      const tip = resp.status === 404
+        ? '：接口不存在，请确认「API 地址」末尾为 /v1（例如 https://api.openai.com/v1）'
+        : ((resp.status === 401 || resp.status === 403)
+          ? '：API Key 无效或无 TTS 权限'
+          : '');
+      throw new Error(`语音合成失败（${msg}）${tip}`);
     }
-    let audioBase64 = null;
-    let audioUrl = null;
-    if (data.audio && typeof data.audio === 'string') audioBase64 = data.audio;
-    else if (data.data && typeof data.data.audio === 'string') audioBase64 = data.data.audio;
-    else if (data.audio_file || (data.data && data.data.audio_file)) audioUrl = data.audio_file || data.data.audio_file;
-    if (!audioBase64 && !audioUrl) throw new Error('响应中未找到音频内容');
-    return { ok: true, audioBase64, audioUrl, mime: 'audio/mp3' };
+    const buf = Buffer.from(await resp.arrayBuffer());
+    const audioBase64 = buf.toString('base64');
+    if (!audioBase64) throw new Error('响应中未找到音频内容');
+    return { ok: true, audioBase64, mime: 'audio/mp3' };
   } catch (err) {
     return { ok: false, error: err && err.message ? err.message : String(err) };
   }
@@ -1873,8 +1879,9 @@ ipcMain.handle('ai-voice-stt', async (_e, { audioBase64, mime, config }) => {
   try {
     const key = String((config && config.apiKey) || '').trim();
     if (!key) throw new Error('请先在「AI 语音」设置中填写 API Key 并保存');
-    // 语音识别走 OpenAI 兼容的 /audio/transcriptions，与 TTS 同域名（用户配置的 baseUrl，默认 api.minimax.chat/v1）
-    const baseUrl = String((config && config.baseUrl) || 'https://api.minimax.chat/v1').replace(/\/$/, '');
+    // 语音识别走 OpenAI 兼容的 /audio/transcriptions（与 TTS 同域名的 baseUrl）
+    const baseUrl = String((config && config.baseUrl) || '').replace(/\/$/, '');
+    if (!baseUrl) throw new Error('请先填写 API 地址并保存');
     const url = `${baseUrl}/audio/transcriptions`;
     const buf = Buffer.from(String(audioBase64 || ''), 'base64');
     const form = new FormData();
@@ -1889,9 +1896,9 @@ ipcMain.handle('ai-voice-stt', async (_e, { audioBase64, mime, config }) => {
     if (status < 200 || status >= 300) {
       const msg = (data && data.error && data.error.message) || `HTTP ${status}`;
       const tip = status === 404
-        ? '：接口不存在，请确认「接口地址」末尾为 /v1（例如 https://api.minimax.chat/v1）'
+        ? '：接口不存在，请确认「接口地址」末尾为 /v1（例如 https://api.openai.com/v1）'
         : ((status === 401 || status === 403)
-          ? '：API Key 无效或无语音识别(ASR)权限（sk-cp- 开头的 Token Plan Key 仅含 TTS 权限，请改用按量付费 Key）'
+          ? '：API Key 无效或无语音识别(ASR)权限'
           : '');
       throw new Error(`语音识别失败（${msg}）${tip}`);
     }

@@ -882,8 +882,8 @@ function initMemorySettings() {
   }
 }
 
-/* ================= AI 语音设置 ================= */
-let voiceConfig = { enabled: false, baseUrl: 'https://api.minimax.chat/v1', apiKey: '', voiceId: '', voiceName: '', speed: 1.0 };
+/* ================= AI 语音设置（通用 OpenAI 兼容 TTS） ================= */
+let voiceConfig = { enabled: false, baseUrl: '', apiKey: '', model: '' };
 
 async function speakText(text, { bypassEnabled = false } = {}) {
   if (!bypassEnabled && !voiceConfig.enabled) return;
@@ -891,21 +891,22 @@ async function speakText(text, { bypassEnabled = false } = {}) {
   const clean = String(text).trim();
   if (!clean) return;
   try {
-    await speakMinimax(clean);
+    await speakTTS(clean);
   } catch (e) { console.error('speak failed', e); throw e; }
 }
 
-async function speakMinimax(text) {
+async function speakTTS(text) {
   const key = voiceConfig.apiKey;
   if (!key) throw new Error('请先填写 API Key 并保存');
-  const voiceId = voiceConfig.voiceId;
-  if (!voiceId) throw new Error('请先选择音色');
+  const baseUrl = voiceConfig.baseUrl;
+  if (!baseUrl) throw new Error('请先填写 API 地址并保存');
+  const model = voiceConfig.model;
+  if (!model) throw new Error('请先拉取并选择 TTS 模型');
 
-  // 走主进程 IPC 请求 TTS，绕过渲染进程 CSP 对 fetch 的限制
+  // 走主进程 IPC 请求 TTS（OpenAI 兼容 /audio/speech），绕过渲染进程 CSP 对 fetch 的限制
   const resp = await window.api.aiVoiceTTS({ text, config: voiceConfig });
   if (!resp || !resp.ok) throw new Error((resp && resp.error) || 'TTS 请求失败');
 
-  // MiniMax 可能返回 audio（base64）或 audio_file 下载链接；优先 audio
   let audioSrc = null;
   if (resp.audioBase64 && typeof resp.audioBase64 === 'string') {
     const blob = base64ToBlob(resp.audioBase64, resp.mime || 'audio/mp3');
@@ -949,28 +950,24 @@ async function initVoiceSettings() {
   const enabledToggle = document.getElementById('voice-enabled-toggle');
   const apiKeyInput = document.getElementById('voice-apikey');
   const baseUrlInput = document.getElementById('voice-baseurl');
-  const voiceSelect = document.getElementById('voice-voiceid');
-  const speedInput = document.getElementById('voice-speed');
-  const speedVal = document.getElementById('voice-speed-val');
+  const modelSelect = document.getElementById('voice-model');
   const fetchStatus = document.getElementById('voice-fetch-status');
   const testStatus = document.getElementById('voice-test-status');
   const keyHint = document.getElementById('voice-key-hint');
   const apiKeyToggle = document.getElementById('voice-apikey-toggle');
 
   if (enabledToggle) enabledToggle.checked = !!voiceConfig.enabled;
-  if (baseUrlInput) baseUrlInput.value = voiceConfig.baseUrl || 'https://api.minimax.chat/v1';
-  if (speedInput) speedInput.value = Number(voiceConfig.speed) || 1.0;
-  if (speedVal) speedVal.textContent = (Number(voiceConfig.speed) || 1.0).toFixed(1) + 'x';
+  if (baseUrlInput) baseUrlInput.value = voiceConfig.baseUrl || '';
   if (apiKeyInput) apiKeyInput.value = voiceConfig.apiKey || '';
 
-  // 下拉框始终预置真实可用的 MiniMax 系统音色（保证能发声），并选中已保存项
-  const curated = (window.api.aiVoiceDefaultVoices && window.api.aiVoiceDefaultVoices()) || [];
-  function fillVoiceOptions(voices, selectedId) {
-    const list = (Array.isArray(voices) && voices.length) ? voices : curated;
-    voiceSelect.innerHTML = list.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name || v.id)}</option>`).join('');
-    if (selectedId) voiceSelect.value = selectedId;
+  // 模型下拉：先填占位，再根据已保存项选中；拉取模型后刷新列表
+  function fillModelOptions(models, selectedId) {
+    const list = Array.isArray(models) ? models : [];
+    modelSelect.innerHTML = `<option value="">请选择模型</option>` +
+      list.map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.id)}</option>`).join('');
+    if (selectedId) modelSelect.value = selectedId;
   }
-  fillVoiceOptions(curated, voiceConfig.voiceId);
+  fillModelOptions([], voiceConfig.model);
 
   if (apiKeyInput && keyHint) {
     if (voiceConfig.apiKey) {
@@ -989,34 +986,28 @@ async function initVoiceSettings() {
     });
   }
 
-  // 语速
-  if (speedInput) {
-    speedInput.addEventListener('input', () => {
-      if (speedVal) speedVal.textContent = Number(speedInput.value).toFixed(1) + 'x';
-    });
-  }
-
-  // 拉取音色（可选刷新：成功替换下拉，失败显示真实错误但保留内置列表）
-  const fetchBtn = document.getElementById('btn-voice-fetch-voices');
+  // 拉取模型（GET {base}/v1/models，成功替换下拉并选中已保存项）
+  const fetchBtn = document.getElementById('btn-voice-fetch-models');
   if (fetchBtn) {
     fetchBtn.addEventListener('click', async () => {
       fetchStatus.textContent = '';
       const key = apiKeyInput ? apiKeyInput.value.trim() : '';
       const base = baseUrlInput ? baseUrlInput.value.trim() : '';
       if (!key) { fetchStatus.textContent = '请先填写 API Key'; return; }
+      if (!base) { fetchStatus.textContent = '请先填写 API 地址'; return; }
       fetchBtn.disabled = true; fetchBtn.textContent = '拉取中…';
       try {
-        const r = await window.api.aiVoiceFetchVoices(key, base);
-        fetchBtn.disabled = false; fetchBtn.textContent = '拉取音色';
-        if (r.ok && Array.isArray(r.voices) && r.voices.length) {
-          fillVoiceOptions(r.voices, voiceConfig.voiceId);
-          fetchStatus.textContent = `已拉取 ${r.voices.length} 个音色（来自接口）`;
+        const r = await window.api.aiVoiceFetchModels(key, base);
+        fetchBtn.disabled = false; fetchBtn.textContent = '拉取模型';
+        if (r.ok && Array.isArray(r.models) && r.models.length) {
+          fillModelOptions(r.models, voiceConfig.model);
+          fetchStatus.textContent = `已拉取 ${r.models.length} 个模型（来自接口）`;
         } else {
-          fetchStatus.textContent = `拉取失败：${r.error || '未知错误'}。已保留内置推荐音色，可直接选择使用。`;
+          fetchStatus.textContent = `拉取失败：${r.error || '未知错误'}`;
         }
       } catch (e) {
-        fetchBtn.disabled = false; fetchBtn.textContent = '拉取音色';
-        fetchStatus.textContent = '拉取失败：' + (e && e.message ? e.message : String(e)) + '。已保留内置推荐音色，可直接选择使用。';
+        fetchBtn.disabled = false; fetchBtn.textContent = '拉取模型';
+        fetchStatus.textContent = '拉取失败：' + (e && e.message ? e.message : String(e));
       }
     });
   }
@@ -1025,14 +1016,12 @@ async function initVoiceSettings() {
   const saveBtn = document.getElementById('btn-voice-save');
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
-      const sel = voiceSelect ? voiceSelect.selectedOptions[0] : null;
+      const sel = modelSelect ? modelSelect.selectedOptions[0] : null;
       const newCfg = {
         enabled: enabledToggle ? enabledToggle.checked : false,
-        baseUrl: baseUrlInput ? baseUrlInput.value.trim() : 'https://api.minimax.chat/v1',
+        baseUrl: baseUrlInput ? baseUrlInput.value.trim() : '',
         apiKey: apiKeyInput ? apiKeyInput.value.trim() : '',
-        voiceId: voiceSelect ? voiceSelect.value : '',
-        voiceName: sel ? (sel.textContent || '') : '',
-        speed: speedInput ? Number(speedInput.value) : 1.0,
+        model: modelSelect ? modelSelect.value : '',
       };
       try {
         voiceConfig = await window.api.aiVoiceConfigSet(newCfg);

@@ -11,11 +11,9 @@ function configPath() {
 
 const DEFAULT_VOICE = {
   enabled: false,         // 是否自动朗读 AI 回复
-  baseUrl: 'https://api.minimax.chat/v1',
+  baseUrl: '',            // 通用 OpenAI 兼容 base URL，例如 https://api.openai.com/v1
   apiKey: '',
-  voiceId: '',
-  voiceName: '',
-  speed: 1.0,
+  model: '',             // 选中的 TTS 模型
 };
 
 const DEFAULT_STATE = {
@@ -113,7 +111,7 @@ function getMemoryEnabled() {
   return loadState().memoryEnabled ?? true;
 }
 
-/* ---------------- AI 语音配置 ---------------- */
+/* ---------------- AI 语音配置（通用 OpenAI 兼容 TTS） ---------------- */
 function getVoiceConfig() {
   return { ...DEFAULT_VOICE, ...(loadState().voice || {}) };
 }
@@ -123,114 +121,43 @@ function setVoiceConfig(cfg) {
   const prev = { ...DEFAULT_VOICE, ...(state.voice || {}) };
   const next = {
     enabled: !!(cfg && cfg.enabled),
-    baseUrl: String((cfg && cfg.baseUrl) || prev.baseUrl || DEFAULT_VOICE.baseUrl).trim() || DEFAULT_VOICE.baseUrl,
+    baseUrl: String((cfg && cfg.baseUrl != null ? cfg.baseUrl : prev.baseUrl) || '').trim(),
     apiKey: String((cfg && cfg.apiKey != null ? cfg.apiKey : prev.apiKey) || '').trim(),
-    voiceId: String((cfg && cfg.voiceId != null ? cfg.voiceId : prev.voiceId) || '').trim(),
-    voiceName: String((cfg && cfg.voiceName != null ? cfg.voiceName : prev.voiceName) || '').trim(),
-    speed: Math.max(0.5, Math.min(2.0, parseFloat((cfg && cfg.speed) ?? prev.speed) || 1.0)),
+    model: String((cfg && cfg.model != null ? cfg.model : prev.model) || '').trim(),
   };
   state.voice = next;
   saveState(state);
   return next;
 }
 
-// MiniMax 真实可用的系统音色（TTS 直接可用）。接口拉取失败时作为兜底下拉项，保证仍能发声。
-const DEFAULT_MINIMAX_VOICE_IDS = [
-  { id: 'female-yujie', name: '御姐音' },
-  { id: 'female-shaonv', name: '少女音' },
-  { id: 'female-chengshu', name: '成熟女性' },
-  { id: 'female-tianmei', name: '甜美女性' },
-  { id: 'male-qn-qingse', name: '青涩青年' },
-  { id: 'male-qn-jingying', name: '精英青年' },
-  { id: 'male-qn-badao', name: '霸道青年' },
-  { id: 'male-qn-daxuesheng', name: '青年大学生' },
-  { id: 'presenter_male', name: '男性主持人' },
-  { id: 'presenter_female', name: '女性主持人' },
-  { id: 'audiobook_male_1', name: ' male_1' },
-  { id: 'audiobook_female_1', name: ' female_1' },
-];
-
-// 拉取 MiniMax 音色列表：POST 到语音管理域名 api.minimaxi.com（与 TTS 的 api.minimax.chat 不同）
-// 多候选端点兜底，避免单一路径 404。失败抛出真实错误（不假成功）。
-async function fetchMinimaxVoices(apiKey, baseUrl) {
-  const key = String(apiKey || '').trim();
-  if (!key) throw new Error('请先填写 API Key');
-  const raw = String(baseUrl || DEFAULT_VOICE.baseUrl).replace(/\/+$/, '');
-  // 把 TTS 域名映射到语音管理域名
-  const voiceBase = raw
-    .replace('api.minimax.chat', 'api.minimaxi.com')
-    .replace('api.minimax.io', 'api.minimaxi.com');
-  const candidates = [
-    `${voiceBase}/get_voice`,
-    `${voiceBase}/v1/get_voice`,
-    `${raw}/get_voice`,
-  ];
+// 拉取通用 OpenAI 兼容的 TTS 模型列表（GET {base}/v1/models 或 {base}/models）
+// 复用 modelsUrlCandidates / fetchJson，与 AI 模型拉取同一套兜底逻辑。失败抛出真实错误（不假成功）。
+async function fetchVoiceModels({ apiKey, baseUrl }) {
+  const base = String(baseUrl || '').replace(/\/+$/, '');
+  if (!base) throw new Error('请先填写 API 地址');
+  if (!apiKey) throw new Error('请先填写 API Key');
+  const profile = { baseUrl: base, apiKey, type: 'openai' };
+  const candidates = modelsUrlCandidates(profile);
   let lastErr = null;
-  for (const ep of candidates) {
+  for (const url of candidates) {
     try {
-      const data = await postJson(ep, { 'Authorization': `Bearer ${key}` }, JSON.stringify({ voice_type: 'all' }), 15000);
-      // 接口返回 { system_voice[], voice_cloning[], voice_generation[], base_resp }
-      if (data && data.base_resp && data.base_resp.status_code != null && data.base_resp.status_code !== 0) {
-        lastErr = new Error(`拉取音色失败：${data.base_resp.status_msg || '未知错误'}`);
-        continue;
-      }
-      const groups = ['system_voice', 'voice_cloning', 'voice_generation'];
-      const all = [];
-      for (const g of groups) {
-        const arr = data && data[g];
-        if (Array.isArray(arr)) all.push(...arr);
-      }
-      if (!all.length) { lastErr = new Error('接口返回为空，未找到任何音色'); continue; }
-      const mapped = all
-        .map((v) => ({
-          id: String(v.voice_id || v.id || v.voiceId || '').trim(),
-          name: String(v.voice_name || v.name || v.id || v.voice_id || '').trim(),
-        }))
-        .filter((v) => v.id);
-      if (!mapped.length) { lastErr = new Error('接口返回的音色缺少 voice_id 字段'); continue; }
+      const data = await fetchJson(url, { Authorization: `Bearer ${apiKey}` });
+      const list = data.data || [];
+      if (!Array.isArray(list)) { lastErr = new Error('接口返回格式异常，未找到模型列表'); continue; }
+      if (!list.length) { lastErr = new Error('接口返回为空，未找到任何模型'); continue; }
+      // 只保留名称/ID 含 tts / speech / audio 的模型（避免把 chat 模型塞进 TTS 下拉，但保留全部以防命名不标准）
+      const mapped = list
+        .map((m) => ({ id: String(m.id || m.name || '').trim(), name: String(m.id || m.name || '').trim() }))
+        .filter((m) => m.id);
+      if (!mapped.length) { lastErr = new Error('接口返回缺少模型 id 字段'); continue; }
       return mapped;
     } catch (e) {
       lastErr = e;
+      // 404 说明路径不对，尝试下一个候选；其它错误（401/超时等）直接抛出
+      if (!/HTTP 404/.test(e.message)) throw e;
     }
   }
-  throw lastErr || new Error('无法拉取音色列表');
-}
-
-// POST + JSON body 的 HTTP 请求（fetchJson 仅支持 GET，音色列表接口需要 POST）
-function postJson(urlStr, headers = {}, bodyStr, timeoutMs = 15000) {
-  return new Promise((resolve, reject) => {
-    let url;
-    try { url = new URL(urlStr); } catch (e) { return reject(new Error('API 地址无效')); }
-    const lib = url.protocol === 'http:' ? http : https;
-    const req = lib.request(
-      {
-        method: 'POST',
-        hostname: url.hostname,
-        port: url.port || (url.protocol === 'http:' ? 80 : 443),
-        path: url.pathname + url.search,
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(bodyStr), ...headers },
-        timeout: timeoutMs,
-      },
-      (res) => {
-        const chunks = [];
-        res.on('data', (c) => chunks.push(c));
-        res.on('end', () => {
-          // 用 Buffer.concat 再 toString，避免中文乱码（编码铁律）
-          const raw = Buffer.concat(chunks).toString('utf8');
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            try { resolve(JSON.parse(raw)); }
-            catch (e) { reject(new Error('响应不是有效 JSON')); }
-          } else {
-            reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0, 200)}`));
-          }
-        });
-      }
-    );
-    req.on('timeout', () => { req.destroy(new Error('请求超时')); });
-    req.on('error', reject);
-    req.write(bodyStr);
-    req.end();
-  });
+  throw lastErr || new Error('无法拉取模型列表');
 }
 
 /* ---------------- MCP 服务器配置 ---------------- */
@@ -442,6 +369,5 @@ module.exports = {
   testConnection,
   getVoiceConfig,
   setVoiceConfig,
-  fetchMinimaxVoices,
-  DEFAULT_MINIMAX_VOICE_IDS,
+  fetchVoiceModels,
 };
