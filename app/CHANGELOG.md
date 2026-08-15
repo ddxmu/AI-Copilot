@@ -1,3 +1,6 @@
+## v0.9.34 — 2026-08-16
+- **修复 AI 语音回复「两个声音同时响」（用户反馈）**：`speakText` 在云端 provider（海螺/自定义）播放中途出错时会回退到本地 `speechSynthesis`，导致海螺声还在响、本地声又叠加。现改为只播放「当前保存的 provider」对应的那一路：选本地只播本地，选海螺/自定义只播云端；云端失败不再回退本地（避免两路混播），并在播云端前先 `speechSynthesis.cancel()` 清掉可能残留的本地语音队列。
+
 ## v0.9.33 — 2026-08-16
 - **修复麦克风语音识别 404（用户反馈）**：聊天框麦克风报「接口返回不是有效 JSON：404 page not found」。根因是 minimax 分支请求了 `api.minimax.chat/v1/audio/transcriptions`（MiniMax **没有** OpenAI 兼容的该端点）。现改为走 MiniMax 原生 ASR 接口 `POST {host}/v1/audio/asr`（JSON body，base64 音频，非 multipart），候选域名 `api.minimax.chat` / `api.minimaxi.com` / `api.minimax.io` 逐个尝试，兼容 `text`/`data.text`/`data.utter`/`data.result` 多种返回结构。「自定义」provider 仍走 OpenAI 兼容 `/audio/transcriptions`（用于 OpenAI / 硅基流动 / 通义等 Whisper）。注意：若 MiniMax Key 不带 ASR 权限（如 sk-cp- Token Plan 仅含 TTS），ASR 会返回 401/403，此时请在「AI 语音 › 自定义」里填一个 OpenAI 兼容 Whisper 地址做语音识别。
 

@@ -921,6 +921,12 @@ async function speakText(text, { bypassEnabled = false } = {}) {
   if (!text) return;
   const clean = String(text).trim();
   if (!clean) return;
+  // 只播放「当前保存的 provider」对应的声音，不与其他 provider 混播：
+  // 选了本地就只播本地；选了海螺/自定义就只播云端。云端失败不再回退本地，
+  // 避免海螺音频还在响、本地声又叠加进来 = 两个声音同时出现。
+  if (voiceConfig.provider !== 'local') {
+    try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (_) {}
+  }
   try {
     if (voiceConfig.provider === 'local') {
       await speakLocal(clean);
@@ -931,11 +937,7 @@ async function speakText(text, { bypassEnabled = false } = {}) {
     }
   } catch (e) {
     console.error('speak failed', e);
-    // 云端失败时自动回退本地声音
-    if (voiceConfig.provider !== 'local') {
-      try { await speakLocal(clean); return; } catch (_) { /* 忽略本地失败，抛出原错误 */ }
-    }
-    throw e;
+    // 不回退到本地语音：保证只播放选中的那一路，失败就静默跳过
   }
 }
 

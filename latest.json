@@ -1,17 +1,17 @@
 {
-  "version": "0.9.33",
+  "version": "0.9.34",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.33/AI.Copilot-0.9.33-arm64.dmg",
-  "dmgSha256": "cd9ea6c3dc5d00dd545d3d31deb12b87d88e4bfdc71c18800e9a1d09dbada0a8",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.33/AI.Copilot-0.9.33.zip",
-  "patchSha256": "488e6009171af6ea626f6c9307af2b1ebc41789fd0789d57ea2b5e3e784b5f91",
-  "notes": "修复麦克风语音识别 404：MiniMax 分支改用原生 ASR 接口 /v1/audio/asr（候选域名 api.minimax.chat / api.minimaxi.com / api.minimax.io），不再请求不存在的 OpenAI 兼容 /audio/transcriptions；自定义 provider 仍走 OpenAI 兼容 Whisper。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.34/AI.Copilot-0.9.34-arm64.dmg",
+  "dmgSha256": "2b322da19aee2df50b6c6a5e6903b31bb9d8d74d7499e48f361a72ccd04818ef",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.34/AI.Copilot-0.9.34.zip",
+  "patchSha256": "396fda5fa94e3be36893f6c2629521faad0d282fab45c706eea5365bc6ad4980",
+  "notes": "修复 AI 语音回复「两个声音同时响」：speakText 在云端 provider（海螺/自定义）播放中途出错会回退到本地 speechSynthesis，导致海螺声与本地声叠加。现只播放当前保存 provider 对应的那一路，云端失败不再回退本地，并在播云端前先取消残留的本地语音队列。",
   "deltas": [
     {
-      "from": "0.9.32",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.33/AI.Copilot-0.9.33.zip",
-      "sha256": "488e6009171af6ea626f6c9307af2b1ebc41789fd0789d57ea2b5e3e784b5f91"
+      "from": "0.9.33",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.34/AI.Copilot-0.9.34.zip",
+      "sha256": "396fda5fa94e3be36893f6c2629521faad0d282fab45c706eea5365bc6ad4980"
     }
   ]
 }
