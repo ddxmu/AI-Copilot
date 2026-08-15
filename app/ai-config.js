@@ -14,9 +14,11 @@ const DEFAULT_VOICE = {
   provider: 'local',      // 'local' 使用系统 speechSynthesis；'minimax' 使用 MiniMax 海螺 TTS
   baseUrl: 'https://api.minimax.chat/v1',
   apiKey: '',
-  model: 'speech-2.8-turbo',
+  model: 'speech-01-turbo',
   voiceId: '',
   speed: 1.0,
+  // 语音识别（STT）默认跟随当前 AI 配置；也可设为 'minimax' 用 MiniMax ASR
+  sttProvider: 'active',
 };
 
 const DEFAULT_STATE = {
@@ -134,6 +136,7 @@ function setVoiceConfig(cfg) {
   state.voice.model = String(state.voice.model || '').trim() || DEFAULT_VOICE.model;
   state.voice.voiceId = String(state.voice.voiceId || '').trim();
   state.voice.speed = Math.max(0.5, Math.min(2.0, parseFloat(state.voice.speed) || 1.0));
+  state.voice.sttProvider = ['active', 'minimax'].includes(state.voice.sttProvider) ? state.voice.sttProvider : 'active';
   saveState(state);
   return state.voice;
 }
@@ -160,13 +163,18 @@ async function fetchMinimaxVoices(apiKey, baseUrl) {
       lastErr = new Error('接口返回为空');
     } catch (e) { lastErr = e; }
   }
-  // 兜底：返回已知公共音色（截图中的「御姐音」等）
+  // 兜底：返回 MiniMax 公开系统音色（若官方接口拉取失败，仍可手动选择）
   return [
     { id: 'female-yujie', name: '御姐音' },
-    { id: 'male-qn', name: '青年男声' },
-    { id: 'female-sx', name: '少女音' },
-    { id: 'female-cm', name: '成熟女声' },
-    { id: 'male-cm', name: '成熟男声' },
+    { id: 'female-shaonv', name: '少女音' },
+    { id: 'female-chengshu', name: '成熟女性' },
+    { id: 'female-tianmei', name: '甜美女性' },
+    { id: 'male-qn-qingse', name: '青涩青年' },
+    { id: 'male-qn-jingying', name: '精英青年' },
+    { id: 'male-qn-badao', name: '霸道青年' },
+    { id: 'male-qn-daxuesheng', name: '青年大学生' },
+    { id: 'presenter_male', name: '男性主持人' },
+    { id: 'presenter_female', name: '女性主持人' },
   ];
 }
 

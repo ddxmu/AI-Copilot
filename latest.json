@@ -1,16 +1,16 @@
 {
-  "version": "0.9.15",
-  "notes": "新增 AI 语音设置与麦克风联动：AI 设置里新增「AI 语音」分类，可选「本地（免费/离线）」或「MiniMax 海螺（高质量）」模式；MiniMax 模式支持填 API Key、拉取音色、选择音质模型、调节语速并保存。开启 AI 语音后，点 AI 助手麦克风会自动创建新对话并开始聆听，说完自动发送，AI 回复完成后自动用语音朗读；再点麦克风可停止聆听/朗读。",
-  "pubDate": "2026-08-15T17:25:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.15/AI.Copilot-0.9.15-arm64.dmg",
-  "sha256": "e825cf7abe06569963f1a1c762784d752798901c3cf6f1a16994ce0347207907",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.15/AI.Copilot-0.9.15.zip",
-  "patchSha256": "201b7d5d095deb5524e3fbcd042bc32bd364519a0c25e1939cb749153ed780eb",
+  "version": "0.9.16",
+  "notes": "修复麦克风语音识别无结果：替换 Chromium webkitSpeechRecognition 为 MediaRecorder 本地录音 + 服务端转写；新增语音识别来源选择（跟随当前 AI 配置 / MiniMax ASR）。修复本地/MiniMax 测试语音无声音：本地模式等待 voices 并选择中文语音，MiniMax 修正默认模型为 speech-01-turbo、增加嵌套响应兼容、测试按钮可绕过总开关直接试听。",
+  "pubDate": "2026-08-15T17:56:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.16/AI.Copilot-0.9.16-arm64.dmg",
+  "sha256": "56b14d1a92f8616567d4fdb87c13591f41751a47add37eef60f00e74d1423c5d",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.16/AI.Copilot-0.9.16.zip",
+  "patchSha256": "c6f23a43c1dd4b2f2421209293a32b46023fb326c852400464842c49f3a3937a",
   "deltas": [
     {
-      "from": "0.9.14",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.15/AI.Copilot-0.9.15.zip",
-      "sha256": "201b7d5d095deb5524e3fbcd042bc32bd364519a0c25e1939cb749153ed780eb"
+      "from": "0.9.15",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.16/AI.Copilot-0.9.16.zip",
+      "sha256": "c6f23a43c1dd4b2f2421209293a32b46023fb326c852400464842c49f3a3937a"
     }
   ]
 }

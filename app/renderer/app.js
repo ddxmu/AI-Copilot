@@ -883,7 +883,7 @@ function initMemorySettings() {
 }
 
 /* ================= AI 语音设置 ================= */
-let voiceConfig = { enabled: false, provider: 'local', baseUrl: 'https://api.minimax.chat/v1', apiKey: '', model: 'speech-2.8-turbo', voiceId: '', speed: 1.0 };
+let voiceConfig = { enabled: false, provider: 'local', baseUrl: 'https://api.minimax.chat/v1', apiKey: '', model: 'speech-01-turbo', voiceId: '', speed: 1.0, sttProvider: 'active' };
 
 function applyVoiceProviderUI(provider) {
   document.querySelectorAll('.voice-provider-tab').forEach((btn) => {
@@ -893,42 +893,67 @@ function applyVoiceProviderUI(provider) {
   document.getElementById('voice-provider-minimax').classList.toggle('hidden', provider !== 'minimax');
 }
 
-async function speakText(text) {
-  if (!voiceConfig.enabled || !text) return;
+async function speakText(text, { bypassEnabled = false } = {}) {
+  if (!bypassEnabled && !voiceConfig.enabled) return;
+  if (!text) return;
   const clean = String(text).trim();
   if (!clean) return;
   try {
     if (voiceConfig.provider === 'minimax') {
       await speakMinimax(clean);
     } else {
-      speakLocal(clean);
+      await speakLocal(clean);
     }
-  } catch (e) { console.error('speak failed', e); }
+  } catch (e) { console.error('speak failed', e); throw e; }
 }
 
-function speakLocal(text) {
+async function loadVoices() {
   const synth = window.speechSynthesis;
-  if (!synth) return;
+  if (!synth) return [];
+  return new Promise((resolve) => {
+    let voices = synth.getVoices();
+    if (voices && voices.length) { resolve(voices); return; }
+    synth.addEventListener('voiceschanged', () => {
+      voices = synth.getVoices();
+      resolve(voices);
+    }, { once: true });
+    // 某些浏览器 voiceschanged 不触发，2s 兜底
+    setTimeout(() => resolve(synth.getVoices()), 2000);
+  });
+}
+
+async function speakLocal(text) {
+  const synth = window.speechSynthesis;
+  if (!synth) throw new Error('当前环境不支持系统语音合成');
   synth.cancel();
+  const voices = await loadVoices();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'zh-CN';
   u.rate = voiceConfig.speed || 1.0;
-  synth.speak(u);
+  // 优先选中文语音，否则用默认
+  const zhVoice = voices.find((v) => /^zh-(CN|HK|TW|Hans|Hant)/i.test(v.lang)) || voices.find((v) => /Chinese|中文/i.test(v.name));
+  if (zhVoice) u.voice = zhVoice;
+  return new Promise((resolve, reject) => {
+    u.onend = resolve;
+    u.onerror = (e) => reject(new Error('系统语音播放失败：' + (e && e.message ? e.message : '未知错误')));
+    synth.speak(u);
+  });
 }
 
 async function speakMinimax(text) {
   const key = voiceConfig.apiKey;
-  if (!key) return;
+  if (!key) throw new Error('请先填写 MiniMax API Key 并保存');
   const baseUrl = (voiceConfig.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
-  const model = voiceConfig.model || 'speech-2.8-turbo';
+  const model = voiceConfig.model || 'speech-01-turbo';
   const voiceId = voiceConfig.voiceId;
+  if (!voiceId) throw new Error('请先选择 MiniMax 音色');
   const speed = Number(voiceConfig.speed) || 1.0;
 
   const body = {
     model,
     text,
     stream: false,
-    voice_setting: { voice_id: voiceId || undefined, speed: Math.max(0.5, Math.min(2, speed)) },
+    voice_setting: { voice_id: voiceId, speed: Math.max(0.5, Math.min(2, speed)) },
     audio_setting: { sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 1 },
   };
 
@@ -946,13 +971,20 @@ async function speakMinimax(text) {
   if (data.audio && typeof data.audio === 'string') {
     const blob = base64ToBlob(data.audio, 'audio/mp3');
     audioSrc = URL.createObjectURL(blob);
-  } else if (data.audio_file) {
-    audioSrc = data.audio_file;
+  } else if (data.data && typeof data.data.audio === 'string') {
+    const blob = base64ToBlob(data.data.audio, 'audio/mp3');
+    audioSrc = URL.createObjectURL(blob);
+  } else if (data.audio_file || (data.data && data.data.audio_file)) {
+    audioSrc = data.audio_file || data.data.audio_file;
   }
   if (!audioSrc) throw new Error('响应中未找到音频内容');
   const a = new Audio(audioSrc);
-  a.playbackRate = 1; // MiniMax 已在服务端调速
-  await a.play();
+  a.playbackRate = 1;
+  return new Promise((resolve, reject) => {
+    a.onended = resolve;
+    a.onerror = () => reject(new Error('音频播放失败'));
+    a.play().catch(reject);
+  });
 }
 
 function base64ToBlob(base64, mime) {
@@ -976,11 +1008,12 @@ async function initVoiceSettings() {
   const testStatus = document.getElementById('voice-test-status');
   const keyHint = document.getElementById('voice-key-hint');
   const clearKeyCb = document.getElementById('voice-clear-key');
+  const sttProviderSel = document.getElementById('voice-stt-provider');
 
   if (enabledToggle) enabledToggle.checked = !!voiceConfig.enabled;
   applyVoiceProviderUI(voiceConfig.provider || 'local');
   if (baseUrlInput) baseUrlInput.value = voiceConfig.baseUrl || 'https://api.minimax.chat/v1';
-  if (modelSelect) modelSelect.value = voiceConfig.model || 'speech-2.8-turbo';
+  if (modelSelect) modelSelect.value = voiceConfig.model || 'speech-01-turbo';
   if (voiceSelect) {
     if (voiceConfig.voiceId) {
       voiceSelect.innerHTML = `<option value="${escapeHtml(voiceConfig.voiceId)}">${escapeHtml(voiceConfig.voiceId)}</option>`;
@@ -991,6 +1024,7 @@ async function initVoiceSettings() {
   }
   if (speedInput) speedInput.value = Number(voiceConfig.speed) || 1.0;
   if (speedVal) speedVal.textContent = (Number(voiceConfig.speed) || 1.0).toFixed(1) + 'x';
+  if (sttProviderSel) sttProviderSel.value = voiceConfig.sttProvider || 'active';
   if (apiKeyInput && keyHint) {
     if (voiceConfig.apiKey) keyHint.classList.remove('hidden');
     else keyHint.classList.add('hidden');
@@ -1042,9 +1076,10 @@ async function initVoiceSettings() {
         enabled: enabledToggle ? enabledToggle.checked : false,
         provider: voiceConfig.provider || 'local',
         baseUrl: baseUrlInput ? baseUrlInput.value.trim() : 'https://api.minimax.chat/v1',
-        model: modelSelect ? modelSelect.value : 'speech-2.8-turbo',
+        model: modelSelect ? modelSelect.value : 'speech-01-turbo',
         voiceId: voiceSelect ? voiceSelect.value : '',
         speed: speedInput ? Number(speedInput.value) : 1.0,
+        sttProvider: sttProviderSel ? sttProviderSel.value : 'active',
       };
       if (clearKeyCb && clearKeyCb.checked) {
         newCfg.apiKey = '';
@@ -1060,13 +1095,13 @@ async function initVoiceSettings() {
     });
   }
 
-  // 测试
+  // 测试（测试语音不受 enabled 开关限制，可直接试听）
   const testBtn = document.getElementById('btn-voice-test');
   if (testBtn) {
     testBtn.addEventListener('click', async () => {
       testStatus.textContent = '正在播放测试语音…';
       try {
-        await speakText('你好，我是 AI Copilot 的语音助手。');
+        await speakText('你好，我是 AI Copilot 的语音助手。', { bypassEnabled: true });
         testStatus.textContent = '✓ 测试语音已播放';
       } catch (e) { testStatus.textContent = '测试失败：' + (e && e.message ? e.message : String(e)); }
     });
@@ -2243,77 +2278,15 @@ function autoGrow() {
 }
 chatInput.addEventListener('input', autoGrow);
 
-// 语音输入（Web Speech API）
-// 流程：点击麦克风 → 未授权则弹授权提示 → 点「授权」调用 getUserMedia 触发系统麦克风授权
-//       → 授权通过后启动识别，实时把语音文字写入输入框 → 说话结束自动发送
-let recognizer = null, recognizing = false, micGranted = false;
+// 语音输入（MediaRecorder + STT）
+// 流程：点击麦克风 → 未授权则弹授权提示 → 授权后开始录音 → 检测到静音或再次点击结束
+//       → 把录音发给 STT 服务（MiniMax ASR 或当前 AI 配置 /audio/transcriptions）→ 自动发送
+let micGranted = false, isRecording = false, mediaRecorder = null, micStream = null, audioChunks = [];
+let recordContext = null, recordAnalyser = null, silenceTimer = null, silenceFrames = 0;
 const micModal = document.getElementById('mic-modal');
 const micGrantBtn = document.getElementById('btn-mic-grant');
 const micCancelBtn = document.getElementById('btn-mic-cancel');
 const micErrEl = document.getElementById('mic-modal-error');
-
-function buildRecognizer() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return null;
-  const r = new SR();
-  r.lang = 'zh-CN';
-  r.interimResults = true;   // 实时把临时识别结果显示到输入框
-  r.continuous = false;      // 停顿即结束一次语音输入
-  r.onresult = (ev) => {
-    let interim = '', finalTxt = '';
-    for (let i = 0; i < ev.results.length; i++) {
-      const seg = ev.results[i][0].transcript;
-      if (ev.results[i].isFinal) finalTxt += seg; else interim += seg;
-    }
-    // 已确认内容 + 当前临时内容一起显示，用户能实时看到在说什么
-    chatInput.value = finalTxt + interim;
-    autoGrow();
-  };
-  r.onend = () => {
-    recognizing = false;
-    btnVoice.classList.remove('listening');
-    // 说话结束：若输入框有内容则自动发送
-    const txt = chatInput.value.trim();
-    if (txt && !sending) {
-      sendChat();
-    } else if (!txt) {
-      chatStatusEl.textContent = '未识别到语音，请重试';
-    }
-  };
-  r.onerror = (ev) => {
-    recognizing = false;
-    btnVoice.classList.remove('listening');
-    const map = {
-      'not-allowed': '麦克风权限被拒绝，请在系统设置中允许本应用使用麦克风',
-      'service-not-allowed': '语音识别服务不可用（可能受网络/地区限制）',
-      'no-speech': '没有检测到语音',
-      'audio-capture': '未找到麦克风设备',
-      'network': '网络异常，语音识别需要联网',
-    };
-    chatStatusEl.textContent = '语音识别结束：' + (map[ev.error] || ev.error || '未知错误');
-  };
-  return r;
-}
-
-// 真正开始识别（需已获麦克风授权）
-function startRecognition() {
-  if (!recognizer) recognizer = buildRecognizer();
-  if (!recognizer) {
-    chatStatusEl.textContent = '当前环境不支持语音输入（webkitSpeechRecognition 不可用）';
-    return;
-  }
-  if (recognizing) { recognizer.stop(); return; }
-  try {
-    recognizing = true;
-    btnVoice.classList.add('listening');
-    chatStatusEl.textContent = '正在聆听…请说话';
-    recognizer.start();
-  } catch (e) {
-    // 已在运行会抛错，忽略；其余情况重置状态，稍后用户可重试
-    recognizing = false;
-    btnVoice.classList.remove('listening');
-  }
-}
 
 // 请求麦克风授权：getUserMedia 会触发系统权限弹窗
 async function requestMicPermission() {
@@ -2324,7 +2297,7 @@ async function requestMicPermission() {
   }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    // 拿到即可，立即停止，避免麦克风指示灯常亮；真正录音交给语音识别
+    // 拿到权限后先停掉临时流，真正录音时会重新获取
     stream.getTracks().forEach((t) => t.stop());
     micGranted = true;
     return true;
@@ -2337,7 +2310,6 @@ async function requestMicPermission() {
   }
 }
 
-// 弹窗显隐
 function openMicModal() {
   micErrEl.classList.add('hidden');
   micErrEl.textContent = '';
@@ -2356,23 +2328,226 @@ micGrantBtn.addEventListener('click', async () => {
   micGrantBtn.textContent = '授权';
   if (ok) {
     closeMicModal();
-    startRecognition();
+    startRecording();
   }
 });
 
+function resetRecordingUI() {
+  isRecording = false;
+  btnVoice.classList.remove('listening');
+  if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+  silenceFrames = 0;
+  if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
+  if (recordContext && recordContext.state !== 'closed') { recordContext.close().catch(() => {}); recordContext = null; }
+  recordAnalyser = null;
+}
+
+function finalizeRecording() {
+  if (!isRecording || !mediaRecorder) return;
+  if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+}
+
+function startRecording() {
+  if (isRecording) { finalizeRecording(); return; }
+  if (!window.MediaRecorder) {
+    chatStatusEl.textContent = '当前环境不支持录音（MediaRecorder 不可用）';
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+    micStream = stream;
+    audioChunks = [];
+    const mimeType = getSupportedMimeType();
+    mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      resetRecordingUI();
+      if (audioChunks.length === 0) {
+        chatStatusEl.textContent = '未录制到音频，请重试';
+        return;
+      }
+      const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      handleVoiceBlob(blob);
+    };
+    mediaRecorder.onerror = (e) => {
+      resetRecordingUI();
+      chatStatusEl.textContent = '录音出错：' + (e && e.message ? e.message : '未知错误');
+    };
+
+    mediaRecorder.start(200);
+    isRecording = true;
+    btnVoice.classList.add('listening');
+    chatStatusEl.textContent = '正在聆听…请说话（再次点击结束）';
+
+    // 静默检测：连续 1.5s 音量过低则自动停止
+    setupSilenceDetection(stream);
+  }).catch((e) => {
+    chatStatusEl.textContent = '无法启动录音：' + (e && e.message ? e.message : e);
+  });
+}
+
+function getSupportedMimeType() {
+  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+  for (const t of types) { if (MediaRecorder.isTypeSupported(t)) return t; }
+  return '';
+}
+
+function setupSilenceDetection(stream) {
+  try {
+    recordContext = new AudioContext();
+    const src = recordContext.createMediaStreamSource(stream);
+    recordAnalyser = recordContext.createAnalyser();
+    recordAnalyser.fftSize = 256;
+    src.connect(recordAnalyser);
+    // 不连接 destination，避免自环；100ms 检测一次，连续 15 次（约 1.5s）静音则自动结束
+    silenceTimer = setTimeout(checkSilenceTick, 100);
+  } catch (e) { /* 静默检测失败不影响录音 */ }
+}
+
+function checkSilenceTick() {
+  if (!isRecording || !recordAnalyser) return;
+  const data = new Uint8Array(recordAnalyser.frequencyBinCount);
+  recordAnalyser.getByteFrequencyData(data);
+  const avg = data.reduce((a, b) => a + b, 0) / data.length;
+  if (avg < 10) {
+    silenceFrames++;
+    if (silenceFrames >= 15) { finalizeRecording(); return; }
+  } else {
+    silenceFrames = 0;
+  }
+  silenceTimer = setTimeout(checkSilenceTick, 100);
+}
+
+async function handleVoiceBlob(blob) {
+  chatStatusEl.textContent = '正在识别…';
+  try {
+    let text = '';
+    if (voiceConfig.sttProvider === 'minimax') {
+      text = await transcribeWithMinimax(blob);
+    } else {
+      text = await transcribeWithActiveProfile(blob);
+    }
+    if (!text || !text.trim()) {
+      chatStatusEl.textContent = '未识别到语音，请重试';
+      return;
+    }
+    chatInput.value = text.trim();
+    autoGrow();
+    chatStatusEl.textContent = '';
+    if (!sending) sendChat();
+  } catch (e) {
+    chatStatusEl.textContent = '语音识别失败：' + (e && e.message ? e.message : String(e));
+  }
+}
+
+async function transcribeWithActiveProfile(blob) {
+  const profiles = aiState.profiles || [];
+  const active = profiles.find((p) => p.id === aiState.activeId) || profiles[0];
+  if (!active) throw new Error('没有可用的 AI 配置，请先在「AI 设置 › AI 配置」中添加');
+  const baseUrl = String(active.baseUrl || '').replace(/\/$/, '');
+  if (!baseUrl) throw new Error('当前 AI 配置缺少模型地址');
+  const url = `${baseUrl}/audio/transcriptions`;
+  const form = new FormData();
+  form.append('file', blob, 'voice.webm');
+  form.append('model', 'whisper-1');
+  form.append('language', 'zh');
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${active.apiKey || ''}` },
+    body: form,
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error?.message || `HTTP ${resp.status}`);
+  return data.text || '';
+}
+
+async function transcribeWithMinimax(blob) {
+  const key = voiceConfig.apiKey;
+  if (!key) throw new Error('请先填写 MiniMax API Key 并保存');
+  const baseUrl = String(voiceConfig.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
+  // MiniMax ASR 需要 wav/16kHz base64
+  const base64 = await blobToWavBase16(blob, 16000);
+  const resp = await fetch(`${baseUrl}/audio/asr`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    body: JSON.stringify({ audio_format: 'wav', sample_rate: 16000, language: 'zh-CN', audio_data: base64 }),
+  });
+  const data = await resp.json();
+  if (!resp.ok || (data.base_resp && data.base_resp.status_code !== 0)) {
+    throw new Error((data.base_resp && data.base_resp.status_msg) || `HTTP ${resp.status}`);
+  }
+  return data.text || '';
+}
+
+// 将 Blob 解码并重采样为 16kHz WAV 后返回 base64
+async function blobToWavBase16(blob, targetSampleRate) {
+  const buf = await blob.arrayBuffer();
+  const srcCtx = new AudioContext();
+  try {
+    const audioBuffer = await srcCtx.decodeAudioData(buf);
+    const offline = new OfflineAudioContext(1, Math.ceil(audioBuffer.duration * targetSampleRate), targetSampleRate);
+    const s = offline.createBufferSource();
+    s.buffer = audioBuffer;
+    s.connect(offline.destination);
+    s.start();
+    const out = await offline.startRendering();
+    return audioBufferToBase64Wav(out);
+  } finally {
+    try { srcCtx.close(); } catch (e) {}
+  }
+}
+
+function audioBufferToBase64Wav(buffer) {
+  const numOfChan = buffer.numberOfChannels;
+  const length = buffer.length * numOfChan * 2 + 44;
+  const arr = new ArrayBuffer(length);
+  const view = new DataView(arr);
+  const channels = [];
+  for (let i = 0; i < numOfChan; i++) channels.push(buffer.getChannelData(i));
+  let pos = 0;
+  function writeUint32(v) { view.setUint32(pos, v, true); pos += 4; }
+  function writeUint16(v) { view.setUint16(pos, v, true); pos += 2; }
+  writeUint32(0x46464952); // RIFF
+  writeUint32(length - 8);
+  writeUint32(0x45564157); // WAVE
+  writeUint32(0x20746d66); // fmt
+  writeUint32(16);
+  writeUint16(1);
+  writeUint16(numOfChan);
+  writeUint32(buffer.sampleRate);
+  writeUint32(buffer.sampleRate * numOfChan * 2);
+  writeUint16(numOfChan * 2);
+  writeUint16(16);
+  writeUint32(0x61746164); // data
+  writeUint32(length - pos - 4);
+  for (let i = 0; i < buffer.length; i++) {
+    for (let c = 0; c < numOfChan; c++) {
+      let sample = channels[c][i];
+      sample = Math.max(-1, Math.min(1, sample));
+      sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+      view.setInt16(pos, sample | 0, true);
+      pos += 2;
+    }
+  }
+  const bytes = new Uint8Array(arr);
+  let binary = '';
+  const len = bytes.length;
+  for (let i = 0; i < len; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
 btnVoice.addEventListener('click', () => {
-  // 如果 AI 语音模式开启：首次点击麦克风自动新建对话并开始聆听；再点则停止
+  // 如果 AI 语音模式开启：首次点击麦克风自动新建对话并开始录音；再点则停止
   if (voiceConfig.enabled) {
-    if (recognizing) { if (recognizer) recognizer.stop(); return; }
-    // 停止当前朗读
+    if (isRecording) { finalizeRecording(); return; }
     try { window.speechSynthesis.cancel(); } catch (e) {}
     createNewChat();
-    if (micGranted) { startRecognition(); }
+    if (micGranted) { startRecording(); }
     else { openMicModal(); }
     return;
   }
-  // 普通模式：已有授权直接识别，否则弹授权
-  if (micGranted) { startRecognition(); return; }
+  // 普通模式：已有授权直接录音，否则弹授权
+  if (micGranted) { startRecording(); return; }
   openMicModal();
 });
 
