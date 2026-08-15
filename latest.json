@@ -5,12 +5,12 @@
   "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.29/AI.Copilot-0.9.29-arm64.dmg",
   "sha256": "de7e7061d1fbdc256e177bac28a43467dfd1a69ad830a898daa8cbc0b8f63ded",
   "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.29/AI.Copilot-0.9.29.zip",
-  "patchSha256": "967e21f049fedecc182271b445b8d512481c40a4be31292971386c3dbf64b860",
+  "patchSha256": "6516151a61a7cb049d7afff14b73dffae2e7986525e27a486623b6970fbf95c6",
   "deltas": [
     {
       "from": "0.9.28",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.29/AI.Copilot-0.9.29.zip",
-      "sha256": "967e21f049fedecc182271b445b8d512481c40a4be31292971386c3dbf64b860"
+      "sha256": "6516151a61a7cb049d7afff14b73dffae2e7986525e27a486623b6970fbf95c6"
     }
   ]
 }
