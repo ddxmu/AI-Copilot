@@ -1809,13 +1809,12 @@ ipcMain.handle('ai-voice-fetch-voices', async (_e, { apiKey, baseUrl }) => {
     const voices = await aiConfig.fetchMinimaxVoices(apiKey, baseUrl);
     return { ok: true, voices };
   } catch (e) {
-    return {
-      ok: false,
-      error: e && e.message ? e.message : String(e),
-      fallbackVoices: aiConfig.DEFAULT_MINIMAX_VOICE_IDS || [],
-    };
+    return { ok: false, error: e && e.message ? e.message : String(e) };
   }
 });
+
+// 内置推荐音色（真实可用的 MiniMax 系统音色 ID，保证下拉框始终可发声）
+ipcMain.handle('ai-voice-default-voices', () => aiConfig.DEFAULT_MINIMAX_VOICE_IDS || []);
 
 /* ---------------- AI 语音网络请求（走主进程，绕过 CSP） ---------------- */
 // 先读原始文本再解析 JSON，避免接口返回 HTML/空字符串时直接抛出 JSON.parse 错误
@@ -1870,55 +1869,33 @@ ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
   }
 });
 
-ipcMain.handle('ai-voice-stt', async (_e, { provider, audioBase64, mime, profile, config }) => {
+ipcMain.handle('ai-voice-stt', async (_e, { audioBase64, mime, config }) => {
   try {
-    if (provider === 'minimax') {
-      const key = String(config.apiKey || '').trim();
-      if (!key) throw new Error('请先填写 API Key 并保存');
-      // 语音识别走 OpenAI 兼容的 /audio/transcriptions，与 TTS 同域名（用户配置的 baseUrl，默认 api.minimax.chat/v1）
-      const baseUrl = String(config.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
-      const url = `${baseUrl}/audio/transcriptions`;
-      const buf = Buffer.from(String(audioBase64 || ''), 'base64');
-      const form = new FormData();
-      form.append('file', new Blob([buf], { type: mime || 'audio/wav' }), 'voice.wav');
-      form.append('language', 'zh');
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${key}` },
-        body: form,
-      });
-      const { status, data } = await readJsonResponse(resp);
-      if (status < 200 || status >= 300) {
-        const msg = (data && data.error && data.error.message) || `HTTP ${status}`;
-        const tip = status === 404
-          ? '：接口不存在，请确认「接口地址」末尾为 /v1（例如 https://api.minimax.chat/v1）'
-          : ((status === 401 || status === 403)
-            ? '：API Key 无效或无语音识别(ASR)权限（sk-cp- 开头的 Token Plan Key 仅含 TTS 权限，请改用按量付费 Key）'
-            : '');
-        throw new Error(`语音识别失败（${msg}）${tip}`);
-      }
-      return { ok: true, text: (data && data.text) || '' };
-    }
-    // 默认：跟随当前 AI 配置，走 OpenAI 兼容 /audio/transcriptions
-    const active = profile;
-    if (!active) throw new Error('没有可用的 AI 配置，请先在「AI 设置 › AI 配置」中添加');
-    const baseUrl = String(active.baseUrl || '').replace(/\/$/, '');
-    if (!baseUrl) throw new Error('当前 AI 配置缺少模型地址');
+    const key = String((config && config.apiKey) || '').trim();
+    if (!key) throw new Error('请先在「AI 语音」设置中填写 API Key 并保存');
+    // 语音识别走 OpenAI 兼容的 /audio/transcriptions，与 TTS 同域名（用户配置的 baseUrl，默认 api.minimax.chat/v1）
+    const baseUrl = String((config && config.baseUrl) || 'https://api.minimax.chat/v1').replace(/\/$/, '');
     const url = `${baseUrl}/audio/transcriptions`;
     const buf = Buffer.from(String(audioBase64 || ''), 'base64');
-    const ext = (mime === 'audio/webm') ? 'webm' : (mime === 'audio/mp4' ? 'm4a' : 'webm');
     const form = new FormData();
-    form.append('file', new Blob([buf], { type: mime || 'audio/webm' }), `voice.${ext}`);
-    form.append('model', 'whisper-1');
+    form.append('file', new Blob([buf], { type: mime || 'audio/wav' }), 'voice.wav');
     form.append('language', 'zh');
     const resp = await fetch(url, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${active.apiKey || ''}` },
+      headers: { 'Authorization': `Bearer ${key}` },
       body: form,
     });
     const { status, data } = await readJsonResponse(resp);
-    if (status < 200 || status >= 300) throw new Error((data && data.error && data.error.message) || `HTTP ${status}`);
-    return { ok: true, text: data.text || '' };
+    if (status < 200 || status >= 300) {
+      const msg = (data && data.error && data.error.message) || `HTTP ${status}`;
+      const tip = status === 404
+        ? '：接口不存在，请确认「接口地址」末尾为 /v1（例如 https://api.minimax.chat/v1）'
+        : ((status === 401 || status === 403)
+          ? '：API Key 无效或无语音识别(ASR)权限（sk-cp- 开头的 Token Plan Key 仅含 TTS 权限，请改用按量付费 Key）'
+          : '');
+      throw new Error(`语音识别失败（${msg}）${tip}`);
+    }
+    return { ok: true, text: (data && data.text) || '' };
   } catch (err) {
     return { ok: false, error: err && err.message ? err.message : String(err) };
   }

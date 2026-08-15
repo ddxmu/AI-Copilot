@@ -883,15 +883,7 @@ function initMemorySettings() {
 }
 
 /* ================= AI 语音设置 ================= */
-let voiceConfig = { enabled: false, provider: 'local', baseUrl: 'https://api.minimax.chat/v1', apiKey: '', model: 'speech-01-turbo', voiceId: '', speed: 1.0, sttProvider: 'active' };
-
-function applyVoiceProviderUI(provider) {
-  document.querySelectorAll('.voice-provider-tab').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.provider === provider);
-  });
-  document.getElementById('voice-provider-local').classList.toggle('hidden', provider !== 'local');
-  document.getElementById('voice-provider-minimax').classList.toggle('hidden', provider !== 'minimax');
-}
+let voiceConfig = { enabled: false, baseUrl: 'https://api.minimax.chat/v1', apiKey: '', voiceId: '', voiceName: '', speed: 1.0 };
 
 async function speakText(text, { bypassEnabled = false } = {}) {
   if (!bypassEnabled && !voiceConfig.enabled) return;
@@ -899,45 +891,8 @@ async function speakText(text, { bypassEnabled = false } = {}) {
   const clean = String(text).trim();
   if (!clean) return;
   try {
-    if (voiceConfig.provider === 'minimax') {
-      await speakMinimax(clean);
-    } else {
-      await speakLocal(clean);
-    }
+    await speakMinimax(clean);
   } catch (e) { console.error('speak failed', e); throw e; }
-}
-
-async function loadVoices() {
-  const synth = window.speechSynthesis;
-  if (!synth) return [];
-  return new Promise((resolve) => {
-    let voices = synth.getVoices();
-    if (voices && voices.length) { resolve(voices); return; }
-    synth.addEventListener('voiceschanged', () => {
-      voices = synth.getVoices();
-      resolve(voices);
-    }, { once: true });
-    // 某些浏览器 voiceschanged 不触发，2s 兜底
-    setTimeout(() => resolve(synth.getVoices()), 2000);
-  });
-}
-
-async function speakLocal(text) {
-  const synth = window.speechSynthesis;
-  if (!synth) throw new Error('当前环境不支持系统语音合成');
-  synth.cancel();
-  const voices = await loadVoices();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'zh-CN';
-  u.rate = voiceConfig.speed || 1.0;
-  // 优先选中文语音，否则用默认
-  const zhVoice = voices.find((v) => /^zh-(CN|HK|TW|Hans|Hant)/i.test(v.lang)) || voices.find((v) => /Chinese|中文/i.test(v.name));
-  if (zhVoice) u.voice = zhVoice;
-  return new Promise((resolve, reject) => {
-    u.onend = resolve;
-    u.onerror = (e) => reject(new Error('系统语音播放失败：' + (e && e.message ? e.message : '未知错误')));
-    synth.speak(u);
-  });
 }
 
 async function speakMinimax(text) {
@@ -994,36 +949,33 @@ async function initVoiceSettings() {
   const enabledToggle = document.getElementById('voice-enabled-toggle');
   const apiKeyInput = document.getElementById('voice-apikey');
   const baseUrlInput = document.getElementById('voice-baseurl');
-  const modelSelect = document.getElementById('voice-model');
   const voiceSelect = document.getElementById('voice-voiceid');
   const speedInput = document.getElementById('voice-speed');
   const speedVal = document.getElementById('voice-speed-val');
   const fetchStatus = document.getElementById('voice-fetch-status');
   const testStatus = document.getElementById('voice-test-status');
   const keyHint = document.getElementById('voice-key-hint');
-  const clearKeyCb = document.getElementById('voice-clear-key');
   const apiKeyToggle = document.getElementById('voice-apikey-toggle');
 
   if (enabledToggle) enabledToggle.checked = !!voiceConfig.enabled;
-  applyVoiceProviderUI(voiceConfig.provider || 'local');
   if (baseUrlInput) baseUrlInput.value = voiceConfig.baseUrl || 'https://api.minimax.chat/v1';
-  if (modelSelect) modelSelect.value = voiceConfig.model || 'speech-01-turbo';
-  if (voiceSelect) {
-    if (voiceConfig.voiceId) {
-      voiceSelect.innerHTML = `<option value="${escapeHtml(voiceConfig.voiceId)}">${escapeHtml(voiceConfig.voiceId)}</option>`;
-      voiceSelect.value = voiceConfig.voiceId;
-    } else {
-      voiceSelect.innerHTML = '<option value="">请先拉取音色</option>';
-    }
-  }
   if (speedInput) speedInput.value = Number(voiceConfig.speed) || 1.0;
   if (speedVal) speedVal.textContent = (Number(voiceConfig.speed) || 1.0).toFixed(1) + 'x';
-  // 回显已保存的 Key：密码框以圆点显示，眼睛按钮可点开查看，避免关闭/重开后空框误以为没保存
   if (apiKeyInput) apiKeyInput.value = voiceConfig.apiKey || '';
+
+  // 下拉框始终预置真实可用的 MiniMax 系统音色（保证能发声），并选中已保存项
+  const curated = (window.api.aiVoiceDefaultVoices && window.api.aiVoiceDefaultVoices()) || [];
+  function fillVoiceOptions(voices, selectedId) {
+    const list = (Array.isArray(voices) && voices.length) ? voices : curated;
+    voiceSelect.innerHTML = list.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name || v.id)}</option>`).join('');
+    if (selectedId) voiceSelect.value = selectedId;
+  }
+  fillVoiceOptions(curated, voiceConfig.voiceId);
+
   if (apiKeyInput && keyHint) {
     if (voiceConfig.apiKey) {
       keyHint.classList.remove('hidden');
-      keyHint.textContent = '已保存 API Key（圆点为已保存内容，留空保持原 Key，点眼睛可查看）';
+      keyHint.textContent = '已保存 API Key（圆点为已保存内容，点眼睛可查看）';
     } else {
       keyHint.classList.add('hidden');
     }
@@ -1037,14 +989,6 @@ async function initVoiceSettings() {
     });
   }
 
-  // 切换模式
-  document.querySelectorAll('.voice-provider-tab').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      voiceConfig.provider = btn.dataset.provider;
-      applyVoiceProviderUI(voiceConfig.provider);
-    });
-  });
-
   // 语速
   if (speedInput) {
     speedInput.addEventListener('input', () => {
@@ -1052,41 +996,27 @@ async function initVoiceSettings() {
     });
   }
 
-  // 拉取音色
+  // 拉取音色（可选刷新：成功替换下拉，失败显示真实错误但保留内置列表）
   const fetchBtn = document.getElementById('btn-voice-fetch-voices');
-  const defaultVoiceIds = [
-    { id: 'female-yujie', name: '御姐音' },
-    { id: 'female-shaonv', name: '少女音' },
-    { id: 'female-chengshu', name: '成熟女性' },
-    { id: 'female-tianmei', name: '甜美女性' },
-    { id: 'male-qn-qingse', name: '青涩青年' },
-    { id: 'male-qn-jingying', name: '精英青年' },
-    { id: 'male-qn-badao', name: '霸道青年' },
-    { id: 'male-qn-daxuesheng', name: '青年大学生' },
-    { id: 'presenter_male', name: '男性主持人' },
-    { id: 'presenter_female', name: '女性主持人' },
-  ];
   if (fetchBtn) {
     fetchBtn.addEventListener('click', async () => {
       fetchStatus.textContent = '';
       const key = apiKeyInput ? apiKeyInput.value.trim() : '';
-      if (!key) { fetchStatus.textContent = '请先输入 API Key'; return; }
+      const base = baseUrlInput ? baseUrlInput.value.trim() : '';
+      if (!key) { fetchStatus.textContent = '请先填写 API Key'; return; }
       fetchBtn.disabled = true; fetchBtn.textContent = '拉取中…';
       try {
-        const r = await window.api.aiVoiceFetchVoices(key, baseUrlInput ? baseUrlInput.value.trim() : '');
+        const r = await window.api.aiVoiceFetchVoices(key, base);
         fetchBtn.disabled = false; fetchBtn.textContent = '拉取音色';
-        const voices = (r.ok && Array.isArray(r.voices) && r.voices.length) ? r.voices : (r.fallbackVoices || defaultVoiceIds);
-        if (r.ok) {
-          fetchStatus.textContent = `已拉取 ${voices.length} 个音色`;
+        if (r.ok && Array.isArray(r.voices) && r.voices.length) {
+          fillVoiceOptions(r.voices, voiceConfig.voiceId);
+          fetchStatus.textContent = `已拉取 ${r.voices.length} 个音色（来自接口）`;
         } else {
-          fetchStatus.textContent = `拉取失败：${r.error || '未知错误'}。已加载默认音色（共 ${voices.length} 个），可继续选择，但真实语音合成需要有效的 API Key 和接口地址。`;
+          fetchStatus.textContent = `拉取失败：${r.error || '未知错误'}。已保留内置推荐音色，可直接选择使用。`;
         }
-        voiceSelect.innerHTML = voices.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name || v.id)}</option>`).join('');
-        if (voiceConfig.voiceId) voiceSelect.value = voiceConfig.voiceId;
       } catch (e) {
         fetchBtn.disabled = false; fetchBtn.textContent = '拉取音色';
-        fetchStatus.textContent = '拉取失败：' + (e && e.message ? e.message : String(e));
-        voiceSelect.innerHTML = defaultVoiceIds.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name || v.id)}</option>`).join('');
+        fetchStatus.textContent = '拉取失败：' + (e && e.message ? e.message : String(e)) + '。已保留内置推荐音色，可直接选择使用。';
       }
     });
   }
@@ -1095,27 +1025,22 @@ async function initVoiceSettings() {
   const saveBtn = document.getElementById('btn-voice-save');
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
+      const sel = voiceSelect ? voiceSelect.selectedOptions[0] : null;
       const newCfg = {
         enabled: enabledToggle ? enabledToggle.checked : false,
-        provider: voiceConfig.provider || 'local',
         baseUrl: baseUrlInput ? baseUrlInput.value.trim() : 'https://api.minimax.chat/v1',
-        model: modelSelect ? modelSelect.value : 'speech-01-turbo',
+        apiKey: apiKeyInput ? apiKeyInput.value.trim() : '',
         voiceId: voiceSelect ? voiceSelect.value : '',
+        voiceName: sel ? (sel.textContent || '') : '',
         speed: speedInput ? Number(speedInput.value) : 1.0,
       };
-      if (clearKeyCb && clearKeyCb.checked) {
-        newCfg.apiKey = '';
-      } else {
-        newCfg.apiKey = apiKeyInput && apiKeyInput.value.trim() ? apiKeyInput.value.trim() : voiceConfig.apiKey;
-      }
       try {
         voiceConfig = await window.api.aiVoiceConfigSet(newCfg);
-        testStatus.textContent = '✓ 语音设置已保存（API Key 已写入本地）';
-        // 保存后把输入框回填为已持久化的 Key（圆点显示），保证关掉重开也能看到已保存
+        testStatus.textContent = '✓ 语音设置已保存';
         if (apiKeyInput) apiKeyInput.value = voiceConfig.apiKey || '';
         if (keyHint) {
           keyHint.classList.toggle('hidden', !voiceConfig.apiKey);
-          if (voiceConfig.apiKey) keyHint.textContent = '已保存 API Key（圆点为已保存内容，留空保持原 Key，点眼睛可查看）';
+          if (voiceConfig.apiKey) keyHint.textContent = '已保存 API Key（圆点为已保存内容，点眼睛可查看）';
         }
       } catch (e) { testStatus.textContent = '保存失败：' + (e && e.message ? e.message : String(e)); }
     });
@@ -2476,12 +2401,7 @@ function checkSilenceTick() {
 async function handleVoiceBlob(blob) {
   chatStatusEl.textContent = '正在识别…';
   try {
-    let text = '';
-    if (voiceConfig.sttProvider === 'minimax') {
-      text = await transcribeWithMinimax(blob);
-    } else {
-      text = await transcribeWithActiveProfile(blob);
-    }
+    const text = await transcribeWithMinimax(blob);
     if (!text || !text.trim()) {
       chatStatusEl.textContent = '未识别到语音，请重试';
       return;
@@ -2495,30 +2415,12 @@ async function handleVoiceBlob(blob) {
   }
 }
 
-async function transcribeWithActiveProfile(blob) {
-  const profiles = aiState.profiles || [];
-  const active = profiles.find((p) => p.id === aiState.activeId) || profiles[0];
-  if (!active) throw new Error('没有可用的 AI 配置，请先在「AI 设置 › AI 配置」中添加');
-  const baseUrl = String(active.baseUrl || '').replace(/\/$/, '');
-  if (!baseUrl) throw new Error('当前 AI 配置缺少模型地址');
-  const base64 = await blobToBase64(blob);
-  const resp = await window.api.aiVoiceSTT({
-    provider: 'active',
-    audioBase64: base64,
-    mime: blob.type || 'audio/webm',
-    profile: active,
-  });
-  if (!resp || !resp.ok) throw new Error((resp && resp.error) || '语音识别失败');
-  return resp.text || '';
-}
-
 async function transcribeWithMinimax(blob) {
   const key = voiceConfig.apiKey;
   if (!key) throw new Error('请先填写 API Key 并保存');
   // 语音识别需要 wav/16kHz base64
   const base64 = await blobToWavBase16(blob, 16000);
   const resp = await window.api.aiVoiceSTT({
-    provider: 'minimax',
     audioBase64: base64,
     mime: 'audio/wav',
     config: voiceConfig,

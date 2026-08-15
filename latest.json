@@ -1,16 +1,16 @@
 {
-  "version": "0.9.26",
-  "notes": "更新器优化：修复断点续传累积坏包导致下载 416 的问题（HEAD 校验续传偏移、CDN 返回 200 忽略 Range 时改为截断从头写、416 越界自动清理坏缓存并从头重试、致命/最终失败自动清理坏缓存）；更新失败 UI 新增「清理下载缓存并重试」按钮，点击即删除 .update 缓存目录并自动重新更新。",
-  "pubDate": "2026-08-15T23:40:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.26/AI.Copilot-0.9.26-arm64.dmg",
-  "sha256": "7706b001d78faa22e66d24548a6f8c09691809d1bbe97c3122676c800b4fe266",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.26/AI.Copilot-0.9.26.zip",
-  "patchSha256": "3bba175e843dee7b8c6cbf156cc5a5af6ed3e70371bdb1c690ebfa7e9194a801",
+  "version": "0.9.27",
+  "notes": "AI 语音整块重做：删除旧的「AI语音（高质量）」双标签/模型选择等旧逻辑，统一为纯 MiniMax TTS。新设置面板 = API Key（眼睛显隐）+ 接口地址 + 音色下拉 + 语速 + 保存 + 测试语音；音色下拉始终预置真实可用的 MiniMax 系统音色（保证能发声），「拉取音色」改为可选刷新且失败不再假成功。AI 回复自动朗读开关保留。",
+  "pubDate": "2026-08-16T00:10:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.27/AI.Copilot-0.9.27-arm64.dmg",
+  "sha256": "e2bc65426b789994b6db9762392b8415ec81066b85d6d5df252fa95f940aad89",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.27/AI.Copilot-0.9.27.zip",
+  "patchSha256": "810ce725d3436a74699b5d835748326eb255b3f8e506745340fc7ca67f9974f9",
   "deltas": [
     {
-      "from": "0.9.25",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.26/AI.Copilot-0.9.26.zip",
-      "sha256": "3bba175e843dee7b8c6cbf156cc5a5af6ed3e70371bdb1c690ebfa7e9194a801"
+      "from": "0.9.26",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.27/AI.Copilot-0.9.27.zip",
+      "sha256": "810ce725d3436a74699b5d835748326eb255b3f8e506745340fc7ca67f9974f9"
     }
   ]
 }
