@@ -1,16 +1,16 @@
 {
-  "version": "0.9.13",
-  "notes": "AI 设置弹窗全屏遮罩 + 分类分页显示：此前设置窗口被 .panel 的 900px 宽度限制只能占半屏；现在解除限制，弹窗铺满整版灰色半透明遮罩、窗口居中。左侧分类改为分页切换——点「联网」只显示联网内容、点「外观」只显示外观内容，不再把所有板块堆在一起滚动。仅改 renderer/style.css 与 renderer/app.js 的弹窗样式与分页逻辑，未动任何升级/更新链路。",
-  "pubDate": "2026-08-15T12:50:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.13/AI.Copilot-0.9.13-arm64.dmg",
-  "sha256": "e25bbe51d4cff05f19d8c3739917a63defdfd141efc353b5578c3fff49e3957e",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.13/AI.Copilot-0.9.13.zip",
-  "patchSha256": "e45cf2a28c36bab9505f5ae69c1854338c2ac64f0b232c4414fe7d9c54c917c5",
+  "version": "0.9.14",
+  "notes": "修复 AI 助手麦克风语音输入：点麦克风先弹「麦克风权限」授权提示，点授权通过系统麦克风授权后开始聆听；识别中实时把文字显示到输入框，麦克风按钮变红点脉冲；说完自动发送；识别失败给中文提示（权限被拒/服务不可用/未检测到语音/无麦克风/网络异常）。已授权后再次点麦克风直接进入识别。注意：语音识别走 Chromium 在线服务，国内网络若不通仍需切换设备端/Whisper 引擎。",
+  "pubDate": "2026-08-15T17:11:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.14/AI.Copilot-0.9.14-arm64.dmg",
+  "sha256": "5f040b9b76c6771ede8a26b45524a0c4da7ac00694aeddb4698b9015d6564abf",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.14/AI.Copilot-0.9.14.zip",
+  "patchSha256": "ed5c8c9fcaa911bf28aa05d540c3e7b3dd9e8484ccdfd72367a724507bc3794f",
   "deltas": [
     {
-      "from": "0.9.12",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.13/AI.Copilot-0.9.13.zip",
-      "sha256": "e45cf2a28c36bab9505f5ae69c1854338c2ac64f0b232c4414fe7d9c54c917c5"
+      "from": "0.9.13",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.14/AI.Copilot-0.9.14.zip",
+      "sha256": "ed5c8c9fcaa911bf28aa05d540c3e7b3dd9e8484ccdfd72367a724507bc3794f"
     }
   ]
 }

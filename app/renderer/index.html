@@ -80,6 +80,28 @@
     <!-- 右侧内容区 -->
     <main class="content">
 
+      <!-- 顶部工具栏 -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="topbar-btn" id="btn-toggle-sidebar" title="收起/展开侧边栏">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="8" y1="8" x2="8" y2="16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </button>
+          <div class="topbar-search" id="topbar-search">
+            <input type="text" id="input-history-search" placeholder="搜索历史记录…" />
+          </div>
+          <button class="topbar-btn" id="btn-toggle-search" title="搜索历史记录">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="16" y1="16" x2="20" y2="20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="topbar-right">
+          <button class="topbar-btn" id="btn-toggle-rightbar" title="最近消息 / 预览">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="16" y1="8" x2="16" y2="16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="content-body">
+
       <!-- 模块一：按规则替换文件（三步向导） -->
       <section id="panel-wizard" class="panel">
         <!-- 步骤指示器 -->
@@ -1217,7 +1239,24 @@
         </div>
       </section>
 
+      </div>
     </main>
+
+    <!-- 右侧边栏（最近消息 / 预览） -->
+    <aside class="right-sidebar" id="right-sidebar">
+      <div class="right-sidebar-header">
+        <span class="right-sidebar-title" id="right-sidebar-title">最近消息</span>
+        <button class="right-sidebar-close" id="btn-close-rightbar" title="关闭">✕</button>
+      </div>
+      <div class="right-sidebar-tabs" id="right-sidebar-tabs">
+        <button class="right-sidebar-tab active" data-tab="recent">最近消息</button>
+      </div>
+      <div class="right-sidebar-body" id="right-sidebar-body">
+        <div class="right-sidebar-panel active" data-panel="recent">
+          <div id="right-recent-list" class="recent-list"></div>
+        </div>
+      </div>
+    </aside>
   </div>
 
   <!-- 开始处理前的重要提示弹窗 -->
@@ -1247,6 +1286,20 @@
       </div>
       <div class="modal-btns">
         <button id="btn-memory-close" class="btn primary">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 麦克风授权弹窗 -->
+  <div id="mic-modal" class="modal hidden">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="mic-modal-icon">🎙️</div>
+      <h2 style="text-align:center;">麦克风权限</h2>
+      <p class="hint" style="text-align:center; margin: 6px 0 18px;">AI Copilot 需要使用麦克风进行语音输入。<br />点击下方「授权」并在系统弹窗中允许，即可开始说话。</p>
+      <div id="mic-modal-error" class="mic-modal-error hidden"></div>
+      <div class="modal-btns">
+        <button id="btn-mic-cancel" class="btn">取消</button>
+        <button id="btn-mic-grant" class="btn primary">授权</button>
       </div>
     </div>
   </div>

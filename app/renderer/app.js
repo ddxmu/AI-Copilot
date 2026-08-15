@@ -1666,6 +1666,19 @@ let chatList = [];          // 所有对话 [{id,title,messages,createdAt,update
 let activeChatId = null;    // 当前活跃对话 ID
 const chatHistoryListEl = document.getElementById('chat-history-list');
 const btnNewChat = document.getElementById('btn-new-chat');
+const sidebarEl = document.querySelector('.sidebar');
+const contentEl = document.querySelector('.content');
+const topbarEl = document.querySelector('.topbar');
+const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
+const btnToggleSearch = document.getElementById('btn-toggle-search');
+const btnToggleRightbar = document.getElementById('btn-toggle-rightbar');
+const btnCloseRightbar = document.getElementById('btn-close-rightbar');
+const inputHistorySearch = document.getElementById('input-history-search');
+const rightSidebar = document.getElementById('right-sidebar');
+const rightSidebarTabs = document.getElementById('right-sidebar-tabs');
+const rightSidebarBody = document.getElementById('right-sidebar-body');
+const rightRecentListEl = document.getElementById('right-recent-list');
+const rightSidebarTitle = document.getElementById('right-sidebar-title');
 
 // 生成对话 ID
 function genChatId() {
@@ -1846,13 +1859,19 @@ function toolSummaryFromArgs(name, input) {
   return (p || JSON.stringify(input).slice(0, 80)) + extra;
 }
 
-// 渲染侧边栏列表
-function renderChatList() {
+let currentHistoryFilter = '';
+// 渲染侧边栏列表（支持搜索过滤）
+function renderChatList(filterQuery = '') {
+  currentHistoryFilter = filterQuery;
   if (!chatHistoryListEl) return;
-  const visible = chatList.filter((c) => !c.archived);
-  const archived = chatList.filter((c) => c.archived);
+  const q = (filterQuery || '').toLowerCase().trim();
+  const visible = chatList.filter((c) => !c.archived && (!q || (c.title || '').toLowerCase().includes(q)));
+  const archived = chatList.filter((c) => c.archived && (!q || (c.title || '').toLowerCase().includes(q)));
   if (!visible.length && !archived.length) {
-    chatHistoryListEl.innerHTML = '<div class="chat-history-empty">暂无历史记录</div>';
+    chatHistoryListEl.innerHTML = q
+      ? '<div class="chat-history-empty">无匹配记录</div>'
+      : '<div class="chat-history-empty">暂无历史记录</div>';
+    renderRightRecent();
     return;
   }
   const renderItem = (chat) => {
@@ -1886,6 +1905,27 @@ function renderChatList() {
     chatHistoryListEl.appendChild(sep);
     archived.forEach((c) => chatHistoryListEl.appendChild(renderItem(c)));
   }
+  renderRightRecent();
+}
+
+// 渲染右侧「最近消息」列表
+function renderRightRecent() {
+  if (!rightRecentListEl) return;
+  const recent = chatList.slice(0, 20);
+  if (!recent.length) {
+    rightRecentListEl.innerHTML = '<div class="recent-empty">暂无消息</div>';
+    return;
+  }
+  rightRecentListEl.innerHTML = '';
+  recent.forEach((chat) => {
+    const item = document.createElement('div');
+    item.className = 'recent-item' + (chat.id === activeChatId ? ' active' : '');
+    item.dataset.chatId = chat.id;
+    item.textContent = chat.title || '新对话';
+    item.title = chat.title || '';
+    item.addEventListener('click', () => switchToChat(chat.id));
+    rightRecentListEl.appendChild(item);
+  });
 }
 
 // 行内改名：把列表项标题替换成输入框（Electron 不支持 window.prompt）
@@ -2012,30 +2052,125 @@ function autoGrow() {
 chatInput.addEventListener('input', autoGrow);
 
 // 语音输入（Web Speech API）
-let recognizer = null, recognizing = false;
+// 流程：点击麦克风 → 未授权则弹授权提示 → 点「授权」调用 getUserMedia 触发系统麦克风授权
+//       → 授权通过后启动识别，实时把语音文字写入输入框 → 说话结束自动发送
+let recognizer = null, recognizing = false, micGranted = false;
+const micModal = document.getElementById('mic-modal');
+const micGrantBtn = document.getElementById('btn-mic-grant');
+const micCancelBtn = document.getElementById('btn-mic-cancel');
+const micErrEl = document.getElementById('mic-modal-error');
+
 function buildRecognizer() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return null;
   const r = new SR();
   r.lang = 'zh-CN';
-  r.interimResults = true;
-  r.continuous = false;
+  r.interimResults = true;   // 实时把临时识别结果显示到输入框
+  r.continuous = false;      // 停顿即结束一次语音输入
   r.onresult = (ev) => {
-    let txt = '';
-    for (let i = ev.resultIndex; i < ev.results.length; i++) txt += ev.results[i][0].transcript;
-    chatInput.value = txt;
+    let interim = '', finalTxt = '';
+    for (let i = 0; i < ev.results.length; i++) {
+      const seg = ev.results[i][0].transcript;
+      if (ev.results[i].isFinal) finalTxt += seg; else interim += seg;
+    }
+    // 已确认内容 + 当前临时内容一起显示，用户能实时看到在说什么
+    chatInput.value = finalTxt + interim;
     autoGrow();
   };
-  r.onend = () => { recognizing = false; btnVoice.classList.remove('listening'); };
-  r.onerror = (ev) => { recognizing = false; btnVoice.classList.remove('listening'); chatStatusEl.textContent = '语音识别结束：' + (ev.error || '未知错误'); };
+  r.onend = () => {
+    recognizing = false;
+    btnVoice.classList.remove('listening');
+    // 说话结束：若输入框有内容则自动发送
+    const txt = chatInput.value.trim();
+    if (txt && !sending) {
+      sendChat();
+    } else if (!txt) {
+      chatStatusEl.textContent = '未识别到语音，请重试';
+    }
+  };
+  r.onerror = (ev) => {
+    recognizing = false;
+    btnVoice.classList.remove('listening');
+    const map = {
+      'not-allowed': '麦克风权限被拒绝，请在系统设置中允许本应用使用麦克风',
+      'service-not-allowed': '语音识别服务不可用（可能受网络/地区限制）',
+      'no-speech': '没有检测到语音',
+      'audio-capture': '未找到麦克风设备',
+      'network': '网络异常，语音识别需要联网',
+    };
+    chatStatusEl.textContent = '语音识别结束：' + (map[ev.error] || ev.error || '未知错误');
+  };
   return r;
 }
-btnVoice.addEventListener('click', () => {
+
+// 真正开始识别（需已获麦克风授权）
+function startRecognition() {
   if (!recognizer) recognizer = buildRecognizer();
-  if (!recognizer) { chatStatusEl.textContent = '当前环境不支持语音输入'; return; }
+  if (!recognizer) {
+    chatStatusEl.textContent = '当前环境不支持语音输入（webkitSpeechRecognition 不可用）';
+    return;
+  }
   if (recognizing) { recognizer.stop(); return; }
-  try { recognizing = true; btnVoice.classList.add('listening'); recognizer.start(); }
-  catch (e) { recognizing = false; btnVoice.classList.remove('listening'); }
+  try {
+    recognizing = true;
+    btnVoice.classList.add('listening');
+    chatStatusEl.textContent = '正在聆听…请说话';
+    recognizer.start();
+  } catch (e) {
+    // 已在运行会抛错，忽略；其余情况重置状态，稍后用户可重试
+    recognizing = false;
+    btnVoice.classList.remove('listening');
+  }
+}
+
+// 请求麦克风授权：getUserMedia 会触发系统权限弹窗
+async function requestMicPermission() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    micErrEl.textContent = '当前环境无法访问麦克风（mediaDevices 不可用）';
+    micErrEl.classList.remove('hidden');
+    return false;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // 拿到即可，立即停止，避免麦克风指示灯常亮；真正录音交给语音识别
+    stream.getTracks().forEach((t) => t.stop());
+    micGranted = true;
+    return true;
+  } catch (e) {
+    micErrEl.textContent = (e && e.name === 'NotAllowedError')
+      ? '麦克风权限被拒绝，请在系统设置 › 隐私与安全性 › 麦克风 中允许「AI Copilot」'
+      : ('无法获取麦克风：' + (e && e.message ? e.message : e));
+    micErrEl.classList.remove('hidden');
+    return false;
+  }
+}
+
+// 弹窗显隐
+function openMicModal() {
+  micErrEl.classList.add('hidden');
+  micErrEl.textContent = '';
+  micModal.classList.remove('hidden');
+}
+function closeMicModal() { micModal.classList.add('hidden'); }
+
+micCancelBtn.addEventListener('click', closeMicModal);
+micModal.addEventListener('click', (e) => { if (e.target === micModal) closeMicModal(); });
+micGrantBtn.addEventListener('click', async () => {
+  micErrEl.classList.add('hidden');
+  micGrantBtn.disabled = true;
+  micGrantBtn.textContent = '请求授权中…';
+  const ok = await requestMicPermission();
+  micGrantBtn.disabled = false;
+  micGrantBtn.textContent = '授权';
+  if (ok) {
+    closeMicModal();
+    startRecognition();
+  }
+});
+
+btnVoice.addEventListener('click', () => {
+  if (micGranted) { startRecognition(); return; }
+  openMicModal();
 });
 
 // 权限模式下拉
@@ -4604,6 +4739,50 @@ async function renderChangelog() {
     </div>`;
   }).join('');
 }
+function toggleSidebar() {
+  if (sidebarEl) sidebarEl.classList.toggle('collapsed');
+}
+
+function toggleSearch() {
+  if (!topbarEl || !inputHistorySearch) return;
+  const open = topbarEl.classList.toggle('search-open');
+  if (open) {
+    inputHistorySearch.focus();
+  } else {
+    inputHistorySearch.value = '';
+    renderChatList('');
+  }
+}
+
+function openRightSidebar() {
+  if (rightSidebar) rightSidebar.classList.add('open');
+}
+
+function closeRightSidebar() {
+  if (rightSidebar) rightSidebar.classList.remove('open');
+}
+
+function toggleRightSidebar() {
+  if (rightSidebar) rightSidebar.classList.toggle('open');
+}
+
+if (btnToggleSidebar) btnToggleSidebar.addEventListener('click', toggleSidebar);
+if (btnToggleSearch) btnToggleSearch.addEventListener('click', toggleSearch);
+if (btnToggleRightbar) btnToggleRightbar.addEventListener('click', toggleRightSidebar);
+if (btnCloseRightbar) btnCloseRightbar.addEventListener('click', closeRightSidebar);
+if (inputHistorySearch) inputHistorySearch.addEventListener('input', (e) => renderChatList(e.target.value));
+
+if (rightSidebarTabs) {
+  rightSidebarTabs.addEventListener('click', (e) => {
+    const tab = e.target.closest('.right-sidebar-tab');
+    if (!tab) return;
+    const tabId = tab.dataset.tab;
+    document.querySelectorAll('.right-sidebar-tab').forEach((t) => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.right-sidebar-panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === tabId));
+    if (rightSidebarTitle) rightSidebarTitle.textContent = tab.textContent || '最近消息';
+  });
+}
+
 if (btnNewChat) btnNewChat.addEventListener('click', () => createNewChat());
 loadChats();
 // 规则状态同步给主进程（供智能体使用）
