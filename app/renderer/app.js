@@ -2778,9 +2778,122 @@ window.api.onAiToolStart(({ name, input }) => {
   addToolLine(name, toolSummary(name, input));
 });
 
-window.api.onAiToolEnd(({ name, result }) => {
+window.api.onAiToolEnd(({ name, input, result }) => {
   if (runningChatId && activeChatId !== runningChatId) return;
   addToolLine(name + ' ✓', result.slice(0, 200) + (result.length > 200 ? '…' : ''));
+  captureWorkItem(name, input, result);
+});
+
+// ========== 右侧栏「工作完成」列表 ==========
+const WORK_TYPES = {
+  write_file: { type: 'file', icon: '📄' },
+  edit_file: { type: 'file', icon: '✏️' },
+  open_file: { type: 'openfile', icon: '📂' },
+  open_url: { type: 'web', icon: '🌐' },
+};
+const workListEl = document.getElementById('work-list');
+const workEmptyEl = document.getElementById('work-empty');
+const workCountEl = document.getElementById('work-count');
+const btnClearWork = document.getElementById('btn-clear-work');
+let workItems = [];
+
+function basenameOf(p) {
+  if (!p) return '';
+  const i = Math.max(String(p).lastIndexOf('/'), String(p).lastIndexOf('\\'));
+  return i >= 0 ? p.slice(i + 1) : p;
+}
+function fmtHM(d) {
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return h + ':' + m;
+}
+
+function captureWorkItem(name, input, result) {
+  const def = WORK_TYPES[name];
+  if (!def) return;
+  // 跳过失败 / 用户取消的操作
+  if (!result || /^(错误|用户取消|用户拒绝|工具执行出错)/.test(String(result).trim())) return;
+  const inp = input || {};
+  let path = null, url = null;
+  if (def.type === 'web') { url = inp.url; if (!url) return; }
+  else { path = inp.path; if (!path) return; }
+  workItems.unshift({
+    type: def.type,
+    icon: def.icon,
+    name: def.type === 'web' ? url : basenameOf(path),
+    path: path || null,
+    url: url || null,
+    time: fmtHM(new Date()),
+  });
+  if (workItems.length > 200) workItems.pop();
+  renderWorkList();
+  // 自动展开右侧栏并切到「工作完成」标签，让用户立刻看到产出
+  openRightSidebar();
+  switchRightTab('work');
+}
+
+function renderWorkList() {
+  if (!workListEl) return;
+  workListEl.innerHTML = '';
+  if (!workItems.length) {
+    if (workEmptyEl) workEmptyEl.classList.remove('hidden');
+    updateWorkBadge();
+    return;
+  }
+  if (workEmptyEl) workEmptyEl.classList.add('hidden');
+  workItems.forEach((it) => {
+    const div = document.createElement('div');
+    div.className = 'work-item';
+    div.dataset.type = it.type;
+    if (it.path) div.dataset.path = it.path;
+    if (it.url) div.dataset.url = it.url;
+
+    const ico = document.createElement('span');
+    ico.className = 'work-ico';
+    ico.textContent = it.icon;
+
+    const meta = document.createElement('div');
+    meta.className = 'work-meta';
+    const nm = document.createElement('div');
+    nm.className = 'work-name';
+    nm.textContent = it.name;
+    const sub = document.createElement('div');
+    sub.className = 'work-sub';
+    sub.textContent = it.type === 'web' ? it.url : it.path;
+    meta.append(nm, sub);
+
+    const tm = document.createElement('span');
+    tm.className = 'work-time';
+    tm.textContent = it.time;
+
+    div.append(ico, meta, tm);
+    div.addEventListener('click', () => {
+      if (it.type === 'web' && it.url) window.open(it.url, '_blank');
+      else if (it.path) window.api.revealInFolder(it.path);
+    });
+    workListEl.appendChild(div);
+  });
+  updateWorkBadge();
+}
+
+function updateWorkBadge() {
+  if (!workCountEl) return;
+  const n = workItems.length;
+  workCountEl.textContent = n > 99 ? '99+' : String(n);
+  workCountEl.classList.toggle('hidden', n === 0);
+}
+
+function switchRightTab(tabId) {
+  const tab = rightSidebarTabs && rightSidebarTabs.querySelector('.right-sidebar-tab[data-tab="' + tabId + '"]');
+  if (!tab) return;
+  document.querySelectorAll('.right-sidebar-tab').forEach((t) => t.classList.toggle('active', t === tab));
+  document.querySelectorAll('.right-sidebar-panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === tabId));
+  if (rightSidebarTitle) rightSidebarTitle.textContent = tab.dataset.title || tab.textContent || '最近消息';
+}
+
+if (btnClearWork) btnClearWork.addEventListener('click', () => {
+  workItems = [];
+  renderWorkList();
 });
 
 const CONFIRM_ICONS = { 'write': '✍️', 'edit': '✏️', 'batch': '🔁', 'open-file': '📂', 'open-url': '🌐', 'mcp': '🔌', 'install_dependency': '📦' };
@@ -5116,7 +5229,7 @@ if (rightSidebarTabs) {
     const tabId = tab.dataset.tab;
     document.querySelectorAll('.right-sidebar-tab').forEach((t) => t.classList.toggle('active', t === tab));
     document.querySelectorAll('.right-sidebar-panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === tabId));
-    if (rightSidebarTitle) rightSidebarTitle.textContent = tab.textContent || '最近消息';
+    if (rightSidebarTitle) rightSidebarTitle.textContent = tab.dataset.title || tab.textContent.trim() || '最近消息';
   });
 }
 

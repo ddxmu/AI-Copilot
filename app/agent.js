@@ -1757,7 +1757,7 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
         pendingImages.push(result);
         result = result.note;
       }
-      ctx.emit('tool-end', { name: call.name, result: String(result).slice(0, 500) });
+      ctx.emit('tool-end', { name: call.name, input: call.input, result: String(result).slice(0, 500) });
       results.push({ id: call.id, name: call.name, result });
     }
 

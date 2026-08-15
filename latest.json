@@ -1,16 +1,16 @@
 {
-  "version": "0.9.27",
-  "notes": "AI 语音整块重做：删除旧的「AI语音（高质量）」双标签/模型选择等旧逻辑，统一为纯 MiniMax TTS。新设置面板 = API Key（眼睛显隐）+ 接口地址 + 音色下拉 + 语速 + 保存 + 测试语音；音色下拉始终预置真实可用的 MiniMax 系统音色（保证能发声），「拉取音色」改为可选刷新且失败不再假成功。AI 回复自动朗读开关保留。",
-  "pubDate": "2026-08-16T00:10:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.27/AI.Copilot-0.9.27-arm64.dmg",
-  "sha256": "e2bc65426b789994b6db9762392b8415ec81066b85d6d5df252fa95f940aad89",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.27/AI.Copilot-0.9.27.zip",
-  "patchSha256": "810ce725d3436a74699b5d835748326eb255b3f8e506745340fc7ca67f9974f9",
+  "version": "0.9.28",
+  "notes": "AI 助手「工作完成」自动列表：右栏新增「工作完成」标签页，AI 编写/修改文件、打开文件、打开网页会自动以列表展示（点击文件定位、点击网页打开），带未读计数与清空。全站悬停提示：左侧导航、顶栏按钮、搜索框悬停立即显示中文功能说明。",
+  "pubDate": "2026-08-15T18:10:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.28/AI.Copilot-0.9.28-arm64.dmg",
+  "sha256": "59cbae65eafef466a11788a0026aba677b2986f10c9fa485d6620c9487ebcb7f",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.28/AI.Copilot-0.9.28.zip",
+  "patchSha256": "dd38f661dafc55d2c4b9ad3f7584881e1157141638b739d1ddf7616d382dd19e",
   "deltas": [
     {
-      "from": "0.9.26",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.27/AI.Copilot-0.9.27.zip",
-      "sha256": "810ce725d3436a74699b5d835748326eb255b3f8e506745340fc7ca67f9974f9"
+      "from": "0.9.27",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.28/AI.Copilot-0.9.28.zip",
+      "sha256": "dd38f661dafc55d2c4b9ad3f7584881e1157141638b739d1ddf7616d382dd19e"
     }
   ]
 }
