@@ -1,16 +1,16 @@
 {
-  "version": "0.9.25",
-  "notes": "修复 AI 语音「拉取音色」404：旧代码在 TTS 域名 api.minimax.chat/v1 上用 GET 试探 /get_voice、/voice_identity、/voices、/voice_id 四个路径，全部 404。经核实，MiniMax 音色列表接口是 POST https://api.minimaxi.com/v1/get_voice（body {\"voice_type\":\"all\"}，返回 system_voice/voice_cloning/voice_generation），部署在「语音管理」域名 api.minimaxi.com（与 TTS 的 api.minimax.chat 不同）。现改为：把用户配置的接口地址映射到语音管理域名，POST 该端点并合并三类音色；404 时给出明确提示（接口地址末尾需为 /v1、Key 需含音色管理权限）。",
-  "pubDate": "2026-08-15T21:25:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.25/AI.Copilot-0.9.25-arm64.dmg",
-  "sha256": "89a1e440927134e20ad3d2e07cbcf5841add771ec483ff4e94a651f1ef513536",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.25/AI.Copilot-0.9.25.zip",
-  "patchSha256": "9bdce7acab481e3b97986f64e07116a36e11f3085f1cad7885e6c18757d0709a",
+  "version": "0.9.26",
+  "notes": "更新器优化：修复断点续传累积坏包导致下载 416 的问题（HEAD 校验续传偏移、CDN 返回 200 忽略 Range 时改为截断从头写、416 越界自动清理坏缓存并从头重试、致命/最终失败自动清理坏缓存）；更新失败 UI 新增「清理下载缓存并重试」按钮，点击即删除 .update 缓存目录并自动重新更新。",
+  "pubDate": "2026-08-15T23:40:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.26/AI.Copilot-0.9.26-arm64.dmg",
+  "sha256": "7706b001d78faa22e66d24548a6f8c09691809d1bbe97c3122676c800b4fe266",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.26/AI.Copilot-0.9.26.zip",
+  "patchSha256": "3bba175e843dee7b8c6cbf156cc5a5af6ed3e70371bdb1c690ebfa7e9194a801",
   "deltas": [
     {
-      "from": "0.9.24",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.25/AI.Copilot-0.9.25.zip",
-      "sha256": "9bdce7acab481e3b97986f64e07116a36e11f3085f1cad7885e6c18757d0709a"
+      "from": "0.9.25",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.26/AI.Copilot-0.9.26.zip",
+      "sha256": "3bba175e843dee7b8c6cbf156cc5a5af6ed3e70371bdb1c690ebfa7e9194a801"
     }
   ]
 }

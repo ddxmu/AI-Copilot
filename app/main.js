@@ -310,6 +310,9 @@ ipcMain.handle('download-update', async (_e, manifest) => {
   }
 });
 
+// 一键清理更新缓存（坏掉的半截下载文件），供更新失败 UI 的「清理并重试」按钮调用
+ipcMain.handle('clear-update-cache', async () => updater.clearUpdateCache());
+
 // 选择文件（可多选）。可选传入扩展名数组限定可选类型，默认用全部支持类型
 ipcMain.handle('select-files', async (_e, exts) => {
   const list = (Array.isArray(exts) && exts.length) ? exts : ALL_EXTS;

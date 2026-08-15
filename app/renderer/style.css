@@ -975,6 +975,17 @@ body {
   box-shadow: 0 2px 8px rgba(47,111,237,0.25);
 }
 
+.btn.danger {
+  background: #e5484d;
+  border-color: #e5484d;
+  color: #fff;
+}
+.btn.danger:hover {
+  background: #d33a3f;
+  border-color: #d33a3f;
+  color: #fff;
+}
+
 .btn.ghost {
   background: transparent;
   border-color: transparent;

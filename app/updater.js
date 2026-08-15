@@ -23,7 +23,7 @@ const MANIFEST_URL = `https://raw.githubusercontent.com/${REPO}/${MANIFEST_BRANC
 
 // 下载参数
 const STALL_TIMEOUT_MS = 45000;      // 45 秒没收到数据视为假死
-const MAX_RETRIES = 2;               // 含首次最多 3 次
+const MAX_RETRIES = 3;               // 含首次最多 4 次（配合坏缓存自动清理，断点续传更稳）
 const PROGRESS_THROTTLE_MS = 250;    // 进度事件最小间隔
 
 function userData() { return app.getPath('userData'); }
@@ -85,9 +85,45 @@ function formatBytes(n) {
   return n + ' B';
 }
 
+// 探测服务器文件总大小（HEAD），用于「校验续传偏移」；失败返回 -1（不阻断下载）
+function headSize(url) {
+  return new Promise((resolve) => {
+    const mod = url.startsWith('https') ? https : http;
+    const doHead = (u, redirects) => {
+      if (redirects > 10) return resolve(-1);
+      let req;
+      try {
+        req = mod.request(u, { method: 'HEAD', timeout: 20000 }, (res) => {
+          if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+            res.resume();
+            return doHead(new URL(res.headers.location, u).href, redirects + 1);
+          }
+          res.resume();
+          const cl = parseInt(res.headers['content-length'] || '0', 10);
+          resolve(cl > 0 ? cl : -1);
+        });
+      } catch (e) { return resolve(-1); }
+      req.on('error', () => resolve(-1));
+      req.on('timeout', () => { try { req.destroy(); } catch (e) {} resolve(-1); });
+    };
+    doHead(url, 0);
+  });
+}
+
+// 优化版断点续传：
+//  1) 下载前 HEAD 探测服务器文件大小，校验续传偏移——本地半截缓存若已超出服务器大小（坏包）则清理从头下；
+//  2) 请求了 Range 但 CDN 返回 200（忽略 Range、给了完整文件）时，截断从头写，绝不再 append 到半截上（正是 416 的根因）；
+//  3) 收到 416（范围越界）立即清理坏缓存并从头重试；
+//  4) 下载中断/致命错误/最终放弃时自动清理坏缓存，避免污染下次更新。
 function downloadFile(url, dest, opts = {}) {
   return new Promise((resolve, reject) => {
     const { onProgress, onStage } = opts;
+
+    // 删除坏掉的下载缓存（半截/超出服务器大小的 partial），让下次从头下
+    const cleanupPartial = () => {
+      try { if (fs.existsSync(dest)) fs.unlinkSync(dest); } catch (e) {}
+    };
+
     let attempt = 0;
     let lastWritten = 0;
     let lastSpeedTime = Date.now();
@@ -130,20 +166,26 @@ function downloadFile(url, dest, opts = {}) {
         }, STALL_TIMEOUT_MS);
       };
 
-      const onFail = (err) => {
+      // fatal=true 表示不可续传的致命错误（HTTP 非 200/206、重定向过多）：清理坏缓存后放弃
+      const onFail = (err, fatal = false) => {
         clearStall();
         if (out) { try { out.destroy(); } catch (e) {} out = null; }
+        if (fatal) {
+          cleanupPartial();
+          return reject(err);
+        }
         if (attempt <= MAX_RETRIES) {
           const resumeFrom = written > startByte ? written : startByte;
           if (onStage) onStage(`下载中断，${attempt}/${MAX_RETRIES} 次重试…`);
           setTimeout(() => tryDownload(resumeFrom), 1000);
         } else {
+          cleanupPartial();           // 最终失败也清理，避免坏缓存污染下次更新
           reject(err);
         }
       };
 
       const doGet = (u, redirects) => {
-        if (redirects > 10) return onFail(new Error('重定向次数过多'));
+        if (redirects > 10) return onFail(new Error('重定向次数过多'), true);
         const mod = u.startsWith('https') ? https : http;
         const headers = {};
         if (startByte > 0) headers.Range = `bytes=${startByte}-`;
@@ -152,12 +194,30 @@ function downloadFile(url, dest, opts = {}) {
             res.resume();
             return doGet(new URL(res.headers.location, u).href, redirects + 1);
           }
+          // 416 = 续传偏移越界（本地 partial 比服务器文件大）：清理坏缓存后从头重试
+          if (res.statusCode === 416) {
+            res.resume();
+            cleanupPartial();
+            if (attempt <= MAX_RETRIES) {
+              if (onStage) onStage(`下载偏移越界，已清理缓存并从头重试（${attempt}/${MAX_RETRIES}）…`);
+              setTimeout(() => tryDownload(0), 1000);   // 必须从头，否则会一直 416
+            } else {
+              reject(new Error('下载偏移越界，已清理缓存后仍失败'));
+            }
+            return;
+          }
           if (res.statusCode !== 200 && res.statusCode !== 206) {
             res.resume();
-            return onFail(new Error('下载失败 HTTP ' + res.statusCode));
+            return onFail(new Error('下载失败 HTTP ' + res.statusCode), true);
           }
-          total = parseInt(res.headers['content-length'] || '0', 10) + startByte;
-          out = fs.createWriteStream(dest, startByte > 0 ? { flags: 'a' } : {});
+          const serverSize = parseInt(res.headers['content-length'] || '0', 10);
+          // 请求了 Range 但服务器返回 200（忽略 Range、给了完整文件）：必须截断从头写，
+          // 否则 append 会把整文件又拼到半截后面，生成比真文件更大的坏包（正是 416 的来源）。
+          const honoredRange = startByte > 0 && res.statusCode === 206;
+          const effectiveStart = honoredRange ? startByte : 0;
+          written = effectiveStart;
+          total = serverSize + effectiveStart;
+          out = fs.createWriteStream(dest, honoredRange ? { flags: 'a' } : {});
 
           res.on('data', (chunk) => {
             written += chunk.length;
@@ -166,24 +226,38 @@ function downloadFile(url, dest, opts = {}) {
             report();
           });
           res.on('end', () => { clearStall(); out.end(); });
-          res.on('error', onFail);
+          res.on('error', () => onFail(new Error('下载连接出错'), false));
           out.on('finish', () => { clearStall(); report(true); resolve(dest); });
-          out.on('error', onFail);
+          out.on('error', () => onFail(new Error('写入失败'), false));
           resetStall();
           report(true);
         });
-        req.on('error', onFail);
-        req.on('timeout', () => { onFail(new Error('连接超时')); });
+        req.on('error', () => onFail(new Error('下载连接出错'), false));
+        req.on('timeout', () => onFail(new Error('连接超时'), false));
         reqRef = req;
       };
       doGet(url, 0);
     };
 
-    try {
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-    } catch (e) {}
+    try { fs.mkdirSync(path.dirname(dest), { recursive: true }); } catch (e) {}
+
+    // 校验续传偏移：先探测服务器文件大小，若本地半截缓存已超出服务器大小（坏包），
+    // 直接清理并从头下载；太小（≤1MB）的半截不值得续传，也从头下更稳。
     const existing = fs.existsSync(dest) ? fs.statSync(dest).size : 0;
-    tryDownload(existing > 1048576 ? existing : 0);
+    headSize(url).then((serverSize) => {
+      let startByte = 0;
+      if (existing > 0) {
+        if (serverSize > 0 && existing > serverSize) {
+          cleanupPartial();           // 坏缓存：比服务器文件还大
+          startByte = 0;
+        } else if (existing > 1048576) {
+          startByte = existing;        // 较大的半截才续传
+        } else {
+          startByte = 0;
+        }
+      }
+      tryDownload(startByte);
+    });
   });
 }
 
@@ -385,4 +459,17 @@ async function downloadAndInstall(manifest, cb = {}) {
   await relaunchAndApply(staging); // 内部会 app.quit，不会正常返回
 }
 
-module.exports = { checkForUpdates, downloadAndInstall, REPO, MANIFEST_URL };
+// 清理更新缓存（半截 patch.zip / delta.zip / update.dmg / staging 等）。
+// 等价于手动执行：rm -f "$HOME/Library/Application Support/AI Copilot/.update/patch.zip"
+// 整目录清理更彻底（.update 仅存放临时更新文件，下次更新会自动重建）；失败不会抛错，返回 {ok,error}。
+function clearUpdateCache() {
+  try {
+    const dir = updateDir();
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) };
+  }
+}
+
+module.exports = { checkForUpdates, downloadAndInstall, downloadFile, clearUpdateCache, REPO, MANIFEST_URL };

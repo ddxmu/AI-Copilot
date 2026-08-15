@@ -1775,6 +1775,9 @@ async function initUpdater() {
       manualLink.href = pendingUpdate.dmgUrl;
       manualLink.textContent = 'GitHub 下载失败？点击手动下载 DMG';
     }
+    // 一键清理坏缓存按钮：每次失败都复位为可点击
+    const clearBtn = document.getElementById('btn-clear-update-cache');
+    if (clearBtn) { clearBtn.disabled = false; clearBtn.textContent = '清理下载缓存并重试'; }
   });
 
   // 手动检查
@@ -1838,6 +1841,32 @@ async function initUpdater() {
   // 设置卡片「下载并安装」
   const installBtn = document.getElementById('btn-install-update');
   if (installBtn) installBtn.addEventListener('click', startInstall);
+
+  // 「清理下载缓存并重试」：删除坏的半截下载文件（等价于 rm -f …/.update/patch.zip），然后自动重新更新
+  const clearCacheBtn = document.getElementById('btn-clear-update-cache');
+  if (clearCacheBtn) clearCacheBtn.addEventListener('click', async () => {
+    clearCacheBtn.disabled = true;
+    clearCacheBtn.textContent = '清理中…';
+    const status = document.getElementById('update-status');
+    const manualWrap = document.getElementById('update-manual-wrap');
+    if (status) { status.textContent = '正在清理下载缓存…'; status.className = 'update-status'; }
+    try {
+      const r = await window.api.clearUpdateCache();
+      if (status) {
+        status.textContent = (r && r.ok)
+          ? '已清理下载缓存，正在重新更新…'
+          : ('清理失败：' + ((r && r.error) || '未知错误'));
+        status.className = 'update-status' + (r && r.ok ? '' : ' error');
+      }
+    } catch (e) {
+      if (status) { status.textContent = '清理失败：' + (e && e.message ? e.message : String(e)); status.className = 'update-status error'; }
+    }
+    // 清理完成后自动重新发起更新；若仍失败，onUpdateError 会再次弹出本按钮
+    clearCacheBtn.disabled = false;
+    clearCacheBtn.textContent = '清理下载缓存并重试';
+    if (manualWrap) manualWrap.classList.add('hidden');
+    startInstall();
+  });
 }
 
 /* ================= 外观主题（浅色 / 深色） ================= */

@@ -103,4 +103,5 @@ contextBridge.exposeInMainWorld('api', {
   onUpdateProgress: (cb) => ipcRenderer.on('update-progress', (_e, p) => cb(p)),
   onUpdateStage: (cb) => ipcRenderer.on('update-stage', (_e, s) => cb(s)),
   onUpdateError: (cb) => ipcRenderer.on('update-error', (_e, m) => cb(m)),
+  clearUpdateCache: () => ipcRenderer.invoke('clear-update-cache'),
 });

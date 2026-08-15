@@ -1,3 +1,10 @@
+## v0.9.26 — 2026-08-15
+- **更新器优化（断点续传 + 一键清理坏缓存）**：
+  - 下载前 HEAD 探测服务器文件大小，校验续传偏移——本地半截缓存若已超出服务器大小（坏包）则自动清理从头下；
+  - 请求了 Range 但 CDN 返回 200（忽略 Range、给了完整文件）时改成「截断从头写」，不再 append 到半截上（这正是之前累积出 2MB 坏包、最终 416 的根因）；
+  - 收到 416（范围越界）立即清理坏缓存并从头重试；致命错误/最终放弃也自动清理坏缓存，避免污染下次更新。
+  - 更新失败 UI 新增「清理下载缓存并重试」红色按钮：点击即删除 `.update` 缓存目录（等价于 `rm -f "$HOME/Library/Application Support/AI Copilot/.update/patch.zip"`），随后自动重新更新；仍失败会再次弹此按钮。
+
 ## v0.9.25 — 2026-08-15
 - **修复 AI 语音「拉取音色」404**：旧代码在 TTS 域名 `api.minimax.chat/v1` 上用 GET 试探 `/get_voice`、`/voice_identity`、`/voices`、`/voice_id` 四个路径，全部 404。经核实，MiniMax 音色列表接口是 **POST `https://api.minimaxi.com/v1/get_voice`**（body `{"voice_type":"all"}`，返回 `system_voice`/`voice_cloning`/`voice_generation`），部署在「语音管理」域名 `api.minimaxi.com`（与 TTS 的 `api.minimax.chat` 不同）。现改为：把用户配置的接口地址映射到语音管理域名，POST 该端点并合并三类音色，兼容 `voice_id`/`voice_name` 字段；404 时给出明确提示（接口地址末尾需为 /v1、Key 需含音色管理权限）。
 
