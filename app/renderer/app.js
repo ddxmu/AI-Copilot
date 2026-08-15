@@ -2280,7 +2280,7 @@ chatInput.addEventListener('input', autoGrow);
 
 // 语音输入（MediaRecorder + STT）
 // 流程：点击麦克风 → 未授权则弹授权提示 → 授权后开始录音 → 检测到静音或再次点击结束
-//       → 把录音发给 STT 服务（MiniMax ASR 或当前 AI 配置 /audio/transcriptions）→ 自动发送
+//       → 把录音发给 STT 服务（MiniMax ASR）→ 自动填入当前对话并发送（不新建对话）
 let micGranted = false, isRecording = false, mediaRecorder = null, micStream = null, audioChunks = [];
 let recordContext = null, recordAnalyser = null, silenceTimer = null, silenceFrames = 0;
 const micModal = document.getElementById('mic-modal');
@@ -2530,18 +2530,11 @@ function audioBufferToBase64Wav(buffer) {
 }
 
 btnVoice.addEventListener('click', () => {
-  // 如果 AI 语音模式开启：首次点击麦克风自动新建对话并开始录音；再点则停止
-  if (voiceConfig.enabled) {
-    if (isRecording) { finalizeRecording(); return; }
-    try { window.speechSynthesis.cancel(); } catch (e) {}
-    createNewChat();
-    if (micGranted) { startRecording(); }
-    else { openMicModal(); }
-    return;
-  }
-  // 普通模式：已有授权直接录音，否则弹授权
-  if (micGranted) { startRecording(); return; }
-  openMicModal();
+  // 语音输入：独立工作，不依赖「AI 设置 › AI 语音」的启用开关，也不新建对话
+  if (isRecording) { finalizeRecording(); return; }
+  try { window.speechSynthesis.cancel(); } catch (e) {}
+  if (micGranted) { startRecording(); }
+  else { openMicModal(); }
 });
 
 // 权限模式下拉

@@ -1,16 +1,16 @@
 {
-  "version": "0.9.20",
-  "notes": "修复麦克风语音识别 404：MiniMax 实际没有 /audio/asr 路径，改为通用 OpenAI 兼容的「接口地址 + /audio/transcriptions」。AI 语音面板去 MiniMax 字样，仅留 API Key + 接口地址，并新增眼睛按钮切换 Key 明文/密文显示。",
-  "pubDate": "2026-08-15T19:22:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.20/AI.Copilot-0.9.20-arm64.dmg",
-  "sha256": "03c0d660e1a3e1a78092b9ca7eea17bf754d6a70f92310fd1f97fac594217950",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.20/AI.Copilot-0.9.20.zip",
-  "patchSha256": "d6337323c0b34a6684b4b9f839eac32a7a89a23aceec10314f9f863e363ce2cf",
+  "version": "0.9.21",
+  "notes": "彻底修复麦克风语音识别 404（改用 MiniMax 真实 ASR 端点 api.minimaxi.com/v1/audio/asr + JSON 格式）；AI 助手麦克风与「AI 设置 › AI 语音」解耦，点击不再新建对话，识别结果直接填入当前对话发送。",
+  "pubDate": "2026-08-15T19:40:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.21/AI.Copilot-0.9.21-arm64.dmg",
+  "sha256": "5cdb57f016a8ea70be6bb854d02196bd15d122bc1b63d9cdc7974f0da419b326",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.21/AI.Copilot-0.9.21.zip",
+  "patchSha256": "c8bfaf41658821245088c04f67bcd49cc929898e5d8b73ef9b6efedb85974324",
   "deltas": [
     {
-      "from": "0.9.19",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.20/AI.Copilot-0.9.20.zip",
-      "sha256": "d6337323c0b34a6684b4b9f839eac32a7a89a23aceec10314f9f863e363ce2cf"
+      "from": "0.9.20",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.21/AI.Copilot-0.9.21.zip",
+      "sha256": "c8bfaf41658821245088c04f67bcd49cc929898e5d8b73ef9b6efedb85974324"
     }
   ]
 }

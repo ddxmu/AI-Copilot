@@ -1868,23 +1868,25 @@ ipcMain.handle('ai-voice-stt', async (_e, { provider, audioBase64, mime, profile
     if (provider === 'minimax') {
       const key = String(config.apiKey || '').trim();
       if (!key) throw new Error('请先填写 API Key 并保存');
-      const baseUrl = String(config.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
-      // 通用 OpenAI 兼容语音识别接口：接口地址 + /audio/transcriptions（MiniMax / OpenAI 等均支持）
-      const url = `${baseUrl}/audio/transcriptions`;
-      const buf = Buffer.from(String(audioBase64 || ''), 'base64');
-      const form = new FormData();
-      form.append('file', new Blob([buf], { type: 'audio/wav' }), 'voice.wav');
-      form.append('model', 'whisper-1');
-      form.append('language', 'zh');
+      let baseUrl = String(config.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
+      // MiniMax 的语音识别（ASR）实际部署在 api.minimaxi.com，路径 /v1/audio/asr，使用 JSON 格式；
+      // 而 TTS 在 api.minimax.chat。这里把 TTS 域名映射到 ASR 域名，其余域名原样保留。
+      baseUrl = baseUrl.replace('api.minimax.chat', 'api.minimaxi.com').replace('api.minimax.io', 'api.minimaxi.com');
+      const url = `${baseUrl}/audio/asr`;
       const resp = await fetch(url, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${key}` },
-        body: form,
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({
+          audio_format: 'wav',
+          sample_rate: 16000,
+          language: 'zh-CN',
+          audio_data: String(audioBase64 || ''),
+        }),
       });
       const { status, data } = await readJsonResponse(resp);
-      if (status < 200 || status >= 300) {
-        const msg = (data && data.error && data.error.message) || (data && data.base_resp && data.base_resp.status_msg) || `HTTP ${status}`;
-        const tip = status === 404 ? '：该接口不存在，或此 API Key 不含语音识别(ASR)权限，请改用含 ASR 权限的 Key' : '';
+      if (status < 200 || status >= 300 || (data && data.base_resp && data.base_resp.status_code !== 0)) {
+        const msg = (data && data.base_resp && data.base_resp.status_msg) || (data && data.error && data.error.message) || `HTTP ${status}`;
+        const tip = status === 404 ? '：该接口不存在，或此 API Key 不含语音识别(ASR)权限（MiniMax Token Plan / sk-cp- 开头 Key 仅含 TTS 权限），请改用按量付费 Key' : '';
         throw new Error(`语音识别失败（${msg}）${tip}`);
       }
       return { ok: true, text: (data && data.text) || '' };
