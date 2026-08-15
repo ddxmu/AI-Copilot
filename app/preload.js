@@ -53,6 +53,9 @@ contextBridge.exposeInMainWorld('api', {
   memoryDelete: (scope, chatId, id) => ipcRenderer.invoke('memory-delete', { scope, chatId, id }),
   aiFetchModels: (profile) => ipcRenderer.invoke('ai-fetch-models', profile),
   aiTestConnection: (profile) => ipcRenderer.invoke('ai-test-connection', profile),
+  aiVoiceConfigGet: () => ipcRenderer.invoke('ai-voice-config-get'),
+  aiVoiceConfigSet: (cfg) => ipcRenderer.invoke('ai-voice-config-set', cfg),
+  aiVoiceFetchVoices: (apiKey, baseUrl) => ipcRenderer.invoke('ai-voice-fetch-voices', { apiKey, baseUrl }),
   // MCP 服务器
   mcpGet: () => ipcRenderer.invoke('mcp-get'),
   mcpSave: (server) => ipcRenderer.invoke('mcp-save', server),

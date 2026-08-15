@@ -1799,3 +1799,13 @@ ipcMain.handle('memory-delete', (_e, { scope, chatId, id }) => {
 });
 ipcMain.handle('memory-enabled-get', () => aiConfig.getMemoryEnabled());
 ipcMain.handle('memory-enabled-set', (_e, enabled) => aiConfig.setMemoryEnabled(enabled));
+ipcMain.handle('ai-voice-config-get', () => aiConfig.getVoiceConfig());
+ipcMain.handle('ai-voice-config-set', (_e, cfg) => aiConfig.setVoiceConfig(cfg));
+ipcMain.handle('ai-voice-fetch-voices', async (_e, { apiKey, baseUrl }) => {
+  try {
+    const voices = await aiConfig.fetchMinimaxVoices(apiKey, baseUrl);
+    return { ok: true, voices };
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) };
+  }
+});

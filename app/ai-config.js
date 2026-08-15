@@ -9,7 +9,24 @@ function configPath() {
   return path.join(app.getPath('userData'), 'ai-config.json');
 }
 
-const DEFAULT_STATE = { profiles: [], activeId: null, webAccess: false, memoryEnabled: true, mcpServers: [] };
+const DEFAULT_VOICE = {
+  enabled: false,
+  provider: 'local',      // 'local' 使用系统 speechSynthesis；'minimax' 使用 MiniMax 海螺 TTS
+  baseUrl: 'https://api.minimax.chat/v1',
+  apiKey: '',
+  model: 'speech-2.8-turbo',
+  voiceId: '',
+  speed: 1.0,
+};
+
+const DEFAULT_STATE = {
+  profiles: [],
+  activeId: null,
+  webAccess: false,
+  memoryEnabled: true,
+  mcpServers: [],
+  voice: { ...DEFAULT_VOICE },
+};
 
 function loadState() {
   try {
@@ -21,6 +38,7 @@ function loadState() {
       webAccess: data.webAccess ?? false,
       memoryEnabled: data.memoryEnabled ?? true,
       mcpServers: Array.isArray(data.mcpServers) ? data.mcpServers : [],
+      voice: { ...DEFAULT_VOICE, ...(data.voice || {}) },
     };
   } catch (e) {
     return { ...DEFAULT_STATE, mcpServers: [] };
@@ -94,6 +112,62 @@ function setMemoryEnabled(enabled) {
 
 function getMemoryEnabled() {
   return loadState().memoryEnabled ?? true;
+}
+
+/* ---------------- AI 语音配置 ---------------- */
+function getVoiceConfig() {
+  return { ...DEFAULT_VOICE, ...(loadState().voice || {}) };
+}
+
+function setVoiceConfig(cfg) {
+  const state = loadState();
+  state.voice = {
+    ...DEFAULT_VOICE,
+    ...(state.voice || {}),
+    ...(cfg || {}),
+  };
+  // 类型安全
+  state.voice.enabled = !!state.voice.enabled;
+  state.voice.provider = state.voice.provider === 'minimax' ? 'minimax' : 'local';
+  state.voice.baseUrl = String(state.voice.baseUrl || '').trim() || DEFAULT_VOICE.baseUrl;
+  state.voice.apiKey = String(state.voice.apiKey || '').trim();
+  state.voice.model = String(state.voice.model || '').trim() || DEFAULT_VOICE.model;
+  state.voice.voiceId = String(state.voice.voiceId || '').trim();
+  state.voice.speed = Math.max(0.5, Math.min(2.0, parseFloat(state.voice.speed) || 1.0));
+  saveState(state);
+  return state.voice;
+}
+
+// MiniMax 音色列表：优先读官方 voice_id/voice_identity，兜底返回几个已知公共音色
+async function fetchMinimaxVoices(apiKey, baseUrl) {
+  const key = String(apiKey || '').trim();
+  if (!key) throw new Error('请先填写 MiniMax API Key');
+  const url = String(baseUrl || DEFAULT_VOICE.baseUrl).replace(/\/$/, '');
+  const candidates = ['/voice_identity', '/voices', '/voice_id'];
+  let lastErr = null;
+  for (const p of candidates) {
+    try {
+      const data = await fetchJson(`${url}${p}`, { 'Authorization': `Bearer ${key}` }, 15000);
+      // 官方接口返回格式不确定，兼容几种常见结构
+      const list = data?.voices || data?.data?.voices || data?.data || data?.voice_identity || (Array.isArray(data) ? data : null);
+      if (Array.isArray(list) && list.length) {
+        return list.map((v) => ({
+          id: String(v.voice_id || v.id || v.voiceId || v.name || '').trim(),
+          name: String(v.name || v.voice_name || v.id || v.voice_id || '').trim(),
+        })).filter((v) => v.id);
+      }
+      // 如果返回了但解析为空，继续尝试下一个端点
+      lastErr = new Error('接口返回为空');
+    } catch (e) { lastErr = e; }
+  }
+  // 兜底：返回已知公共音色（截图中的「御姐音」等）
+  return [
+    { id: 'female-yujie', name: '御姐音' },
+    { id: 'male-qn', name: '青年男声' },
+    { id: 'female-sx', name: '少女音' },
+    { id: 'female-cm', name: '成熟女声' },
+    { id: 'male-cm', name: '成熟男声' },
+  ];
 }
 
 /* ---------------- MCP 服务器配置 ---------------- */
@@ -303,4 +377,7 @@ module.exports = {
   normalizeMcpServer,
   fetchModels,
   testConnection,
+  getVoiceConfig,
+  setVoiceConfig,
+  fetchMinimaxVoices,
 };

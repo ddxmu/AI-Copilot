@@ -824,6 +824,7 @@ async function initAiSettings() {
     });
   }
   initMemorySettings();
+  initVoiceSettings();
   initMcpSettings();
 }
 
@@ -877,6 +878,197 @@ function initMemorySettings() {
         await renderMemoryList();
       });
       list.appendChild(row);
+    });
+  }
+}
+
+/* ================= AI 语音设置 ================= */
+let voiceConfig = { enabled: false, provider: 'local', baseUrl: 'https://api.minimax.chat/v1', apiKey: '', model: 'speech-2.8-turbo', voiceId: '', speed: 1.0 };
+
+function applyVoiceProviderUI(provider) {
+  document.querySelectorAll('.voice-provider-tab').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.provider === provider);
+  });
+  document.getElementById('voice-provider-local').classList.toggle('hidden', provider !== 'local');
+  document.getElementById('voice-provider-minimax').classList.toggle('hidden', provider !== 'minimax');
+}
+
+async function speakText(text) {
+  if (!voiceConfig.enabled || !text) return;
+  const clean = String(text).trim();
+  if (!clean) return;
+  try {
+    if (voiceConfig.provider === 'minimax') {
+      await speakMinimax(clean);
+    } else {
+      speakLocal(clean);
+    }
+  } catch (e) { console.error('speak failed', e); }
+}
+
+function speakLocal(text) {
+  const synth = window.speechSynthesis;
+  if (!synth) return;
+  synth.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'zh-CN';
+  u.rate = voiceConfig.speed || 1.0;
+  synth.speak(u);
+}
+
+async function speakMinimax(text) {
+  const key = voiceConfig.apiKey;
+  if (!key) return;
+  const baseUrl = (voiceConfig.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
+  const model = voiceConfig.model || 'speech-2.8-turbo';
+  const voiceId = voiceConfig.voiceId;
+  const speed = Number(voiceConfig.speed) || 1.0;
+
+  const body = {
+    model,
+    text,
+    stream: false,
+    voice_setting: { voice_id: voiceId || undefined, speed: Math.max(0.5, Math.min(2, speed)) },
+    audio_setting: { sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 1 },
+  };
+
+  const resp = await fetch(`${baseUrl}/t2a_v2`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (!resp.ok || (data && data.base_resp && data.base_resp.status_code !== 0)) {
+    throw new Error((data && data.base_resp && data.base_resp.status_msg) || `HTTP ${resp.status}`);
+  }
+  // MiniMax 可能返回 audio（base64）或 audio_file 下载链接；优先 audio
+  let audioSrc = null;
+  if (data.audio && typeof data.audio === 'string') {
+    const blob = base64ToBlob(data.audio, 'audio/mp3');
+    audioSrc = URL.createObjectURL(blob);
+  } else if (data.audio_file) {
+    audioSrc = data.audio_file;
+  }
+  if (!audioSrc) throw new Error('响应中未找到音频内容');
+  const a = new Audio(audioSrc);
+  a.playbackRate = 1; // MiniMax 已在服务端调速
+  await a.play();
+}
+
+function base64ToBlob(base64, mime) {
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+async function initVoiceSettings() {
+  try { voiceConfig = await window.api.aiVoiceConfigGet(); } catch (e) { voiceConfig = { ...voiceConfig }; }
+
+  const enabledToggle = document.getElementById('voice-enabled-toggle');
+  const apiKeyInput = document.getElementById('voice-apikey');
+  const baseUrlInput = document.getElementById('voice-baseurl');
+  const modelSelect = document.getElementById('voice-model');
+  const voiceSelect = document.getElementById('voice-voiceid');
+  const speedInput = document.getElementById('voice-speed');
+  const speedVal = document.getElementById('voice-speed-val');
+  const fetchStatus = document.getElementById('voice-fetch-status');
+  const testStatus = document.getElementById('voice-test-status');
+  const keyHint = document.getElementById('voice-key-hint');
+  const clearKeyCb = document.getElementById('voice-clear-key');
+
+  if (enabledToggle) enabledToggle.checked = !!voiceConfig.enabled;
+  applyVoiceProviderUI(voiceConfig.provider || 'local');
+  if (baseUrlInput) baseUrlInput.value = voiceConfig.baseUrl || 'https://api.minimax.chat/v1';
+  if (modelSelect) modelSelect.value = voiceConfig.model || 'speech-2.8-turbo';
+  if (voiceSelect) {
+    if (voiceConfig.voiceId) {
+      voiceSelect.innerHTML = `<option value="${escapeHtml(voiceConfig.voiceId)}">${escapeHtml(voiceConfig.voiceId)}</option>`;
+      voiceSelect.value = voiceConfig.voiceId;
+    } else {
+      voiceSelect.innerHTML = '<option value="">请先拉取音色</option>';
+    }
+  }
+  if (speedInput) speedInput.value = Number(voiceConfig.speed) || 1.0;
+  if (speedVal) speedVal.textContent = (Number(voiceConfig.speed) || 1.0).toFixed(1) + 'x';
+  if (apiKeyInput && keyHint) {
+    if (voiceConfig.apiKey) keyHint.classList.remove('hidden');
+    else keyHint.classList.add('hidden');
+  }
+
+  // 切换模式
+  document.querySelectorAll('.voice-provider-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      voiceConfig.provider = btn.dataset.provider;
+      applyVoiceProviderUI(voiceConfig.provider);
+    });
+  });
+
+  // 语速
+  if (speedInput) {
+    speedInput.addEventListener('input', () => {
+      if (speedVal) speedVal.textContent = Number(speedInput.value).toFixed(1) + 'x';
+    });
+  }
+
+  // 拉取音色
+  const fetchBtn = document.getElementById('btn-voice-fetch-voices');
+  if (fetchBtn) {
+    fetchBtn.addEventListener('click', async () => {
+      fetchStatus.textContent = '';
+      const key = apiKeyInput ? apiKeyInput.value.trim() : '';
+      if (!key) { fetchStatus.textContent = '请先输入 MiniMax API Key'; return; }
+      fetchBtn.disabled = true; fetchBtn.textContent = '拉取中…';
+      try {
+        const r = await window.api.aiVoiceFetchVoices(key, baseUrlInput ? baseUrlInput.value.trim() : '');
+        fetchBtn.disabled = false; fetchBtn.textContent = '拉取音色';
+        if (!r.ok) { fetchStatus.textContent = '拉取失败：' + (r.error || '未知错误'); return; }
+        if (!r.voices || !r.voices.length) { fetchStatus.textContent = '未拉取到音色，已使用默认音色列表'; }
+        else { fetchStatus.textContent = `已拉取 ${r.voices.length} 个音色`; }
+        voiceSelect.innerHTML = (r.voices || []).map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name || v.id)}</option>`).join('');
+        if (voiceConfig.voiceId) voiceSelect.value = voiceConfig.voiceId;
+      } catch (e) {
+        fetchBtn.disabled = false; fetchBtn.textContent = '拉取音色';
+        fetchStatus.textContent = '拉取失败：' + (e && e.message ? e.message : String(e));
+      }
+    });
+  }
+
+  // 保存
+  const saveBtn = document.getElementById('btn-voice-save');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const newCfg = {
+        enabled: enabledToggle ? enabledToggle.checked : false,
+        provider: voiceConfig.provider || 'local',
+        baseUrl: baseUrlInput ? baseUrlInput.value.trim() : 'https://api.minimax.chat/v1',
+        model: modelSelect ? modelSelect.value : 'speech-2.8-turbo',
+        voiceId: voiceSelect ? voiceSelect.value : '',
+        speed: speedInput ? Number(speedInput.value) : 1.0,
+      };
+      if (clearKeyCb && clearKeyCb.checked) {
+        newCfg.apiKey = '';
+      } else {
+        newCfg.apiKey = apiKeyInput && apiKeyInput.value.trim() ? apiKeyInput.value.trim() : voiceConfig.apiKey;
+      }
+      try {
+        voiceConfig = await window.api.aiVoiceConfigSet(newCfg);
+        testStatus.textContent = '✓ 语音设置已保存';
+        if (keyHint) keyHint.classList.toggle('hidden', !voiceConfig.apiKey);
+        if (apiKeyInput && newCfg.apiKey) apiKeyInput.value = '';
+      } catch (e) { testStatus.textContent = '保存失败：' + (e && e.message ? e.message : String(e)); }
+    });
+  }
+
+  // 测试
+  const testBtn = document.getElementById('btn-voice-test');
+  if (testBtn) {
+    testBtn.addEventListener('click', async () => {
+      testStatus.textContent = '正在播放测试语音…';
+      try {
+        await speakText('你好，我是 AI Copilot 的语音助手。');
+        testStatus.textContent = '✓ 测试语音已播放';
+      } catch (e) { testStatus.textContent = '测试失败：' + (e && e.message ? e.message : String(e)); }
     });
   }
 }
@@ -2169,6 +2361,17 @@ micGrantBtn.addEventListener('click', async () => {
 });
 
 btnVoice.addEventListener('click', () => {
+  // 如果 AI 语音模式开启：首次点击麦克风自动新建对话并开始聆听；再点则停止
+  if (voiceConfig.enabled) {
+    if (recognizing) { if (recognizer) recognizer.stop(); return; }
+    // 停止当前朗读
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    createNewChat();
+    if (micGranted) { startRecognition(); }
+    else { openMicModal(); }
+    return;
+  }
+  // 普通模式：已有授权直接识别，否则弹授权
   if (micGranted) { startRecognition(); return; }
   openMicModal();
 });
@@ -2784,6 +2987,22 @@ async function sendChat() {
   if (stillActive) removeEmptyAssistantBubbles();
   saveChats();
   chatInput.focus();
+
+  // AI 语音模式：朗读本轮回复
+  if (voiceConfig.enabled) {
+    const chat = chatList.find((c) => c.id === runChatId);
+    let replyText = '';
+    if (chat && chat.messages) {
+      for (let i = chat.messages.length - 1; i >= 0; i--) {
+        if (chat.messages[i].role === 'assistant') {
+          replyText = typeof chat.messages[i].content === 'string' ? chat.messages[i].content : '';
+          break;
+        }
+      }
+    }
+    if (!replyText && lastSegText) replyText = lastSegText;
+    if (replyText) speakText(replyText);
+  }
 }
 
 // 最近一次 Todo 列表（用于「继续」智能注入）

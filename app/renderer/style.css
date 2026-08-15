@@ -1720,6 +1720,83 @@ body {
   line-height: 1.5;
 }
 
+/* ========== AI 语音设置 ========== */
+.voice-provider-tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.voice-provider-tab {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.voice-provider-tab:hover {
+  border-color: var(--primary);
+  background: var(--primary-bg);
+}
+
+.voice-provider-tab.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.voice-provider-panel {
+  display: block;
+}
+
+.voice-provider-panel.hidden {
+  display: none;
+}
+
+input[type="range"]#voice-speed {
+  width: 100%;
+  height: 6px;
+  margin: 10px 0 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  border-radius: 3px;
+  outline: none;
+}
+
+input[type="range"]#voice-speed::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+
+input[type="range"]#voice-speed::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+
+#voice-test-status {
+  margin-top: 10px;
+}
+
 /* 次级工具条：权限 + 模型 */
 .composer-bar {
   display: flex;

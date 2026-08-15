@@ -1,16 +1,16 @@
 {
-  "version": "0.9.14",
-  "notes": "修复 AI 助手麦克风语音输入：点麦克风先弹「麦克风权限」授权提示，点授权通过系统麦克风授权后开始聆听；识别中实时把文字显示到输入框，麦克风按钮变红点脉冲；说完自动发送；识别失败给中文提示（权限被拒/服务不可用/未检测到语音/无麦克风/网络异常）。已授权后再次点麦克风直接进入识别。注意：语音识别走 Chromium 在线服务，国内网络若不通仍需切换设备端/Whisper 引擎。",
-  "pubDate": "2026-08-15T17:11:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.14/AI.Copilot-0.9.14-arm64.dmg",
-  "sha256": "5f040b9b76c6771ede8a26b45524a0c4da7ac00694aeddb4698b9015d6564abf",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.14/AI.Copilot-0.9.14.zip",
-  "patchSha256": "ed5c8c9fcaa911bf28aa05d540c3e7b3dd9e8484ccdfd72367a724507bc3794f",
+  "version": "0.9.15",
+  "notes": "新增 AI 语音设置与麦克风联动：AI 设置里新增「AI 语音」分类，可选「本地（免费/离线）」或「MiniMax 海螺（高质量）」模式；MiniMax 模式支持填 API Key、拉取音色、选择音质模型、调节语速并保存。开启 AI 语音后，点 AI 助手麦克风会自动创建新对话并开始聆听，说完自动发送，AI 回复完成后自动用语音朗读；再点麦克风可停止聆听/朗读。",
+  "pubDate": "2026-08-15T17:25:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.15/AI.Copilot-0.9.15-arm64.dmg",
+  "sha256": "e825cf7abe06569963f1a1c762784d752798901c3cf6f1a16994ce0347207907",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.15/AI.Copilot-0.9.15.zip",
+  "patchSha256": "201b7d5d095deb5524e3fbcd042bc32bd364519a0c25e1939cb749153ed780eb",
   "deltas": [
     {
-      "from": "0.9.13",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.14/AI.Copilot-0.9.14.zip",
-      "sha256": "ed5c8c9fcaa911bf28aa05d540c3e7b3dd9e8484ccdfd72367a724507bc3794f"
+      "from": "0.9.14",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.15/AI.Copilot-0.9.15.zip",
+      "sha256": "201b7d5d095deb5524e3fbcd042bc32bd364519a0c25e1939cb749153ed780eb"
     }
   ]
 }
