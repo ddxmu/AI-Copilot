@@ -1,17 +1,17 @@
 {
-  "version": "0.9.34",
+  "version": "0.9.35",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.34/AI.Copilot-0.9.34-arm64.dmg",
-  "dmgSha256": "2b322da19aee2df50b6c6a5e6903b31bb9d8d74d7499e48f361a72ccd04818ef",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.34/AI.Copilot-0.9.34.zip",
-  "patchSha256": "396fda5fa94e3be36893f6c2629521faad0d282fab45c706eea5365bc6ad4980",
-  "notes": "修复 AI 语音回复「两个声音同时响」：speakText 在云端 provider（海螺/自定义）播放中途出错会回退到本地 speechSynthesis，导致海螺声与本地声叠加。现只播放当前保存 provider 对应的那一路，云端失败不再回退本地，并在播云端前先取消残留的本地语音队列。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.35/AI.Copilot-0.9.35-arm64.dmg",
+  "dmgSha256": "5696b0a8dcdf53070a6ce706a3f8b81c312538e995c99f9b381d5a39093256b1",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.35/AI.Copilot-0.9.35.zip",
+  "patchSha256": "a5f171b1f87b8d65b9cd079f911d28d04c052bf0c7f843a0924949cdddb8b1d9",
+  "notes": "AI 语音开关重构：删除总开关，改为本地 / MiniMax 海螺 / 自定义三个来源各自带独立「启用此语音」开关。选中的来源即为 AI 回复朗读所用的声音，只有该来源开关打开才播、关闭则不播。",
   "deltas": [
     {
-      "from": "0.9.33",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.34/AI.Copilot-0.9.34.zip",
-      "sha256": "396fda5fa94e3be36893f6c2629521faad0d282fab45c706eea5365bc6ad4980"
+      "from": "0.9.34",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.35/AI.Copilot-0.9.35.zip",
+      "sha256": "a5f171b1f87b8d65b9cd079f911d28d04c052bf0c7f843a0924949cdddb8b1d9"
     }
   ]
 }

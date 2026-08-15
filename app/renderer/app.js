@@ -916,8 +916,14 @@ function blobToBase64(blob) {
   });
 }
 
+function isVoiceOn() {
+  if (voiceConfig.provider === 'local') return !!voiceConfig.localEnabled;
+  if (voiceConfig.provider === 'minimax') return !!voiceConfig.minimaxEnabled;
+  return !!voiceConfig.customEnabled;
+}
+
 async function speakText(text, { bypassEnabled = false } = {}) {
-  if (!bypassEnabled && !voiceConfig.enabled) return;
+  if (!bypassEnabled && !isVoiceOn()) return;
   if (!text) return;
   const clean = String(text).trim();
   if (!clean) return;
@@ -1017,7 +1023,9 @@ function updateKeyHint(hintEl, hasKey) {
 async function initVoiceSettings() {
   try { voiceConfig = await window.api.aiVoiceConfigGet(); } catch (e) { voiceConfig = { ...voiceConfig }; }
 
-  const enabledToggle = document.getElementById('voice-enabled-toggle');
+  const localEnabledToggle = document.getElementById('voice-local-enabled');
+  const minimaxEnabledToggle = document.getElementById('voice-minimax-enabled');
+  const customEnabledToggle = document.getElementById('voice-custom-enabled');
   const tabs = document.querySelectorAll('.voice-tab');
   const panels = document.querySelectorAll('.voice-panel');
   const fetchStatus = document.getElementById('voice-fetch-status');
@@ -1042,8 +1050,10 @@ async function initVoiceSettings() {
   const customModelSelect = document.getElementById('voice-custom-model');
   const fetchCustomModelsBtn = document.getElementById('btn-voice-custom-fetch-models');
 
-  // 启用开关
-  if (enabledToggle) enabledToggle.checked = !!voiceConfig.enabled;
+  // 各来源独立开关
+  if (localEnabledToggle) localEnabledToggle.checked = !!voiceConfig.localEnabled;
+  if (minimaxEnabledToggle) minimaxEnabledToggle.checked = !!voiceConfig.minimaxEnabled;
+  if (customEnabledToggle) customEnabledToggle.checked = !!voiceConfig.customEnabled;
 
   // 选项卡切换
   let activeProvider = voiceConfig.provider || 'local';
@@ -1146,45 +1156,31 @@ async function initVoiceSettings() {
   const saveBtn = document.getElementById('btn-voice-save');
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
-      let newCfg = { enabled: enabledToggle ? enabledToggle.checked : false, provider: activeProvider };
-      if (activeProvider === 'local') {
-        const sel = localVoiceSelect ? localVoiceSelect.selectedOptions[0] : null;
-        newCfg = {
-          ...newCfg,
-          apiKey: '',
-          baseUrl: '',
-          customModel: '',
-          model: '',
-          voiceId: localVoiceSelect ? localVoiceSelect.value : '',
-          voiceName: sel ? sel.textContent : '',
-          speed: 1.0,
-        };
-      } else if (activeProvider === 'minimax') {
-        const sel = minimaxVoiceSelect ? minimaxVoiceSelect.selectedOptions[0] : null;
-        newCfg = {
-          ...newCfg,
-          minimaxKey: minimaxApiKey ? minimaxApiKey.value.trim() : '',
-          customKey: voiceConfig.customKey || '',
-          baseUrl: '',
-          customModel: '',
-          voiceId: minimaxVoiceSelect ? minimaxVoiceSelect.value : '',
-          voiceName: sel ? sel.textContent : '',
-          model: minimaxModelSelect ? minimaxModelSelect.value : 'speech-2.8-turbo',
-          speed: minimaxSpeed ? Number(minimaxSpeed.value) : 1.0,
-        };
-      } else {
-        newCfg = {
-          ...newCfg,
-          minimaxKey: voiceConfig.minimaxKey || '',
-          customKey: customApiKey ? customApiKey.value.trim() : '',
-          baseUrl: customBaseUrl ? customBaseUrl.value.trim() : '',
-          customModel: customModelSelect ? customModelSelect.value : '',
-          voiceId: '',
-          voiceName: '',
-          model: '',
-          speed: 1.0,
-        };
-      }
+      const localSel = localVoiceSelect ? localVoiceSelect.selectedOptions[0] : null;
+      const mSel = minimaxVoiceSelect ? minimaxVoiceSelect.selectedOptions[0] : null;
+      const newCfg = {
+        provider: activeProvider,
+        localEnabled: localEnabledToggle ? localEnabledToggle.checked : false,
+        minimaxEnabled: minimaxEnabledToggle ? minimaxEnabledToggle.checked : false,
+        customEnabled: customEnabledToggle ? customEnabledToggle.checked : false,
+        // 始终带上各来源的配置，避免从某一来源保存时清掉其它来源的开关/信息
+        minimaxKey: minimaxApiKey ? minimaxApiKey.value.trim() : (voiceConfig.minimaxKey || ''),
+        customKey: customApiKey ? customApiKey.value.trim() : (voiceConfig.customKey || ''),
+        baseUrl: customBaseUrl ? customBaseUrl.value.trim() : (voiceConfig.baseUrl || ''),
+        customModel: customModelSelect ? customModelSelect.value : (voiceConfig.customModel || ''),
+        model: minimaxModelSelect ? minimaxModelSelect.value : (voiceConfig.model || 'speech-2.8-turbo'),
+        speed: minimaxSpeed ? Number(minimaxSpeed.value) : (voiceConfig.speed || 1.0),
+        voiceId: activeProvider === 'local'
+          ? (localVoiceSelect ? localVoiceSelect.value : (voiceConfig.voiceId || ''))
+          : (activeProvider === 'minimax'
+              ? (minimaxVoiceSelect ? minimaxVoiceSelect.value : (voiceConfig.voiceId || ''))
+              : (voiceConfig.voiceId || '')),
+        voiceName: activeProvider === 'local'
+          ? (localSel ? localSel.textContent : (voiceConfig.voiceName || ''))
+          : (activeProvider === 'minimax'
+              ? (mSel ? mSel.textContent : (voiceConfig.voiceName || ''))
+              : (voiceConfig.voiceName || '')),
+      };
       try {
         voiceConfig = await window.api.aiVoiceConfigSet(newCfg);
         testStatus.textContent = '✓ 语音设置已保存';
@@ -3378,8 +3374,8 @@ async function sendChat() {
   saveChats();
   chatInput.focus();
 
-  // AI 语音模式：朗读本轮回复
-  if (voiceConfig.enabled) {
+  // AI 语音模式：朗读本轮回复（仅当前选中来源的独立开关打开才播）
+  if (isVoiceOn()) {
     const chat = chatList.find((c) => c.id === runChatId);
     let replyText = '';
     if (chat && chat.messages) {

@@ -10,7 +10,9 @@ function configPath() {
 }
 
 const DEFAULT_VOICE = {
-  enabled: false,         // 是否自动朗读 AI 回复
+  localEnabled: false,    // 本地语音独立开关
+  minimaxEnabled: false,  // MiniMax 海螺独立开关
+  customEnabled: false,   // 自定义 OpenAI 兼容独立开关
   provider: 'local',      // 'local' | 'minimax' | 'custom'
   apiKey: '',             // 兼容旧版（已废弃，迁移到 minimaxKey / customKey）
   minimaxKey: '',         // MiniMax 海螺 API Key（独立保存，不与自定义混用）
@@ -36,11 +38,20 @@ function loadState() {
   try {
     const raw = fs.readFileSync(configPath(), 'utf8');
     const data = JSON.parse(raw);
-    // 旧版没有 provider 字段，按用户要求清空旧语音数据，只保留 enabled 开关
+    // 0.9.34 起：总开关 enabled 拆分为三个来源各自独立开关（localEnabled/minimaxEnabled/customEnabled）。
+    // 旧版只有总开关 enabled 时，按 provider 映射到对应独立开关；无 provider（更早版本）默认归本地。
     const oldVoice = data.voice || {};
-    const voice = oldVoice.provider
-      ? { ...DEFAULT_VOICE, ...oldVoice }
-      : { ...DEFAULT_VOICE, enabled: !!oldVoice.enabled };
+    let voice;
+    if (oldVoice.provider) {
+      voice = { ...DEFAULT_VOICE, ...oldVoice };
+      // 旧版只有总开关时，把 enabled 映射到当前 provider 对应的独立开关
+      if (oldVoice.enabled && !oldVoice[oldVoice.provider + 'Enabled']) {
+        voice[oldVoice.provider + 'Enabled'] = true;
+      }
+    } else {
+      voice = { ...DEFAULT_VOICE, localEnabled: !!oldVoice.enabled };
+    }
+    delete voice.enabled;
     return {
       profiles: Array.isArray(data.profiles) ? data.profiles : [],
       activeId: data.activeId ?? null,
@@ -140,7 +151,9 @@ function setVoiceConfig(cfg) {
   const providers = ['local', 'minimax', 'custom'];
   const legacyKey = String((cfg && cfg.apiKey != null ? cfg.apiKey : prev.apiKey) || '').trim();
   const next = {
-    enabled: !!(cfg && cfg.enabled),
+    localEnabled: !!(cfg && cfg.localEnabled),
+    minimaxEnabled: !!(cfg && cfg.minimaxEnabled),
+    customEnabled: !!(cfg && cfg.customEnabled),
     provider: providers.includes(cfg && cfg.provider) ? cfg.provider : (prev.provider || 'local'),
     // 旧字段保留（兼容），实际以 minimaxKey / customKey 为准
     apiKey: prev.apiKey || legacyKey,
