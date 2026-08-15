@@ -2002,6 +2002,8 @@ const chatHistory = [];   // 发给模型的简版历史 [{role, content}]
 let sessionUsage = { input: 0, output: 0 };
 let currentAssistantBubble = null;
 let sending = false;
+// 标记「本次发送来自麦克风语音输入」：仅此路触发的消息才会激活 AI 语音回复
+let voiceSendPending = false;
 // 正在执行 AI 任务的会话 ID：流式事件 / 结果落库都路由到该会话，切换界面不影响
 let runningChatId = null;
 // 本次任务的 AI 文本段累积（按工具调用切分；最后一段用于功能任务落库）
@@ -2555,7 +2557,11 @@ async function handleVoiceBlob(blob) {
     chatInput.value = text.trim();
     autoGrow();
     chatStatusEl.textContent = '';
-    if (!sending) sendChat();
+    if (!sending) {
+      voiceSendPending = true;
+      // 先把识别到的文字显示在输入框，稍作停留让用户看到，随后自动发送
+      setTimeout(() => { if (!sending) sendChat(); }, 400);
+    }
   } catch (e) {
     chatStatusEl.textContent = '语音识别失败：' + (e && e.message ? e.message : String(e));
   }
@@ -3298,6 +3304,9 @@ function sanitizeHistoryForAttachments(messages, currentMeta) {
 
 async function sendChat() {
   const text = chatInput.value.trim();
+  // 标记本次是否由麦克风语音输入发起（用后清除，避免影响后续手动发送）
+  const fromVoice = voiceSendPending;
+  voiceSendPending = false;
   // 允许「仅有附件、无文字」发送；文字和附件都没有则忽略
   if ((!text && pendingAttachments.length === 0) || sending) return;
   const attachmentsMeta = pendingAttachments.map((a) => ({ name: a.name, path: a.path, kind: a.kind, mime: a.mime, size: a.size }));
@@ -3374,8 +3383,8 @@ async function sendChat() {
   saveChats();
   chatInput.focus();
 
-  // AI 语音模式：朗读本轮回复（仅当前选中来源的独立开关打开才播）
-  if (isVoiceOn()) {
+  // AI 语音模式：仅当本条消息由麦克风语音输入发起、且当前选中来源的独立开关打开时才朗读回复
+  if (fromVoice && isVoiceOn()) {
     const chat = chatList.find((c) => c.id === runChatId);
     let replyText = '';
     if (chat && chat.messages) {

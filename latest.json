@@ -1,17 +1,17 @@
 {
-  "version": "0.9.35",
+  "version": "0.9.36",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.35/AI.Copilot-0.9.35-arm64.dmg",
-  "dmgSha256": "5696b0a8dcdf53070a6ce706a3f8b81c312538e995c99f9b381d5a39093256b1",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.35/AI.Copilot-0.9.35.zip",
-  "patchSha256": "a5f171b1f87b8d65b9cd079f911d28d04c052bf0c7f843a0924949cdddb8b1d9",
-  "notes": "AI 语音开关重构：删除总开关，改为本地 / MiniMax 海螺 / 自定义三个来源各自带独立「启用此语音」开关。选中的来源即为 AI 回复朗读所用的声音，只有该来源开关打开才播、关闭则不播。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.36/AI.Copilot-0.9.36-arm64.dmg",
+  "dmgSha256": "369eebef41a4adb146bad063f584b0fcc61320ef8078976ea980296f58bcb335",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.36/AI.Copilot-0.9.36.zip",
+  "patchSha256": "7e6c4bd395664fd66998ccd1af33452f5964f0472c3ca071224dd5302a9c293b",
+  "notes": "麦克风语音输入行为调整：点击麦克风自动识别→文字填入输入框（停留 400ms 便于查看）→说完或再次点击结束自动发送。仅由麦克风发出的消息才激活 AI 语音回复；手动打字发送的不朗读。",
   "deltas": [
     {
-      "from": "0.9.34",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.35/AI.Copilot-0.9.35.zip",
-      "sha256": "a5f171b1f87b8d65b9cd079f911d28d04c052bf0c7f843a0924949cdddb8b1d9"
+      "from": "0.9.35",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.36/AI.Copilot-0.9.36.zip",
+      "sha256": "7e6c4bd395664fd66998ccd1af33452f5964f0472c3ca071224dd5302a9c293b"
     }
   ]
 }
