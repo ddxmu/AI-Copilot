@@ -1,3 +1,9 @@
+## v0.9.32 — 2026-08-16
+- **修复 AI 语音三处 bug（用户反馈）**：
+  - 海螺测试/朗读「实际是本地语音」：MiniMax T2A V2 返回的音频是 **hex 编码**（output_format=hex），旧代码按 base64 解码导致乱码、播放失败、静默回退到本地语音。现在主进程把 hex 正确转 base64 再回放，海螺音色能正常发声。
+  - 海螺「拉取我的音色」数量不对（不足 300+）：旧候选域名含一个重复的 `/v1/v1` 错误项，且国内域名不全，导致拉取失败只保留内置 12 个。改为优先 `api.minimaxi.com`（国内）/ `api.minimax.io`（国际），并兼容多种响应结构（`system_voice`/`voice_cloning`/`voice_generation`/`data`/`output` 包装）、去重、按中文名排序，正常返回 300+ 音色。
+  - 切到「自定义」仍显示海螺信息：MiniMax 与自定义共用同一个 `apiKey` 字段，互相串味。现将两者 Key 拆成独立字段 `minimaxKey` / `customKey` 分别保存（旧版共用的 `apiKey` 自动按 provider 迁移），互不干扰。
+
 ## v0.9.31 — 2026-08-16
 - **AI 语音设置重做：本地 / MiniMax 海螺 / 自定义 三栏**（按截图要求）：
   - 本地（免费 / 离线）：使用 macOS 系统 `speechSynthesis` 语音，无需联网，可选择中文语音；失败无网络依赖。

@@ -1823,6 +1823,24 @@ ipcMain.handle('ai-voice-fetch-models', async (_e, { apiKey, baseUrl }) => {
 });
 
 /* ---------------- AI 语音网络请求（走主进程，绕过 CSP） ---------------- */
+// 将 hex 字符串（MiniMax T2A V2 的 audio 默认编码）转成 base64，供渲染进程解码播放
+function hexToBase64(hex) {
+  const s = String(hex).trim();
+  if (!s || s.length % 2 !== 0) throw new Error('音频内容不是有效的 hex 编码');
+  const bytes = new Uint8Array(s.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    const b = parseInt(s.substr(i * 2, 2), 16);
+    if (Number.isNaN(b)) throw new Error('音频内容包含非 hex 字符');
+    bytes[i] = b;
+  }
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
 // 先读原始文本再解析 JSON，避免接口返回 HTML/空字符串时直接抛出 JSON.parse 错误
 async function readJsonResponse(resp) {
   const text = await resp.text();
@@ -1841,7 +1859,9 @@ async function readJsonResponse(resp) {
 ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
   try {
     const provider = config && config.provider;
-    const key = String(config.apiKey || '').trim();
+    const key = String(
+      (provider === 'minimax' ? config.minimaxKey : config.customKey) || config.apiKey || ''
+    ).trim();
 
     // 本地语音：由渲染进程用 Web Speech API 处理，主进程不发声
     if (provider === 'local') {
@@ -1872,10 +1892,12 @@ ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
       if (status < 200 || status >= 300 || (data && data.base_resp && data.base_resp.status_code !== 0)) {
         throw new Error((data && data.base_resp && data.base_resp.status_msg) || `HTTP ${status}`);
       }
-      let audioBase64 = null;
-      if (data.audio && typeof data.audio === 'string') audioBase64 = data.audio;
-      else if (data.data && typeof data.data.audio === 'string') audioBase64 = data.data.audio;
-      if (!audioBase64) throw new Error('响应中未找到音频内容');
+      // MiniMax T2A V2 的 audio 默认是 hex 编码（output_format=hex），需转成 base64 再回传
+      let audioHex = null;
+      if (data.audio && typeof data.audio === 'string') audioHex = data.audio;
+      else if (data.data && typeof data.data.audio === 'string') audioHex = data.data.audio;
+      if (!audioHex) throw new Error('响应中未找到音频内容');
+      const audioBase64 = hexToBase64(audioHex);
       return { ok: true, audioBase64, mime: 'audio/mp3' };
     }
 
@@ -1926,7 +1948,9 @@ ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
 ipcMain.handle('ai-voice-stt', async (_e, { audioBase64, mime, config }) => {
   try {
     const provider = config && config.provider;
-    const key = String((config && config.apiKey) || '').trim();
+    const key = String(
+      (provider === 'minimax' ? config.minimaxKey : config.customKey) || config.apiKey || ''
+    ).trim();
     if (!key) throw new Error('请先在「AI 语音」设置中填写 API Key 并保存');
     if (provider === 'local') throw new Error('本地离线模式不支持语音识别，请切换到 MiniMax 或 自定义');
     const baseUrl = provider === 'minimax'

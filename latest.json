@@ -1,17 +1,17 @@
 {
-  "version": "0.9.31",
+  "version": "0.9.32",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.31/AI.Copilot-0.9.31-arm64.dmg",
-  "dmgSha256": "89d5a30299db938b2caa0adadf38a034cd0a8c22c138d5a5374cbbd327dce62c",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.31/AI.Copilot-0.9.31.zip",
-  "patchSha256": "a1a9eb52c847a604b58aafd18e70e8942dc49c1a477b0ec1665066106610160d",
-  "notes": "AI 语音设置重做：本地 / MiniMax 海螺 / 自定义 三栏；文件处理完成后自动在右栏「工作完成」打开。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.32/AI.Copilot-0.9.32-arm64.dmg",
+  "dmgSha256": "972e29218e446421f056a774fef1a747ccc29596c514eb994816929f357ec8d3",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.32/AI.Copilot-0.9.32.zip",
+  "patchSha256": "f757c308e301021f426809f3317c28b09fd600e53e5bce5a3e004cef1478b97f",
+  "notes": "修复 AI 语音三处 bug：海螺朗读实际是本地语音（MiniMax 返回 hex 音频现正确解码）、海螺拉取音色数量不足 300+（修正域名/兼容多种响应）、切到自定义仍显示海螺 Key（MiniMax 与自定义 Key 拆开独立保存）。",
   "deltas": [
     {
-      "from": "0.9.30",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.31/AI.Copilot-0.9.31.zip",
-      "sha256": "a1a9eb52c847a604b58aafd18e70e8942dc49c1a477b0ec1665066106610160d"
+      "from": "0.9.31",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.32/AI.Copilot-0.9.32.zip",
+      "sha256": "f757c308e301021f426809f3317c28b09fd600e53e5bce5a3e004cef1478b97f"
     }
   ]
 }

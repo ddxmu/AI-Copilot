@@ -1067,11 +1067,11 @@ async function initVoiceSettings() {
   }
 
   // MiniMax 默认值
-  if (minimaxApiKey) minimaxApiKey.value = voiceConfig.apiKey || '';
+  if (minimaxApiKey) minimaxApiKey.value = voiceConfig.minimaxKey || '';
   if (minimaxModelSelect) minimaxModelSelect.value = voiceConfig.model || 'speech-2.8-turbo';
   if (minimaxSpeed) minimaxSpeed.value = Number(voiceConfig.speed) || 1.0;
   if (minimaxSpeedVal) minimaxSpeedVal.textContent = (Number(voiceConfig.speed) || 1.0).toFixed(1) + 'x';
-  updateKeyHint(minimaxKeyHint, voiceConfig.apiKey);
+  updateKeyHint(minimaxKeyHint, voiceConfig.minimaxKey);
   setupApiKeyToggle('voice-minimax-apikey', 'voice-minimax-apikey-toggle');
 
   // MiniMax 音色下拉：先填内置推荐，选中已保存项
@@ -1109,9 +1109,9 @@ async function initVoiceSettings() {
   }
 
   // 自定义默认值
-  if (customApiKey) customApiKey.value = voiceConfig.apiKey || '';
+  if (customApiKey) customApiKey.value = voiceConfig.customKey || '';
   if (customBaseUrl) customBaseUrl.value = voiceConfig.baseUrl || '';
-  updateKeyHint(customKeyHint, voiceConfig.apiKey);
+  updateKeyHint(customKeyHint, voiceConfig.customKey);
   setupApiKeyToggle('voice-custom-apikey', 'voice-custom-apikey-toggle');
   fillSelectOptions(customModelSelect, [], voiceConfig.customModel, '请选择模型');
 
@@ -1161,7 +1161,8 @@ async function initVoiceSettings() {
         const sel = minimaxVoiceSelect ? minimaxVoiceSelect.selectedOptions[0] : null;
         newCfg = {
           ...newCfg,
-          apiKey: minimaxApiKey ? minimaxApiKey.value.trim() : '',
+          minimaxKey: minimaxApiKey ? minimaxApiKey.value.trim() : '',
+          customKey: voiceConfig.customKey || '',
           baseUrl: '',
           customModel: '',
           voiceId: minimaxVoiceSelect ? minimaxVoiceSelect.value : '',
@@ -1172,7 +1173,8 @@ async function initVoiceSettings() {
       } else {
         newCfg = {
           ...newCfg,
-          apiKey: customApiKey ? customApiKey.value.trim() : '',
+          minimaxKey: voiceConfig.minimaxKey || '',
+          customKey: customApiKey ? customApiKey.value.trim() : '',
           baseUrl: customBaseUrl ? customBaseUrl.value.trim() : '',
           customModel: customModelSelect ? customModelSelect.value : '',
           voiceId: '',
@@ -1184,10 +1186,10 @@ async function initVoiceSettings() {
       try {
         voiceConfig = await window.api.aiVoiceConfigSet(newCfg);
         testStatus.textContent = '✓ 语音设置已保存';
-        if (minimaxApiKey) minimaxApiKey.value = voiceConfig.apiKey || '';
-        if (customApiKey) customApiKey.value = voiceConfig.apiKey || '';
-        updateKeyHint(minimaxKeyHint, voiceConfig.apiKey);
-        updateKeyHint(customKeyHint, voiceConfig.apiKey);
+        if (minimaxApiKey) minimaxApiKey.value = voiceConfig.minimaxKey || '';
+        if (customApiKey) customApiKey.value = voiceConfig.customKey || '';
+        updateKeyHint(minimaxKeyHint, voiceConfig.minimaxKey);
+        updateKeyHint(customKeyHint, voiceConfig.customKey);
       } catch (e) { testStatus.textContent = '保存失败：' + (e && e.message ? e.message : String(e)); }
     });
   }
@@ -2562,8 +2564,8 @@ async function handleVoiceBlob(blob) {
 }
 
 async function transcribeWithMinimax(blob) {
-  const key = voiceConfig.apiKey;
-  if (!key) throw new Error('请先填写 API Key 并保存');
+  const key = voiceConfig.provider === 'custom' ? voiceConfig.customKey : voiceConfig.minimaxKey;
+  if (!key) throw new Error('请先填写对应来源的 API Key 并保存');
   // 语音识别需要 wav/16kHz base64
   const base64 = await blobToWavBase16(blob, 16000);
   const resp = await window.api.aiVoiceSTT({

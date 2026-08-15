@@ -12,7 +12,9 @@ function configPath() {
 const DEFAULT_VOICE = {
   enabled: false,         // 是否自动朗读 AI 回复
   provider: 'local',      // 'local' | 'minimax' | 'custom'
-  apiKey: '',             // MiniMax / 自定义共用
+  apiKey: '',             // 兼容旧版（已废弃，迁移到 minimaxKey / customKey）
+  minimaxKey: '',         // MiniMax 海螺 API Key（独立保存，不与自定义混用）
+  customKey: '',          // 自定义 OpenAI 兼容 API Key（独立保存）
   baseUrl: '',            // 自定义 OpenAI 兼容 base URL，例如 https://api.openai.com/v1
   voiceId: '',            // MiniMax 音色 ID
   voiceName: '',          // MiniMax 音色显示名
@@ -123,17 +125,27 @@ function getMemoryEnabled() {
 
 /* ---------------- AI 语音配置（本地 / MiniMax / 自定义） ---------------- */
 function getVoiceConfig() {
-  return { ...DEFAULT_VOICE, ...(loadState().voice || {}) };
+  const v = { ...DEFAULT_VOICE, ...(loadState().voice || {}) };
+  // 旧版兼容：只有共用的 apiKey 时，按当前 provider 迁移到对应独立字段
+  if (!v.minimaxKey && !v.customKey && v.apiKey) {
+    if (v.provider === 'custom') v.customKey = v.apiKey;
+    else v.minimaxKey = v.apiKey; // local / minimax 都归 MiniMax
+  }
+  return v;
 }
 
 function setVoiceConfig(cfg) {
   const state = loadState();
   const prev = { ...DEFAULT_VOICE, ...(state.voice || {}) };
   const providers = ['local', 'minimax', 'custom'];
+  const legacyKey = String((cfg && cfg.apiKey != null ? cfg.apiKey : prev.apiKey) || '').trim();
   const next = {
     enabled: !!(cfg && cfg.enabled),
     provider: providers.includes(cfg && cfg.provider) ? cfg.provider : (prev.provider || 'local'),
-    apiKey: String((cfg && cfg.apiKey != null ? cfg.apiKey : prev.apiKey) || '').trim(),
+    // 旧字段保留（兼容），实际以 minimaxKey / customKey 为准
+    apiKey: prev.apiKey || legacyKey,
+    minimaxKey: String((cfg && cfg.minimaxKey != null ? cfg.minimaxKey : (prev.minimaxKey || legacyKey)) || '').trim(),
+    customKey: String((cfg && cfg.customKey != null ? cfg.customKey : prev.customKey) || '').trim(),
     baseUrl: String((cfg && cfg.baseUrl != null ? cfg.baseUrl : prev.baseUrl) || '').trim(),
     voiceId: String((cfg && cfg.voiceId != null ? cfg.voiceId : prev.voiceId) || '').trim(),
     voiceName: String((cfg && cfg.voiceName != null ? cfg.voiceName : prev.voiceName) || '').trim(),
@@ -162,41 +174,51 @@ const DEFAULT_MINIMAX_VOICE_IDS = [
   { id: 'audiobook_female_1', name: '有声书女性' },
 ];
 
-// 拉取 MiniMax 音色列表：POST 到语音管理域名 api.minimaxi.com（与 TTS 的 api.minimax.chat 不同）
+// 拉取 MiniMax 音色列表：POST 到语音管理域名（与 TTS 的 api.minimax.chat 同属 MiniMax，但用 get_voice 接口）
 async function fetchMinimaxVoices(apiKey, baseUrl) {
   const key = String(apiKey || '').trim();
   if (!key) throw new Error('请先填写 API Key');
   const raw = String(baseUrl || 'https://api.minimax.chat/v1').replace(/\/+$/, '');
-  const voiceBase = raw
-    .replace('api.minimax.chat', 'api.minimaxi.com')
-    .replace('api.minimax.io', 'api.minimaxi.com');
+  // 优先用 MiniMax 国内域名 api.minimaxi.com，其次国际域名 api.minimax.io，最后回退传入的 base
   const candidates = [
-    `${voiceBase}/get_voice`,
-    `${voiceBase}/v1/get_voice`,
+    'https://api.minimaxi.com/v1/get_voice',
+    'https://api.minimax.io/v1/get_voice',
     `${raw}/get_voice`,
   ];
   let lastErr = null;
   for (const ep of candidates) {
     try {
       const data = await postJson(ep, { Authorization: `Bearer ${key}` }, JSON.stringify({ voice_type: 'all' }), 15000);
-      if (data && data.base_resp && data.base_resp.status_code != null && data.base_resp.status_code !== 0) {
-        lastErr = new Error(`拉取音色失败：${data.base_resp.status_msg || '未知错误'}`);
+      const baseResp = (data && data.base_resp) || (data && data.output && data.output.base_resp) || {};
+      if (baseResp.status_code != null && baseResp.status_code !== 0) {
+        lastErr = new Error(`拉取音色失败：${baseResp.status_msg || '未知错误'}`);
         continue;
       }
+      // 响应可能直接是 { system_voice, voice_cloning, voice_generation }，
+      // 也可能是 DashScope 包装的 { output: { system_voice... } } 或 { data: [...] }
+      const root = (data && data.output) || data || {};
       const groups = ['system_voice', 'voice_cloning', 'voice_generation'];
       const all = [];
       for (const g of groups) {
-        const arr = data && data[g];
-        if (Array.isArray(arr)) all.push(...arr);
+        if (Array.isArray(root[g])) all.push(...root[g]);
       }
+      if (Array.isArray(root.data)) all.push(...root.data);
+      if (Array.isArray(root.voice_list)) all.push(...root.voice_list);
       if (!all.length) { lastErr = new Error('接口返回为空，未找到任何音色'); continue; }
-      const mapped = all
-        .map((v) => ({
-          id: String(v.voice_id || v.id || v.voiceId || '').trim(),
-          name: String(v.voice_name || v.name || v.id || v.voice_id || '').trim(),
-        }))
-        .filter((v) => v.id);
+      const seen = new Set();
+      const mapped = [];
+      for (const v of all) {
+        const id = String(v.voice_id || v.id || v.voiceId || '').trim();
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        mapped.push({
+          id,
+          name: String(v.voice_name || v.name || v.voice_id || id).trim(),
+        });
+      }
       if (!mapped.length) { lastErr = new Error('接口返回的音色缺少 voice_id 字段'); continue; }
+      // 按名称排序，方便下拉浏览
+      mapped.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
       return mapped;
     } catch (e) {
       lastErr = e;
