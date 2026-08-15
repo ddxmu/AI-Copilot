@@ -1,16 +1,16 @@
 {
-  "version": "0.9.12",
-  "notes": "AI 设置改为独立窗口样式：点左侧「AI 设置」弹出独立设置窗口——顶部「设置」标题 + 右上角 × 关闭按钮，左侧分类导航（外观、联网、AI配置、记忆、MCP服务器、智能体技能、更新日志），右侧对应内容区，点分类滚动到对应板块，点遮罩或 × 关闭。所有原有设置项 id 不变、功能绑定保持原样。",
-  "pubDate": "2026-08-15T12:19:23+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.12/AI.Copilot-0.9.12-arm64.dmg",
-  "sha256": "948d91b3887e2dff161aea93daf757dba66bf4392cc93e9291efb6233d62841e",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.12/AI.Copilot-0.9.12.zip",
-  "patchSha256": "cb25a70cfffe0d9e05749a3877c20436910296228f955943b5973cf43bcb086a",
+  "version": "0.9.13",
+  "notes": "AI 设置弹窗全屏遮罩 + 分类分页显示：此前设置窗口被 .panel 的 900px 宽度限制只能占半屏；现在解除限制，弹窗铺满整版灰色半透明遮罩、窗口居中。左侧分类改为分页切换——点「联网」只显示联网内容、点「外观」只显示外观内容，不再把所有板块堆在一起滚动。仅改 renderer/style.css 与 renderer/app.js 的弹窗样式与分页逻辑，未动任何升级/更新链路。",
+  "pubDate": "2026-08-15T12:50:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.13/AI.Copilot-0.9.13-arm64.dmg",
+  "sha256": "e25bbe51d4cff05f19d8c3739917a63defdfd141efc353b5578c3fff49e3957e",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.13/AI.Copilot-0.9.13.zip",
+  "patchSha256": "e45cf2a28c36bab9505f5ae69c1854338c2ac64f0b232c4414fe7d9c54c917c5",
   "deltas": [
     {
-      "from": "0.9.11",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.12/AI.Copilot-0.9.12.zip",
-      "sha256": "cb25a70cfffe0d9e05749a3877c20436910296228f955943b5973cf43bcb086a"
+      "from": "0.9.12",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.13/AI.Copilot-0.9.13.zip",
+      "sha256": "e45cf2a28c36bab9505f5ae69c1854338c2ac64f0b232c4414fe7d9c54c917c5"
     }
   ]
 }

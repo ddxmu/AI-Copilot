@@ -58,7 +58,7 @@ if "sealed resource" in _assess or "invalid" in _assess or "damaged" in _assess:
 print("app 签名完成（spctl:", (_ar.stdout + _ar.stderr).strip().splitlines()[-1] if (_ar.stdout + _ar.stderr).strip() else "ok", ")")
 
 # 1. 计算 app 大小，建足够大的可写 dmg
-size_mb = int(run(["du", "-sm", APP]).stdout.split()[0]) + 60
+size_mb = int(run(["du", "-sm", APP]).stdout.split()[0]) + 300
 print(f"app 大小 ~{size_mb-60}MB, dmg 分配 {size_mb}MB")
 run(["hdiutil", "create", "-size", f"{size_mb}m", "-fs", "HFS+",
      "-volname", VOL, "-ov", TMP_DMG])

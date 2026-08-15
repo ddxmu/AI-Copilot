@@ -517,12 +517,7 @@ const settingsModal = document.getElementById('panel-ai-settings');
 function openSettingsModal(targetId) {
   settingsModal.classList.remove('hidden');
   // 默认打开「外观」或传入的分类
-  const target = targetId || 'settings-appearance';
-  activateSettingsNav(target);
-  requestAnimationFrame(() => {
-    const section = document.getElementById(target);
-    if (section) section.scrollIntoView({ behavior: 'instant', block: 'start' });
-  });
+  activateSettingsNav(targetId || 'settings-appearance');
 }
 
 function closeSettingsModal() {
@@ -530,8 +525,12 @@ function closeSettingsModal() {
 }
 
 function activateSettingsNav(targetId) {
+  const id = targetId || 'settings-appearance';
   document.querySelectorAll('.settings-nav').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.target === targetId);
+    btn.classList.toggle('active', btn.dataset.target === id);
+  });
+  document.querySelectorAll('.settings-section').forEach((sec) => {
+    sec.classList.toggle('active', sec.id === id);
   });
 }
 
@@ -545,12 +544,7 @@ settingsModal.addEventListener('click', (e) => {
 
 document.querySelectorAll('.settings-nav').forEach((btn) => {
   btn.addEventListener('click', () => {
-    const target = btn.dataset.target;
-    activateSettingsNav(target);
-    const section = document.getElementById(target);
-    if (section) {
-      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    activateSettingsNav(btn.dataset.target);
   });
 });
 
