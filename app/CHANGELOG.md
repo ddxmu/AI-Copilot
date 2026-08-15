@@ -1,3 +1,6 @@
+## v0.9.33 — 2026-08-16
+- **修复麦克风语音识别 404（用户反馈）**：聊天框麦克风报「接口返回不是有效 JSON：404 page not found」。根因是 minimax 分支请求了 `api.minimax.chat/v1/audio/transcriptions`（MiniMax **没有** OpenAI 兼容的该端点）。现改为走 MiniMax 原生 ASR 接口 `POST {host}/v1/audio/asr`（JSON body，base64 音频，非 multipart），候选域名 `api.minimax.chat` / `api.minimaxi.com` / `api.minimax.io` 逐个尝试，兼容 `text`/`data.text`/`data.utter`/`data.result` 多种返回结构。「自定义」provider 仍走 OpenAI 兼容 `/audio/transcriptions`（用于 OpenAI / 硅基流动 / 通义等 Whisper）。注意：若 MiniMax Key 不带 ASR 权限（如 sk-cp- Token Plan 仅含 TTS），ASR 会返回 401/403，此时请在「AI 语音 › 自定义」里填一个 OpenAI 兼容 Whisper 地址做语音识别。
+
 ## v0.9.32 — 2026-08-16
 - **修复 AI 语音三处 bug（用户反馈）**：
   - 海螺测试/朗读「实际是本地语音」：MiniMax T2A V2 返回的音频是 **hex 编码**（output_format=hex），旧代码按 base64 解码导致乱码、播放失败、静默回退到本地语音。现在主进程把 hex 正确转 base64 再回放，海螺音色能正常发声。

@@ -1,17 +1,17 @@
 {
-  "version": "0.9.32",
+  "version": "0.9.33",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.32/AI.Copilot-0.9.32-arm64.dmg",
-  "dmgSha256": "972e29218e446421f056a774fef1a747ccc29596c514eb994816929f357ec8d3",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.32/AI.Copilot-0.9.32.zip",
-  "patchSha256": "f757c308e301021f426809f3317c28b09fd600e53e5bce5a3e004cef1478b97f",
-  "notes": "修复 AI 语音三处 bug：海螺朗读实际是本地语音（MiniMax 返回 hex 音频现正确解码）、海螺拉取音色数量不足 300+（修正域名/兼容多种响应）、切到自定义仍显示海螺 Key（MiniMax 与自定义 Key 拆开独立保存）。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.33/AI.Copilot-0.9.33-arm64.dmg",
+  "dmgSha256": "cd9ea6c3dc5d00dd545d3d31deb12b87d88e4bfdc71c18800e9a1d09dbada0a8",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.33/AI.Copilot-0.9.33.zip",
+  "patchSha256": "488e6009171af6ea626f6c9307af2b1ebc41789fd0789d57ea2b5e3e784b5f91",
+  "notes": "修复麦克风语音识别 404：MiniMax 分支改用原生 ASR 接口 /v1/audio/asr（候选域名 api.minimax.chat / api.minimaxi.com / api.minimax.io），不再请求不存在的 OpenAI 兼容 /audio/transcriptions；自定义 provider 仍走 OpenAI 兼容 Whisper。",
   "deltas": [
     {
-      "from": "0.9.31",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.32/AI.Copilot-0.9.32.zip",
-      "sha256": "f757c308e301021f426809f3317c28b09fd600e53e5bce5a3e004cef1478b97f"
+      "from": "0.9.32",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.33/AI.Copilot-0.9.33.zip",
+      "sha256": "488e6009171af6ea626f6c9307af2b1ebc41789fd0789d57ea2b5e3e784b5f91"
     }
   ]
 }

@@ -1856,6 +1856,57 @@ async function readJsonResponse(resp) {
   return { status: resp.status, data, raw: text };
 }
 
+// MiniMax 原生语音识别（ASR）：接口为 /v1/audio/asr（JSON body，非 multipart），
+// 部署在 api.minimaxi.com / api.minimax.io，与 TTS 的 api.minimax.chat 不同。
+// 注意：MiniMax 的 OpenAI 兼容 /audio/transcriptions 端点并不存在（会 404），必须用 /audio/asr。
+async function fetchMinimaxASR(audioBase64, key) {
+  const candidates = [
+    'https://api.minimax.chat/v1/audio/asr',
+    'https://api.minimaxi.com/v1/audio/asr',
+    'https://api.minimax.io/v1/audio/asr',
+  ];
+  let lastErr = null;
+  for (const url of candidates) {
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({
+          audio_format: 'wav',
+          sample_rate: 16000,
+          language: 'zh-CN',
+          audio_data: audioBase64,
+        }),
+      });
+      const respText = await resp.text();
+      if (resp.status === 404) { lastErr = new Error('接口返回 404'); continue; }
+      let data = null;
+      try { data = JSON.parse(respText); } catch (e) { lastErr = new Error('响应不是有效 JSON：' + respText.slice(0, 120)); continue; }
+      if (resp.status < 200 || resp.status >= 300) {
+        const msg = (data && data.base_resp && data.base_resp.status_msg)
+          || (data && data.error && data.error.message)
+          || `HTTP ${resp.status}`;
+        if (resp.status === 401 || resp.status === 403) {
+          throw new Error(`MiniMax 语音识别失败：${msg}（API Key 可能无 ASR 权限，或 Key 与域名区域不匹配）`);
+        }
+        lastErr = new Error(msg);
+        continue;
+      }
+      let text = '';
+      if (typeof data.text === 'string') text = data.text;
+      else if (data.data && typeof data.data.text === 'string') text = data.data.text;
+      else if (data.data && typeof data.data.utter === 'string') text = data.data.utter;
+      else if (data.data && typeof data.data.result === 'string') text = data.data.result;
+      if (!text) throw new Error('MiniMax ASR 响应中未找到识别文本');
+      return text;
+    } catch (e) {
+      if (e.message && e.message.indexOf('MiniMax 语音识别失败') === 0) throw e;
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('MiniMax 语音识别请求失败');
+}
+
 ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
   try {
     const provider = config && config.provider;
@@ -1953,31 +2004,37 @@ ipcMain.handle('ai-voice-stt', async (_e, { audioBase64, mime, config }) => {
     ).trim();
     if (!key) throw new Error('请先在「AI 语音」设置中填写 API Key 并保存');
     if (provider === 'local') throw new Error('本地离线模式不支持语音识别，请切换到 MiniMax 或 自定义');
-    const baseUrl = provider === 'minimax'
-      ? 'https://api.minimax.chat/v1'
-      : String((config && config.baseUrl) || '').replace(/\/$/, '');
-    if (!baseUrl) throw new Error('请先填写 API 地址并保存');
-    const url = `${baseUrl}/audio/transcriptions`;
-    const buf = Buffer.from(String(audioBase64 || ''), 'base64');
-    const form = new FormData();
-    form.append('file', new Blob([buf], { type: mime || 'audio/wav' }), 'voice.wav');
-    form.append('language', 'zh');
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${key}` },
-      body: form,
-    });
-    const { status, data } = await readJsonResponse(resp);
-    if (status < 200 || status >= 300) {
-      const msg = (data && data.error && data.error.message) || `HTTP ${status}`;
-      const tip = status === 404
-        ? '：接口不存在，请确认「接口地址」末尾为 /v1（例如 https://api.openai.com/v1）'
-        : ((status === 401 || status === 403)
-          ? '：API Key 无效或无语音识别(ASR)权限'
-          : '');
-      throw new Error(`语音识别失败（${msg}）${tip}`);
+
+    // 自定义：OpenAI 兼容 /audio/transcriptions（multipart form），例如 OpenAI / 硅基流动 / 通义
+    if (provider === 'custom') {
+      const baseUrl = String((config && config.baseUrl) || '').replace(/\/$/, '');
+      if (!baseUrl) throw new Error('请先填写 API 地址并保存');
+      const url = `${baseUrl}/audio/transcriptions`;
+      const buf = Buffer.from(String(audioBase64 || ''), 'base64');
+      const form = new FormData();
+      form.append('file', new Blob([buf], { type: mime || 'audio/wav' }), 'voice.wav');
+      form.append('language', 'zh');
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${key}` },
+        body: form,
+      });
+      const { status, data } = await readJsonResponse(resp);
+      if (status < 200 || status >= 300) {
+        const msg = (data && data.error && data.error.message) || `HTTP ${status}`;
+        const tip = status === 404
+          ? '：接口不存在，请确认「接口地址」末尾为 /v1（例如 https://api.openai.com/v1）'
+          : ((status === 401 || status === 403)
+            ? '：API Key 无效或无语音识别(ASR)权限'
+            : '');
+        throw new Error(`语音识别失败（${msg}）${tip}`);
+      }
+      return { ok: true, text: (data && data.text) || '' };
     }
-    return { ok: true, text: (data && data.text) || '' };
+
+    // MiniMax：走原生 ASR（/v1/audio/asr），不要用 OpenAI 兼容的 /audio/transcriptions（不存在，会 404）
+    const text = await fetchMinimaxASR(audioBase64, key);
+    return { ok: true, text: text || '' };
   } catch (err) {
     return { ok: false, error: err && err.message ? err.message : String(err) };
   }
