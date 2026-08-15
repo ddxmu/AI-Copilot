@@ -1,17 +1,17 @@
 {
-  "version": "0.9.36",
+  "version": "0.9.37",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.36/AI.Copilot-0.9.36-arm64.dmg",
-  "dmgSha256": "369eebef41a4adb146bad063f584b0fcc61320ef8078976ea980296f58bcb335",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.36/AI.Copilot-0.9.36.zip",
-  "patchSha256": "7e6c4bd395664fd66998ccd1af33452f5964f0472c3ca071224dd5302a9c293b",
-  "notes": "麦克风语音输入行为调整：点击麦克风自动识别→文字填入输入框（停留 400ms 便于查看）→说完或再次点击结束自动发送。仅由麦克风发出的消息才激活 AI 语音回复；手动打字发送的不朗读。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.37/AI.Copilot-0.9.37-arm64.dmg",
+  "dmgSha256": "d815b94482bb097653801551320d0d3d30031b46746d664dfa484954cecc1fe8",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.37/AI.Copilot-0.9.37.zip",
+  "patchSha256": "059722e7dfa40fe98527222420fde2775509992447e9dee1548b582468b4e290",
+  "notes": "麦克风交互对齐 WorkBuddy：点麦克风录音，录音中点击发送/回车或再次点麦克风结束并识别，文字入框后自动发送（仅麦克风发出的消息激活 AI 语音回复）。设置文案：更新日志改名「更新和日志」，软件更新说明改为「自动检查新版本」。",
   "deltas": [
     {
-      "from": "0.9.35",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.36/AI.Copilot-0.9.36.zip",
-      "sha256": "7e6c4bd395664fd66998ccd1af33452f5964f0472c3ca071224dd5302a9c293b"
+      "from": "0.9.36",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.37/AI.Copilot-0.9.37.zip",
+      "sha256": "059722e7dfa40fe98527222420fde2775509992447e9dee1548b582468b4e290"
     }
   ]
 }

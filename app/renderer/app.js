@@ -2505,7 +2505,7 @@ function startRecording() {
     mediaRecorder.start(200);
     isRecording = true;
     btnVoice.classList.add('listening');
-    chatStatusEl.textContent = '正在聆听…请说话（再次点击结束）';
+    chatStatusEl.textContent = '正在聆听…请说话（点击「发送」或再次点击麦克风结束）';
 
     // 静默检测：连续 1.5s 音量过低则自动停止
     setupSilenceDetection(stream);
@@ -3436,10 +3436,15 @@ function handleSlashCommand(text) {
   }
 }
 
-btnSend.addEventListener('click', sendChat);
+btnSend.addEventListener('click', () => {
+  // 录音中点击发送：停止录音并触发语音识别（识别后文字入框并自动发送）
+  if (isRecording) { finalizeRecording(); return; }
+  sendChat();
+});
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
+    if (isRecording) { finalizeRecording(); return; }
     sendChat();
   }
 });
