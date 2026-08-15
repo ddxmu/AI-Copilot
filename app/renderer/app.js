@@ -943,39 +943,20 @@ async function speakLocal(text) {
 async function speakMinimax(text) {
   const key = voiceConfig.apiKey;
   if (!key) throw new Error('请先填写 MiniMax API Key 并保存');
-  const baseUrl = (voiceConfig.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
-  const model = voiceConfig.model || 'speech-01-turbo';
   const voiceId = voiceConfig.voiceId;
   if (!voiceId) throw new Error('请先选择 MiniMax 音色');
-  const speed = Number(voiceConfig.speed) || 1.0;
 
-  const body = {
-    model,
-    text,
-    stream: false,
-    voice_setting: { voice_id: voiceId, speed: Math.max(0.5, Math.min(2, speed)) },
-    audio_setting: { sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 1 },
-  };
+  // 走主进程 IPC 请求 TTS，绕过渲染进程 CSP 对 fetch 的限制
+  const resp = await window.api.aiVoiceTTS({ text, config: voiceConfig });
+  if (!resp || !resp.ok) throw new Error((resp && resp.error) || 'TTS 请求失败');
 
-  const resp = await fetch(`${baseUrl}/t2a_v2`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-    body: JSON.stringify(body),
-  });
-  const data = await resp.json();
-  if (!resp.ok || (data && data.base_resp && data.base_resp.status_code !== 0)) {
-    throw new Error((data && data.base_resp && data.base_resp.status_msg) || `HTTP ${resp.status}`);
-  }
   // MiniMax 可能返回 audio（base64）或 audio_file 下载链接；优先 audio
   let audioSrc = null;
-  if (data.audio && typeof data.audio === 'string') {
-    const blob = base64ToBlob(data.audio, 'audio/mp3');
+  if (resp.audioBase64 && typeof resp.audioBase64 === 'string') {
+    const blob = base64ToBlob(resp.audioBase64, resp.mime || 'audio/mp3');
     audioSrc = URL.createObjectURL(blob);
-  } else if (data.data && typeof data.data.audio === 'string') {
-    const blob = base64ToBlob(data.data.audio, 'audio/mp3');
-    audioSrc = URL.createObjectURL(blob);
-  } else if (data.audio_file || (data.data && data.data.audio_file)) {
-    audioSrc = data.audio_file || data.data.audio_file;
+  } else if (resp.audioUrl && typeof resp.audioUrl === 'string') {
+    audioSrc = resp.audioUrl;
   }
   if (!audioSrc) throw new Error('响应中未找到音频内容');
   const a = new Audio(audioSrc);
@@ -992,6 +973,19 @@ function base64ToBlob(base64, mime) {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return new Blob([bytes], { type: mime });
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result;
+      const idx = typeof dataUrl === 'string' ? dataUrl.indexOf(',') : -1;
+      resolve(idx >= 0 ? dataUrl.slice(idx + 1) : '');
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 async function initVoiceSettings() {
@@ -2446,37 +2440,30 @@ async function transcribeWithActiveProfile(blob) {
   if (!active) throw new Error('没有可用的 AI 配置，请先在「AI 设置 › AI 配置」中添加');
   const baseUrl = String(active.baseUrl || '').replace(/\/$/, '');
   if (!baseUrl) throw new Error('当前 AI 配置缺少模型地址');
-  const url = `${baseUrl}/audio/transcriptions`;
-  const form = new FormData();
-  form.append('file', blob, 'voice.webm');
-  form.append('model', 'whisper-1');
-  form.append('language', 'zh');
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${active.apiKey || ''}` },
-    body: form,
+  const base64 = await blobToBase64(blob);
+  const resp = await window.api.aiVoiceSTT({
+    provider: 'active',
+    audioBase64: base64,
+    mime: blob.type || 'audio/webm',
+    profile: active,
   });
-  const data = await resp.json();
-  if (!resp.ok) throw new Error(data.error?.message || `HTTP ${resp.status}`);
-  return data.text || '';
+  if (!resp || !resp.ok) throw new Error((resp && resp.error) || '语音识别失败');
+  return resp.text || '';
 }
 
 async function transcribeWithMinimax(blob) {
   const key = voiceConfig.apiKey;
   if (!key) throw new Error('请先填写 MiniMax API Key 并保存');
-  const baseUrl = String(voiceConfig.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
   // MiniMax ASR 需要 wav/16kHz base64
   const base64 = await blobToWavBase16(blob, 16000);
-  const resp = await fetch(`${baseUrl}/audio/asr`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-    body: JSON.stringify({ audio_format: 'wav', sample_rate: 16000, language: 'zh-CN', audio_data: base64 }),
+  const resp = await window.api.aiVoiceSTT({
+    provider: 'minimax',
+    audioBase64: base64,
+    mime: 'audio/wav',
+    config: voiceConfig,
   });
-  const data = await resp.json();
-  if (!resp.ok || (data.base_resp && data.base_resp.status_code !== 0)) {
-    throw new Error((data.base_resp && data.base_resp.status_msg) || `HTTP ${resp.status}`);
-  }
-  return data.text || '';
+  if (!resp || !resp.ok) throw new Error((resp && resp.error) || '语音识别失败');
+  return resp.text || '';
 }
 
 // 将 Blob 解码并重采样为 16kHz WAV 后返回 base64

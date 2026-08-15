@@ -56,6 +56,9 @@ contextBridge.exposeInMainWorld('api', {
   aiVoiceConfigGet: () => ipcRenderer.invoke('ai-voice-config-get'),
   aiVoiceConfigSet: (cfg) => ipcRenderer.invoke('ai-voice-config-set', cfg),
   aiVoiceFetchVoices: (apiKey, baseUrl) => ipcRenderer.invoke('ai-voice-fetch-voices', { apiKey, baseUrl }),
+  // 语音 TTS / STT 网络请求走主进程，绕过 CSP 限制
+  aiVoiceTTS: (payload) => ipcRenderer.invoke('ai-voice-tts', payload),
+  aiVoiceSTT: (payload) => ipcRenderer.invoke('ai-voice-stt', payload),
   // MCP 服务器
   mcpGet: () => ipcRenderer.invoke('mcp-get'),
   mcpSave: (server) => ipcRenderer.invoke('mcp-save', server),

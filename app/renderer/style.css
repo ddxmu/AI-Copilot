@@ -438,7 +438,7 @@ body {
 .content-body {
   flex: 1;
   overflow-y: auto;
-  padding: 32px 40px;
+  padding: 22px 40px;
   min-width: 0;
 }
 
@@ -1414,7 +1414,7 @@ body {
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 180px);
+  height: calc(100vh - 205px);
   min-height: 480px;
   box-shadow: var(--shadow-sm);
   overflow: hidden;

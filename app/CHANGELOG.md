@@ -1,3 +1,7 @@
+## v0.9.17 — 2026-08-15
+- **修复语音功能报 Failed to fetch**：v0.9.16 把语音识别/朗读改成调用外部 API（Whisper / MiniMax），但渲染进程的 Content-Security-Policy 限制 `default-src 'self'`，导致 `fetch` 外部接口直接失败，表现为「语音识别失败：Failed to fetch」和「测试失败：Failed to fetch」。现将语音 **TTS、STT 网络请求全部改到主进程** 处理（IPC `ai-voice-tts` / `ai-voice-stt`），渲染进程只负责录音和播放，不再直接 fetch 外部语音接口。
+- **AI 助手布局微调**：因 v0.9.13 新增顶部工具栏占掉 48px，聊天卡片底部被截。已将 `.content-body` 顶部内边距收窄 10px，并把 `.chat-card` 高度从 `calc(100vh - 180px)` 调整为 `calc(100vh - 205px)`，使底部输入框和状态栏完整显示。
+
 ## v0.9.16 — 2026-08-15
 - **修复麦克风语音识别无结果**：v0.9.15 使用 Chromium 的 `webkitSpeechRecognition`（依赖 Google 在线服务），在国内网络下无法识别，导致点击麦克风后提示「未识别到语音」。现彻底替换为 **MediaRecorder 本地录音 + 服务端转写**：点麦克风授权后开始录音，检测到约 1.5 秒静音或再次点击麦克风则自动结束，录音发送给 STT 服务转文字并自动填入输入框、自动发送。
 - **新增语音识别来源选择**：在「AI 设置 › AI 语音」中新增「语音识别来源」选项：

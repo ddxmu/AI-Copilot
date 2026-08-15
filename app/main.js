@@ -1809,3 +1809,83 @@ ipcMain.handle('ai-voice-fetch-voices', async (_e, { apiKey, baseUrl }) => {
     return { ok: false, error: e && e.message ? e.message : String(e) };
   }
 });
+
+/* ---------------- AI 语音网络请求（走主进程，绕过 CSP） ---------------- */
+ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
+  try {
+    const key = String(config.apiKey || '').trim();
+    if (!key) throw new Error('请先填写 MiniMax API Key 并保存');
+    const baseUrl = String(config.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
+    const model = String(config.model || 'speech-01-turbo').trim();
+    const voiceId = String(config.voiceId || '').trim();
+    if (!voiceId) throw new Error('请先选择 MiniMax 音色');
+    const speed = Number(config.speed) || 1.0;
+    const body = {
+      model,
+      text,
+      stream: false,
+      voice_setting: { voice_id: voiceId, speed: Math.max(0.5, Math.min(2, speed)) },
+      audio_setting: { sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 1 },
+    };
+    const resp = await fetch(`${baseUrl}/t2a_v2`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (!resp.ok || (data && data.base_resp && data.base_resp.status_code !== 0)) {
+      throw new Error((data && data.base_resp && data.base_resp.status_msg) || `HTTP ${resp.status}`);
+    }
+    let audioBase64 = null;
+    let audioUrl = null;
+    if (data.audio && typeof data.audio === 'string') audioBase64 = data.audio;
+    else if (data.data && typeof data.data.audio === 'string') audioBase64 = data.data.audio;
+    else if (data.audio_file || (data.data && data.data.audio_file)) audioUrl = data.audio_file || data.data.audio_file;
+    if (!audioBase64 && !audioUrl) throw new Error('响应中未找到音频内容');
+    return { ok: true, audioBase64, audioUrl, mime: 'audio/mp3' };
+  } catch (err) {
+    return { ok: false, error: err && err.message ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle('ai-voice-stt', async (_e, { provider, audioBase64, mime, profile, config }) => {
+  try {
+    if (provider === 'minimax') {
+      const key = String(config.apiKey || '').trim();
+      if (!key) throw new Error('请先填写 MiniMax API Key 并保存');
+      const baseUrl = String(config.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
+      const resp = await fetch(`${baseUrl}/audio/asr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({ audio_format: 'wav', sample_rate: 16000, language: 'zh-CN', audio_data: audioBase64 }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || (data.base_resp && data.base_resp.status_code !== 0)) {
+        throw new Error((data.base_resp && data.base_resp.status_msg) || `HTTP ${resp.status}`);
+      }
+      return { ok: true, text: data.text || '' };
+    }
+    // 默认：跟随当前 AI 配置，走 OpenAI 兼容 /audio/transcriptions
+    const active = profile;
+    if (!active) throw new Error('没有可用的 AI 配置，请先在「AI 设置 › AI 配置」中添加');
+    const baseUrl = String(active.baseUrl || '').replace(/\/$/, '');
+    if (!baseUrl) throw new Error('当前 AI 配置缺少模型地址');
+    const url = `${baseUrl}/audio/transcriptions`;
+    const buf = Buffer.from(String(audioBase64 || ''), 'base64');
+    const ext = (mime === 'audio/webm') ? 'webm' : (mime === 'audio/mp4' ? 'm4a' : 'webm');
+    const form = new FormData();
+    form.append('file', new Blob([buf], { type: mime || 'audio/webm' }), `voice.${ext}`);
+    form.append('model', 'whisper-1');
+    form.append('language', 'zh');
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${active.apiKey || ''}` },
+      body: form,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error?.message || `HTTP ${resp.status}`);
+    return { ok: true, text: data.text || '' };
+  } catch (err) {
+    return { ok: false, error: err && err.message ? err.message : String(err) };
+  }
+});
