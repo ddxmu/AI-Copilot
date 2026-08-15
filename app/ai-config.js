@@ -17,8 +17,8 @@ const DEFAULT_VOICE = {
   model: 'speech-01-turbo',
   voiceId: '',
   speed: 1.0,
-  // 语音识别（STT）默认跟随当前 AI 配置；也可设为 'minimax' 用 MiniMax ASR
-  sttProvider: 'active',
+  // 语音识别（STT）固定走 MiniMax ASR，使用上方 MiniMax Key，与 AI 配置解耦
+  sttProvider: 'minimax',
 };
 
 const DEFAULT_STATE = {
@@ -118,7 +118,10 @@ function getMemoryEnabled() {
 
 /* ---------------- AI 语音配置 ---------------- */
 function getVoiceConfig() {
-  return { ...DEFAULT_VOICE, ...(loadState().voice || {}) };
+  const voice = { ...DEFAULT_VOICE, ...(loadState().voice || {}) };
+  // 历史配置里可能有 sttProvider='active'，统一覆盖为 MiniMax，与 AI 配置解耦
+  voice.sttProvider = 'minimax';
+  return voice;
 }
 
 function setVoiceConfig(cfg) {
@@ -136,7 +139,8 @@ function setVoiceConfig(cfg) {
   state.voice.model = String(state.voice.model || '').trim() || DEFAULT_VOICE.model;
   state.voice.voiceId = String(state.voice.voiceId || '').trim();
   state.voice.speed = Math.max(0.5, Math.min(2.0, parseFloat(state.voice.speed) || 1.0));
-  state.voice.sttProvider = ['active', 'minimax'].includes(state.voice.sttProvider) ? state.voice.sttProvider : 'active';
+  // STT 固定为 MiniMax，避免依赖当前 AI 配置的 Key
+  state.voice.sttProvider = 'minimax';
   saveState(state);
   return state.voice;
 }

@@ -1,3 +1,8 @@
+## v0.9.18 — 2026-08-15
+- **AI 语音设置独立**：语音识别来源去掉「跟随当前 AI 配置」，固定使用 MiniMax ASR，与上方 AI 语音面板里的 MiniMax Key 一致，不再和「AI 配置」中的 Key 关联。
+- **修复语音识别 JSON 解析报错**：v0.9.17 已把语音网络请求迁到主进程，但接口返回非 JSON 时（如 HTML 错误页）会抛出「Unexpected non-whitespace character after JSON…」。现改为先读取响应文本再安全解析 JSON，失败时提示真实响应片段，便于定位。
+- **同步微调**：默认 `sttProvider` 改为 `minimax`，旧配置自动归一，避免误走当前 AI 配置的 `/audio/transcriptions`。
+
 ## v0.9.17 — 2026-08-15
 - **修复语音功能报 Failed to fetch**：v0.9.16 把语音识别/朗读改成调用外部 API（Whisper / MiniMax），但渲染进程的 Content-Security-Policy 限制 `default-src 'self'`，导致 `fetch` 外部接口直接失败，表现为「语音识别失败：Failed to fetch」和「测试失败：Failed to fetch」。现将语音 **TTS、STT 网络请求全部改到主进程** 处理（IPC `ai-voice-tts` / `ai-voice-stt`），渲染进程只负责录音和播放，不再直接 fetch 外部语音接口。
 - **AI 助手布局微调**：因 v0.9.13 新增顶部工具栏占掉 48px，聊天卡片底部被截。已将 `.content-body` 顶部内边距收窄 10px，并把 `.chat-card` 高度从 `calc(100vh - 180px)` 调整为 `calc(100vh - 205px)`，使底部输入框和状态栏完整显示。

@@ -1,16 +1,16 @@
 {
-  "version": "0.9.17",
-  "notes": "修复语音功能 Failed to fetch：v0.9.16 语音 TTS/STT 走渲染进程 fetch 被 CSP 拦截，现改到主进程处理；同时微调 AI 助手布局，让顶部工具栏加入后聊天卡片底部不再被截。",
-  "pubDate": "2026-08-15T18:19:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.17/AI.Copilot-0.9.17-arm64.dmg",
-  "sha256": "719052b0f0b4bf3b13b7116adc21b4e910bf055da0381b2bd3505c99e54064c9",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.17/AI.Copilot-0.9.17.zip",
-  "patchSha256": "290608102e9d481ae1db26915c8a92628a8e5816066a8b3d59570eda8a90e22e",
+  "version": "0.9.18",
+  "notes": "AI 语音设置独立：语音识别来源固定为 MiniMax ASR，不再关联「AI 配置」的 Key；修复语音识别 JSON 解析报错，主进程先读响应文本再安全解析，失败时提示真实响应片段。",
+  "pubDate": "2026-08-15T18:55:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.18/AI.Copilot-0.9.18-arm64.dmg",
+  "sha256": "b76e9edd0ef462fc391ee04b4f35ff4b14d62aef486d9db97b38d848c43ab9fb",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.18/AI.Copilot-0.9.18.zip",
+  "patchSha256": "597735f1f5b9be87e4f2074f039fbbca9f252106e3a8532f9f1302d48793a57f",
   "deltas": [
     {
-      "from": "0.9.16",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.17/AI.Copilot-0.9.17.zip",
-      "sha256": "290608102e9d481ae1db26915c8a92628a8e5816066a8b3d59570eda8a90e22e"
+      "from": "0.9.17",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.18/AI.Copilot-0.9.18.zip",
+      "sha256": "597735f1f5b9be87e4f2074f039fbbca9f252106e3a8532f9f1302d48793a57f"
     }
   ]
 }

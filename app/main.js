@@ -1811,6 +1811,21 @@ ipcMain.handle('ai-voice-fetch-voices', async (_e, { apiKey, baseUrl }) => {
 });
 
 /* ---------------- AI 语音网络请求（走主进程，绕过 CSP） ---------------- */
+// 先读原始文本再解析 JSON，避免接口返回 HTML/空字符串时直接抛出 JSON.parse 错误
+async function readJsonResponse(resp) {
+  const text = await resp.text();
+  let data = null;
+  if (text && text.trim()) {
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      const snippet = text.length > 200 ? text.slice(0, 200) + '…' : text;
+      throw new Error(`接口返回不是有效 JSON：${snippet}`);
+    }
+  }
+  return { status: resp.status, data, raw: text };
+}
+
 ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
   try {
     const key = String(config.apiKey || '').trim();
@@ -1832,9 +1847,9 @@ ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
       body: JSON.stringify(body),
     });
-    const data = await resp.json();
-    if (!resp.ok || (data && data.base_resp && data.base_resp.status_code !== 0)) {
-      throw new Error((data && data.base_resp && data.base_resp.status_msg) || `HTTP ${resp.status}`);
+    const { status, data } = await readJsonResponse(resp);
+    if (status < 200 || status >= 300 || (data && data.base_resp && data.base_resp.status_code !== 0)) {
+      throw new Error((data && data.base_resp && data.base_resp.status_msg) || `HTTP ${status}`);
     }
     let audioBase64 = null;
     let audioUrl = null;
@@ -1859,9 +1874,9 @@ ipcMain.handle('ai-voice-stt', async (_e, { provider, audioBase64, mime, profile
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
         body: JSON.stringify({ audio_format: 'wav', sample_rate: 16000, language: 'zh-CN', audio_data: audioBase64 }),
       });
-      const data = await resp.json();
-      if (!resp.ok || (data.base_resp && data.base_resp.status_code !== 0)) {
-        throw new Error((data.base_resp && data.base_resp.status_msg) || `HTTP ${resp.status}`);
+      const { status, data } = await readJsonResponse(resp);
+      if (status < 200 || status >= 300 || (data && data.base_resp && data.base_resp.status_code !== 0)) {
+        throw new Error((data && data.base_resp && data.base_resp.status_msg) || `HTTP ${status}`);
       }
       return { ok: true, text: data.text || '' };
     }
@@ -1882,8 +1897,8 @@ ipcMain.handle('ai-voice-stt', async (_e, { provider, audioBase64, mime, profile
       headers: { 'Authorization': `Bearer ${active.apiKey || ''}` },
       body: form,
     });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error?.message || `HTTP ${resp.status}`);
+    const { status, data } = await readJsonResponse(resp);
+    if (status < 200 || status >= 300) throw new Error((data && data.error && data.error.message) || `HTTP ${status}`);
     return { ok: true, text: data.text || '' };
   } catch (err) {
     return { ok: false, error: err && err.message ? err.message : String(err) };

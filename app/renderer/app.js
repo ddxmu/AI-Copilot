@@ -1018,7 +1018,8 @@ async function initVoiceSettings() {
   }
   if (speedInput) speedInput.value = Number(voiceConfig.speed) || 1.0;
   if (speedVal) speedVal.textContent = (Number(voiceConfig.speed) || 1.0).toFixed(1) + 'x';
-  if (sttProviderSel) sttProviderSel.value = voiceConfig.sttProvider || 'active';
+  // STT 固定为 MiniMax，与 AI 配置解耦
+  if (sttProviderSel) sttProviderSel.value = 'minimax';
   if (apiKeyInput && keyHint) {
     if (voiceConfig.apiKey) keyHint.classList.remove('hidden');
     else keyHint.classList.add('hidden');
@@ -1073,7 +1074,7 @@ async function initVoiceSettings() {
         model: modelSelect ? modelSelect.value : 'speech-01-turbo',
         voiceId: voiceSelect ? voiceSelect.value : '',
         speed: speedInput ? Number(speedInput.value) : 1.0,
-        sttProvider: sttProviderSel ? sttProviderSel.value : 'active',
+        sttProvider: 'minimax',
       };
       if (clearKeyCb && clearKeyCb.checked) {
         newCfg.apiKey = '';

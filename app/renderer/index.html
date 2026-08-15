@@ -1221,10 +1221,9 @@
                     <div class="form-cell" style="margin-top:14px">
                       <label>语音识别来源</label>
                       <select id="voice-stt-provider">
-                        <option value="active">跟随当前 AI 配置（需要支持 /audio/transcriptions，如 OpenAI / Azure）</option>
                         <option value="minimax">MiniMax ASR（使用上方 MiniMax Key）</option>
                       </select>
-                      <div class="field-hint">点击麦克风后，录音会发给这里选中的服务转成文字。若当前 AI 配置不支持语音转文字，请切换到 MiniMax ASR。</div>
+                      <div class="field-hint">点击麦克风后，录音会发给 MiniMax ASR 转成文字。AI 语音设置独立，不与「AI 配置」中的 Key 关联。</div>
                     </div>
 
                     <div id="voice-provider-local" class="voice-provider-panel">
