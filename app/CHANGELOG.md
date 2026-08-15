@@ -1,3 +1,7 @@
+## v0.9.19 — 2026-08-15
+- **修复 AI 语音测试「音频播放失败」**：渲染进程 CSP 只配置了 `default-src 'self'`，未单独放行 `media-src`，导致 `<audio>` 播放 blob / data / 外部 HTTPS 音频被浏览器拦截。现补充 `media-src 'self' blob: data: https:`，TTS 返回的音频可正常播放。
+- **修复麦克风语音识别 404**：MiniMax ASR（语音转文字）接口部署在 `api.minimaxi.com`，而用户配置的是 TTS 所在的 `api.minimax.chat`，导致 `/audio/asr` 返回 `404 page not found`。现自动把 ASR 请求从 `api.minimax.chat` 映射到 `api.minimaxi.com`，TTS 仍走用户配置的地址。
+
 ## v0.9.18 — 2026-08-15
 - **AI 语音设置独立**：语音识别来源去掉「跟随当前 AI 配置」，固定使用 MiniMax ASR，与上方 AI 语音面板里的 MiniMax Key 一致，不再和「AI 配置」中的 Key 关联。
 - **修复语音识别 JSON 解析报错**：v0.9.17 已把语音网络请求迁到主进程，但接口返回非 JSON 时（如 HTML 错误页）会抛出「Unexpected non-whitespace character after JSON…」。现改为先读取响应文本再安全解析 JSON，失败时提示真实响应片段，便于定位。

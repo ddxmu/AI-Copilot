@@ -1,16 +1,16 @@
 {
-  "version": "0.9.18",
-  "notes": "AI 语音设置独立：语音识别来源固定为 MiniMax ASR，不再关联「AI 配置」的 Key；修复语音识别 JSON 解析报错，主进程先读响应文本再安全解析，失败时提示真实响应片段。",
-  "pubDate": "2026-08-15T18:55:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.18/AI.Copilot-0.9.18-arm64.dmg",
-  "sha256": "b76e9edd0ef462fc391ee04b4f35ff4b14d62aef486d9db97b38d848c43ab9fb",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.18/AI.Copilot-0.9.18.zip",
-  "patchSha256": "597735f1f5b9be87e4f2074f039fbbca9f252106e3a8532f9f1302d48793a57f",
+  "version": "0.9.19",
+  "notes": "修复 AI 语音测试「音频播放失败」：CSP 补充 media-src 放行 blob/data/HTTPS 音频；修复麦克风语音识别 404：MiniMax ASR 自动从 api.minimax.chat 映射到 api.minimaxi.com。",
+  "pubDate": "2026-08-15T19:09:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.19/AI.Copilot-0.9.19-arm64.dmg",
+  "sha256": "558ce39fb7c2f499f0ebf54a56d72a88583ac697b7511125f4b69cdc2f6787ca",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.19/AI.Copilot-0.9.19.zip",
+  "patchSha256": "ced566217ab193a56f4968d263d7c9ebac088e5b837e7cad5aac10e6a87fb674",
   "deltas": [
     {
-      "from": "0.9.17",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.18/AI.Copilot-0.9.18.zip",
-      "sha256": "597735f1f5b9be87e4f2074f039fbbca9f252106e3a8532f9f1302d48793a57f"
+      "from": "0.9.18",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.19/AI.Copilot-0.9.19.zip",
+      "sha256": "ced566217ab193a56f4968d263d7c9ebac088e5b837e7cad5aac10e6a87fb674"
     }
   ]
 }

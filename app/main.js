@@ -1869,7 +1869,9 @@ ipcMain.handle('ai-voice-stt', async (_e, { provider, audioBase64, mime, profile
       const key = String(config.apiKey || '').trim();
       if (!key) throw new Error('请先填写 MiniMax API Key 并保存');
       const baseUrl = String(config.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
-      const resp = await fetch(`${baseUrl}/audio/asr`, {
+      // MiniMax ASR 接口在 api.minimaxi.com 上；若用户配置的是旧域名 api.minimax.chat，自动映射
+      const asrBaseUrl = baseUrl.replace('api.minimax.chat', 'api.minimaxi.com');
+      const resp = await fetch(`${asrBaseUrl}/audio/asr`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
         body: JSON.stringify({ audio_format: 'wav', sample_rate: 16000, language: 'zh-CN', audio_data: audioBase64 }),
