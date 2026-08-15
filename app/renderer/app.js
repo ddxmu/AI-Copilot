@@ -170,6 +170,7 @@ if (ruleExportWrap) {
           'ok'
         );
         try { window.api.revealInFolder(res.filePath); } catch (_) { /* 忽略 */ }
+        try { addWorkItem({ type: 'file', icon: '📄', path: res.filePath }); } catch (_) { /* 忽略 */ }
       } catch (err) {
         showRuleIoMsg('导出失败：' + (err.message || err), 'err');
       }
@@ -2797,6 +2798,27 @@ function fmtHM(d) {
   return h + ':' + m;
 }
 
+// 把一条「已完成」记录写进右栏「工作完成」并自动展开右栏（AI 工具与自带文件处理共用）
+function addWorkItem(item) {
+  if (!item) return;
+  const p = item.path || null;
+  const u = item.url || null;
+  if (!p && !u) return;
+  workItems.unshift({
+    type: item.type || 'file',
+    icon: item.icon || '📄',
+    name: item.name || (item.type === 'web' ? u : basenameOf(p)),
+    path: p,
+    url: u,
+    time: fmtHM(new Date()),
+  });
+  if (workItems.length > 200) workItems.pop();
+  renderWorkList();
+  // 自动展开右侧栏并切到「工作完成」标签，让用户立刻看到产出
+  openRightSidebar();
+  switchRightTab('work');
+}
+
 function captureWorkItem(name, input, result) {
   const def = WORK_TYPES[name];
   if (!def) return;
@@ -2806,19 +2828,7 @@ function captureWorkItem(name, input, result) {
   let path = null, url = null;
   if (def.type === 'web') { url = inp.url; if (!url) return; }
   else { path = inp.path; if (!path) return; }
-  workItems.unshift({
-    type: def.type,
-    icon: def.icon,
-    name: def.type === 'web' ? url : basenameOf(path),
-    path: path || null,
-    url: url || null,
-    time: fmtHM(new Date()),
-  });
-  if (workItems.length > 200) workItems.pop();
-  renderWorkList();
-  // 自动展开右侧栏并切到「工作完成」标签，让用户立刻看到产出
-  openRightSidebar();
-  switchRightTab('work');
+  addWorkItem({ type: def.type, icon: def.icon, path, url });
 }
 
 function renderWorkList() {
@@ -4296,6 +4306,7 @@ if (rnRuleExportWrap) {
           'ok'
         );
         try { window.api.revealInFolder(res.filePath); } catch (_) { /* 忽略 */ }
+        try { addWorkItem({ type: 'file', icon: '📄', path: res.filePath }); } catch (_) { /* 忽略 */ }
       } catch (err) {
         showRnRuleIoMsg('导出失败：' + (err.message || err), 'err');
       }
@@ -4382,6 +4393,8 @@ document.getElementById('rename-start').addEventListener('click', async () => {
     li.append(tag, document.createTextNode(r.file + '　' + r.message));
     list.appendChild(li);
   });
+  // 完成的文件自动进右栏「工作完成」
+  results.forEach((r) => { if (r && r.status === 'done' && r.file) addWorkItem({ type: 'file', icon: '📄', path: r.file }); });
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 });
 
@@ -4523,6 +4536,8 @@ document.getElementById('conv-start').addEventListener('click', async () => {
     li.append(tag, document.createTextNode(r.file + '　' + r.message));
     list.appendChild(li);
   });
+  // 完成的文件自动进右栏「工作完成」
+  results.forEach((r) => { if (r && r.status === 'done' && r.file) addWorkItem({ type: 'file', icon: '📄', path: r.file }); });
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 });
 
@@ -4844,6 +4859,8 @@ document.getElementById('wm-start').addEventListener('click', async () => {
     li.append(tag, document.createTextNode(r.file + '　' + r.message));
     list.appendChild(li);
   });
+  // 完成的 PDF 自动进右栏「工作完成」
+  results.forEach((r) => { if (r && r.status === 'done' && r.file) addWorkItem({ type: 'file', icon: '📄', path: r.file }); });
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 });
 

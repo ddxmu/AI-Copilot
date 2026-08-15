@@ -1,3 +1,8 @@
+## v0.9.30 — 2026-08-16
+- **修复：文件处理完成后自动在右栏「工作完成」打开**（之前只有 AI 对话里助手写/改的文件会进右栏，app 自带文件处理完成不展开右栏）：
+  - 抽出共享 `addWorkItem(item)`，AI 对话路径（`captureWorkItem` → `write_file` / `edit_file` / `open_file` / `open_url`）与自带文件处理完成点统一走它，完成即把产出文件写入右栏「工作完成」列表并自动展开右栏、切到「工作完成」标签。
+  - 自带文件处理完成点接上：PDF 去水印、格式转换（本地引擎）、文件重命名、规则导出（×2），每个成功产出的文件都会进右栏（点击在 Finder 中定位）。
+
 ## v0.9.29 — 2026-08-16
 - **AI 语音改为通用 OpenAI 兼容（清空旧的 MiniMax 逻辑）**：
   - 删干净旧的 MiniMax 专用数据：默认接口地址（`https://api.minimax.chat/v1`）、`voiceId` / `voiceName` 音色字段、`speed` 语速、内置 12 条 MiniMax 系统音色、`fetchMinimaxVoices` 拉取接口，以及本地持久化的旧字段全部清空。

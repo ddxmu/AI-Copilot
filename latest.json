@@ -1,16 +1,16 @@
 {
-  "version": "0.9.29",
-  "notes": "AI 语音改为通用 OpenAI 兼容（清空旧的 MiniMax 数据）：设置面板改为 API Key + API 地址 + 语音模型下拉 + 「拉取模型」按钮 + 保存 + 测试语音；朗读与麦克风识别统一走 OpenAI 兼容接口（POST {base}/audio/speech 发声、POST {base}/audio/transcriptions 识别），适配 OpenAI / SiliconFlow / 任意兼容服务。收起左侧功能栏时，AI 聊天界面自动撑满内容区。",
-  "pubDate": "2026-08-16T00:50:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.29/AI.Copilot-0.9.29-arm64.dmg",
-  "sha256": "de7e7061d1fbdc256e177bac28a43467dfd1a69ad830a898daa8cbc0b8f63ded",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.29/AI.Copilot-0.9.29.zip",
-  "patchSha256": "6516151a61a7cb049d7afff14b73dffae2e7986525e27a486623b6970fbf95c6",
+  "version": "0.9.30",
+  "notes": "修复：文件处理完成后自动在右栏「工作完成」打开。抽出共享 addWorkItem，AI 对话里助手写/改的文件、以及 app 自带文件处理（PDF 去水印 / 格式转换 / 文件重命名 / 规则导出）完成后，都会把产出文件写入右栏「工作完成」列表并自动展开右栏、切到「工作完成」标签（点击在 Finder 中定位）。",
+  "pubDate": "2026-08-16T01:05:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.30/AI.Copilot-0.9.30-arm64.dmg",
+  "sha256": "8dcb1bcf34d916057a2cb21242cd447d73a88333e69b94d0dfa6da56f2a143d4",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.30/AI.Copilot-0.9.30.zip",
+  "patchSha256": "f998c9dab9adb0b5c187baf7abe70e34c70cced39cad767b130f46a8a38a2544",
   "deltas": [
     {
-      "from": "0.9.28",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.29/AI.Copilot-0.9.29.zip",
-      "sha256": "6516151a61a7cb049d7afff14b73dffae2e7986525e27a486623b6970fbf95c6"
+      "from": "0.9.29",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.30/AI.Copilot-0.9.30.zip",
+      "sha256": "f998c9dab9adb0b5c187baf7abe70e34c70cced39cad767b130f46a8a38a2544"
     }
   ]
 }
