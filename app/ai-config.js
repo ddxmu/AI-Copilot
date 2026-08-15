@@ -159,29 +159,81 @@ const DEFAULT_MINIMAX_VOICE_IDS = [
   { id: 'presenter_female', name: '女性主持人' },
 ];
 
-// MiniMax 音色列表：优先读官方 voice_id/voice_identity，全部失败则抛出错误
+// MiniMax 音色列表：POST 到语音管理域名 api.minimaxi.com/v1/get_voice（与 TTS 的 api.minimax.chat 不同）
 async function fetchMinimaxVoices(apiKey, baseUrl) {
   const key = String(apiKey || '').trim();
   if (!key) throw new Error('请先填写 API Key');
-  const url = String(baseUrl || DEFAULT_VOICE.baseUrl).replace(/\/$/, '');
-  const candidates = ['/get_voice', '/voice_identity', '/voices', '/voice_id'];
-  let lastErr = null;
-  for (const p of candidates) {
-    try {
-      const data = await fetchJson(`${url}${p}`, { 'Authorization': `Bearer ${key}` }, 15000);
-      // 官方接口返回格式不确定，兼容几种常见结构
-      const list = data?.voices || data?.data?.voices || data?.data || data?.voice_identity || (Array.isArray(data) ? data : null);
-      if (Array.isArray(list) && list.length) {
-        return list.map((v) => ({
-          id: String(v.voice_id || v.id || v.voiceId || v.name || '').trim(),
-          name: String(v.name || v.voice_name || v.id || v.voice_id || '').trim(),
-        })).filter((v) => v.id);
-      }
-      // 如果返回了但解析为空，继续尝试下一个端点
-      lastErr = new Error('接口返回为空');
-    } catch (e) { lastErr = e; }
+  // 音色列表接口在「语音管理」域名 api.minimaxi.com，而用户配置的「接口地址」是 TTS 域名 api.minimax.chat，
+  // 这里把 TTS 域名映射到语音管理域名，避免 404
+  let url = String(baseUrl || DEFAULT_VOICE.baseUrl).replace(/\/$/, '');
+  url = url.replace('api.minimax.chat', 'api.minimaxi.com').replace('api.minimax.io', 'api.minimaxi.com');
+  const ep = `${url}/get_voice`;
+  let data;
+  try {
+    data = await postJson(ep, { 'Authorization': `Bearer ${key}` }, JSON.stringify({ voice_type: 'all' }), 15000);
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    if (/404/.test(msg)) {
+      throw new Error(`${msg}：音色列表接口应为 api.minimaxi.com/v1/get_voice（已自动映射），请确认接口地址末尾为 /v1、且 Key 含音色管理权限`);
+    }
+    throw e;
   }
-  throw lastErr || new Error('无法拉取音色列表');
+  // 接口返回 { system_voice[], voice_cloning[], voice_generation[], base_resp }
+  if (data && data.base_resp && data.base_resp.status_code !== 0 && data.base_resp.status_code != null) {
+    throw new Error(`拉取音色失败：${data.base_resp.status_msg || '未知错误'}`);
+  }
+  const groups = ['system_voice', 'voice_cloning', 'voice_generation'];
+  const all = [];
+  for (const g of groups) {
+    const arr = data && data[g];
+    if (Array.isArray(arr)) all.push(...arr);
+  }
+  if (!all.length) throw new Error('接口返回为空，未找到任何音色');
+  const mapped = all
+    .map((v) => ({
+      id: String(v.voice_id || v.id || v.voiceId || '').trim(),
+      name: String(v.voice_name || v.name || v.id || v.voice_id || '').trim(),
+    }))
+    .filter((v) => v.id);
+  if (!mapped.length) throw new Error('接口返回的音色缺少 voice_id 字段');
+  return mapped;
+}
+
+// POST + JSON body 的 HTTP 请求（fetchJson 仅支持 GET，音色列表接口需要 POST）
+function postJson(urlStr, headers = {}, bodyStr, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    let url;
+    try { url = new URL(urlStr); } catch (e) { return reject(new Error('API 地址无效')); }
+    const lib = url.protocol === 'http:' ? http : https;
+    const req = lib.request(
+      {
+        method: 'POST',
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'http:' ? 80 : 443),
+        path: url.pathname + url.search,
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(bodyStr), ...headers },
+        timeout: timeoutMs,
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          // 用 Buffer.concat 再 toString，避免中文乱码（编码铁律）
+          const raw = Buffer.concat(chunks).toString('utf8');
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            try { resolve(JSON.parse(raw)); }
+            catch (e) { reject(new Error('响应不是有效 JSON')); }
+          } else {
+            reject(new Error(`HTTP ${res.statusCode}: ${raw.slice(0, 200)}`));
+          }
+        });
+      }
+    );
+    req.on('timeout', () => { req.destroy(new Error('请求超时')); });
+    req.on('error', reject);
+    req.write(bodyStr);
+    req.end();
+  });
 }
 
 /* ---------------- MCP 服务器配置 ---------------- */

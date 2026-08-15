@@ -1,3 +1,6 @@
+## v0.9.25 — 2026-08-15
+- **修复 AI 语音「拉取音色」404**：旧代码在 TTS 域名 `api.minimax.chat/v1` 上用 GET 试探 `/get_voice`、`/voice_identity`、`/voices`、`/voice_id` 四个路径，全部 404。经核实，MiniMax 音色列表接口是 **POST `https://api.minimaxi.com/v1/get_voice`**（body `{"voice_type":"all"}`，返回 `system_voice`/`voice_cloning`/`voice_generation`），部署在「语音管理」域名 `api.minimaxi.com`（与 TTS 的 `api.minimax.chat` 不同）。现改为：把用户配置的接口地址映射到语音管理域名，POST 该端点并合并三类音色，兼容 `voice_id`/`voice_name` 字段；404 时给出明确提示（接口地址末尾需为 /v1、Key 需含音色管理权限）。
+
 ## v0.9.24 — 2026-08-15
 - **修复 AI 语音 API Key 看起来「保存后消失」**：Key 其实一直正确写入本地 `userData/ai-config.json`（已验证持久化有效），但打开设置时密码框从不回填已保存的 Key，只显示一个不起眼的「已保存」小提示，导致关闭/重开后空框被误认为没保存。现已改为：打开设置即用圆点回显已保存的 Key（点眼睛按钮可查看明文），并提示「已保存 API Key（圆点为已保存内容，留空保持原 Key）」；保存成功后也立即回填，确保关掉重开仍能看到。
 
