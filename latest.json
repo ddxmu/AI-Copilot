@@ -1,16 +1,16 @@
 {
-  "version": "0.9.16",
-  "notes": "修复麦克风语音识别无结果：替换 Chromium webkitSpeechRecognition 为 MediaRecorder 本地录音 + 服务端转写；新增语音识别来源选择（跟随当前 AI 配置 / MiniMax ASR）。修复本地/MiniMax 测试语音无声音：本地模式等待 voices 并选择中文语音，MiniMax 修正默认模型为 speech-01-turbo、增加嵌套响应兼容、测试按钮可绕过总开关直接试听。",
-  "pubDate": "2026-08-15T17:56:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.16/AI.Copilot-0.9.16-arm64.dmg",
-  "sha256": "56b14d1a92f8616567d4fdb87c13591f41751a47add37eef60f00e74d1423c5d",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.16/AI.Copilot-0.9.16.zip",
-  "patchSha256": "c6f23a43c1dd4b2f2421209293a32b46023fb326c852400464842c49f3a3937a",
+  "version": "0.9.17",
+  "notes": "修复语音功能 Failed to fetch：v0.9.16 语音 TTS/STT 走渲染进程 fetch 被 CSP 拦截，现改到主进程处理；同时微调 AI 助手布局，让顶部工具栏加入后聊天卡片底部不再被截。",
+  "pubDate": "2026-08-15T18:19:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.17/AI.Copilot-0.9.17-arm64.dmg",
+  "sha256": "719052b0f0b4bf3b13b7116adc21b4e910bf055da0381b2bd3505c99e54064c9",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.17/AI.Copilot-0.9.17.zip",
+  "patchSha256": "290608102e9d481ae1db26915c8a92628a8e5816066a8b3d59570eda8a90e22e",
   "deltas": [
     {
-      "from": "0.9.15",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.16/AI.Copilot-0.9.16.zip",
-      "sha256": "c6f23a43c1dd4b2f2421209293a32b46023fb326c852400464842c49f3a3937a"
+      "from": "0.9.16",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.17/AI.Copilot-0.9.17.zip",
+      "sha256": "290608102e9d481ae1db26915c8a92628a8e5816066a8b3d59570eda8a90e22e"
     }
   ]
 }
