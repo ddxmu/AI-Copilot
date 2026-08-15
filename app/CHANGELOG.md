@@ -1,3 +1,6 @@
+## v0.9.22 — 2026-08-15
+- **修复 AI 语音「拉取音色」假成功**：此前 `fetchMinimaxVoices` 在官方接口全部失败后，会默默返回 10 个默认公开音色，UI 显示「已拉取 10 个音色」，导致用户误以为配置正确。现已改为：接口拉取失败时明确返回错误，渲染进程显示真实失败原因（如 HTTP 404、地址无效等），同时仅把默认音色作为 fallback 加载并明确提示「拉取失败，已加载默认音色」，避免误导。
+
 ## v0.9.21 — 2026-08-15
 - **彻底修复麦克风语音识别 404**：MiniMax 的语音识别（ASR）实际部署在 `api.minimaxi.com/v1/audio/asr`（JSON 格式：`audio_format`/`sample_rate`/`language`/`audio_data` base64），既不在 OpenAI 兼容的 `/audio/transcriptions`，也不在 `api.minimax.chat`。现主进程按此真实端点调用（TTS 域名自动映射为 ASR 域名）。注意：MiniMax Token Plan（`sk-cp-` 开头）Key 仅含 TTS 权限、无 ASR 权限，仍会 404，需改用按量付费 Key。
 - **AI 助手麦克风与「AI 设置 › AI 语音」解耦**：麦克风改为独立语音输入，不再依赖 AI 语音面板的「启用」开关；点击麦克风不再自动新建对话，识别结果直接填入当前对话并发送。语音朗读（TTS）仍由 AI 语音面板的「启用」开关控制。

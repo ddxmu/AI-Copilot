@@ -1806,7 +1806,11 @@ ipcMain.handle('ai-voice-fetch-voices', async (_e, { apiKey, baseUrl }) => {
     const voices = await aiConfig.fetchMinimaxVoices(apiKey, baseUrl);
     return { ok: true, voices };
   } catch (e) {
-    return { ok: false, error: e && e.message ? e.message : String(e) };
+    return {
+      ok: false,
+      error: e && e.message ? e.message : String(e),
+      fallbackVoices: aiConfig.DEFAULT_MINIMAX_VOICE_IDS || [],
+    };
   }
 });
 

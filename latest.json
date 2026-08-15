@@ -1,16 +1,16 @@
 {
-  "version": "0.9.21",
-  "notes": "彻底修复麦克风语音识别 404（改用 MiniMax 真实 ASR 端点 api.minimaxi.com/v1/audio/asr + JSON 格式）；AI 助手麦克风与「AI 设置 › AI 语音」解耦，点击不再新建对话，识别结果直接填入当前对话发送。",
-  "pubDate": "2026-08-15T19:40:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.21/AI.Copilot-0.9.21-arm64.dmg",
-  "sha256": "5cdb57f016a8ea70be6bb854d02196bd15d122bc1b63d9cdc7974f0da419b326",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.21/AI.Copilot-0.9.21.zip",
-  "patchSha256": "c8bfaf41658821245088c04f67bcd49cc929898e5d8b73ef9b6efedb85974324",
+  "version": "0.9.22",
+  "notes": "修复 AI 语音「拉取音色」假成功：接口失败时不再假装已拉取 10 个音色，改为明确提示失败原因并仅加载默认音色作为 fallback。",
+  "pubDate": "2026-08-15T20:15:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.22/AI.Copilot-0.9.22-arm64.dmg",
+  "sha256": "3ee785977bd03041a76f848092ae53632ce592abeed581ec5deaeeefcdf027b6",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.22/AI.Copilot-0.9.22.zip",
+  "patchSha256": "b8d7c09dae9a87ce0193f8b03498363a4695040f12b65e71fd2f0d00d3a96d53",
   "deltas": [
     {
-      "from": "0.9.20",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.21/AI.Copilot-0.9.21.zip",
-      "sha256": "c8bfaf41658821245088c04f67bcd49cc929898e5d8b73ef9b6efedb85974324"
+      "from": "0.9.21",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.22/AI.Copilot-0.9.22.zip",
+      "sha256": "b8d7c09dae9a87ce0193f8b03498363a4695040f12b65e71fd2f0d00d3a96d53"
     }
   ]
 }

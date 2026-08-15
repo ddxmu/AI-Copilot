@@ -1048,6 +1048,18 @@ async function initVoiceSettings() {
 
   // 拉取音色
   const fetchBtn = document.getElementById('btn-voice-fetch-voices');
+  const defaultVoiceIds = [
+    { id: 'female-yujie', name: '御姐音' },
+    { id: 'female-shaonv', name: '少女音' },
+    { id: 'female-chengshu', name: '成熟女性' },
+    { id: 'female-tianmei', name: '甜美女性' },
+    { id: 'male-qn-qingse', name: '青涩青年' },
+    { id: 'male-qn-jingying', name: '精英青年' },
+    { id: 'male-qn-badao', name: '霸道青年' },
+    { id: 'male-qn-daxuesheng', name: '青年大学生' },
+    { id: 'presenter_male', name: '男性主持人' },
+    { id: 'presenter_female', name: '女性主持人' },
+  ];
   if (fetchBtn) {
     fetchBtn.addEventListener('click', async () => {
       fetchStatus.textContent = '';
@@ -1057,14 +1069,18 @@ async function initVoiceSettings() {
       try {
         const r = await window.api.aiVoiceFetchVoices(key, baseUrlInput ? baseUrlInput.value.trim() : '');
         fetchBtn.disabled = false; fetchBtn.textContent = '拉取音色';
-        if (!r.ok) { fetchStatus.textContent = '拉取失败：' + (r.error || '未知错误'); return; }
-        if (!r.voices || !r.voices.length) { fetchStatus.textContent = '未拉取到音色，已使用默认音色列表'; }
-        else { fetchStatus.textContent = `已拉取 ${r.voices.length} 个音色`; }
-        voiceSelect.innerHTML = (r.voices || []).map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name || v.id)}</option>`).join('');
+        const voices = (r.ok && Array.isArray(r.voices) && r.voices.length) ? r.voices : (r.fallbackVoices || defaultVoiceIds);
+        if (r.ok) {
+          fetchStatus.textContent = `已拉取 ${voices.length} 个音色`;
+        } else {
+          fetchStatus.textContent = `拉取失败：${r.error || '未知错误'}。已加载默认音色（共 ${voices.length} 个），可继续选择，但真实语音合成需要有效的 API Key 和接口地址。`;
+        }
+        voiceSelect.innerHTML = voices.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name || v.id)}</option>`).join('');
         if (voiceConfig.voiceId) voiceSelect.value = voiceConfig.voiceId;
       } catch (e) {
         fetchBtn.disabled = false; fetchBtn.textContent = '拉取音色';
         fetchStatus.textContent = '拉取失败：' + (e && e.message ? e.message : String(e));
+        voiceSelect.innerHTML = defaultVoiceIds.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name || v.id)}</option>`).join('');
       }
     });
   }

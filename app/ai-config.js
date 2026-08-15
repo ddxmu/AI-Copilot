@@ -145,10 +145,24 @@ function setVoiceConfig(cfg) {
   return state.voice;
 }
 
-// MiniMax 音色列表：优先读官方 voice_id/voice_identity，兜底返回几个已知公共音色
+// MiniMax 公开系统音色：接口拉取失败时作为 fallback 展示，避免用户误以为拉取成功
+const DEFAULT_MINIMAX_VOICE_IDS = [
+  { id: 'female-yujie', name: '御姐音' },
+  { id: 'female-shaonv', name: '少女音' },
+  { id: 'female-chengshu', name: '成熟女性' },
+  { id: 'female-tianmei', name: '甜美女性' },
+  { id: 'male-qn-qingse', name: '青涩青年' },
+  { id: 'male-qn-jingying', name: '精英青年' },
+  { id: 'male-qn-badao', name: '霸道青年' },
+  { id: 'male-qn-daxuesheng', name: '青年大学生' },
+  { id: 'presenter_male', name: '男性主持人' },
+  { id: 'presenter_female', name: '女性主持人' },
+];
+
+// MiniMax 音色列表：优先读官方 voice_id/voice_identity，全部失败则抛出错误
 async function fetchMinimaxVoices(apiKey, baseUrl) {
   const key = String(apiKey || '').trim();
-  if (!key) throw new Error('请先填写 MiniMax API Key');
+  if (!key) throw new Error('请先填写 API Key');
   const url = String(baseUrl || DEFAULT_VOICE.baseUrl).replace(/\/$/, '');
   const candidates = ['/get_voice', '/voice_identity', '/voices', '/voice_id'];
   let lastErr = null;
@@ -167,19 +181,7 @@ async function fetchMinimaxVoices(apiKey, baseUrl) {
       lastErr = new Error('接口返回为空');
     } catch (e) { lastErr = e; }
   }
-  // 兜底：返回 MiniMax 公开系统音色（若官方接口拉取失败，仍可手动选择）
-  return [
-    { id: 'female-yujie', name: '御姐音' },
-    { id: 'female-shaonv', name: '少女音' },
-    { id: 'female-chengshu', name: '成熟女性' },
-    { id: 'female-tianmei', name: '甜美女性' },
-    { id: 'male-qn-qingse', name: '青涩青年' },
-    { id: 'male-qn-jingying', name: '精英青年' },
-    { id: 'male-qn-badao', name: '霸道青年' },
-    { id: 'male-qn-daxuesheng', name: '青年大学生' },
-    { id: 'presenter_male', name: '男性主持人' },
-    { id: 'presenter_female', name: '女性主持人' },
-  ];
+  throw lastErr || new Error('无法拉取音色列表');
 }
 
 /* ---------------- MCP 服务器配置 ---------------- */
@@ -392,4 +394,5 @@ module.exports = {
   getVoiceConfig,
   setVoiceConfig,
   fetchMinimaxVoices,
+  DEFAULT_MINIMAX_VOICE_IDS,
 };
