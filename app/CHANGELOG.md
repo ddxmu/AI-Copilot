@@ -1,3 +1,11 @@
+## v0.9.31 — 2026-08-16
+- **AI 语音设置重做：本地 / MiniMax 海螺 / 自定义 三栏**（按截图要求）：
+  - 本地（免费 / 离线）：使用 macOS 系统 `speechSynthesis` 语音，无需联网，可选择中文语音；失败无网络依赖。
+  - MiniMax 海螺（高质量）：API Key、音色下拉 + 「拉取我的音色」、音质模型选择（speech-2.8-turbo / speech-01-turbo / speech-01）、语速滑块；TTS 走 MiniMax `POST /v1/t2a_v2`。
+  - 自定义：保留通用 OpenAI 兼容接口（API 地址 + API Key + 模型下拉 + 拉取模型），走 `POST {base}/audio/speech`。
+  - 清空旧版语音数据（无 `provider` 字段时自动重置为本地默认，只保留 enabled 开关）。
+  - 云端（MiniMax / 自定义）TTS 播放失败时自动回退到本地声音；本地模式不支持语音识别，使用 MiniMax / 自定义时才可用麦克风识别。
+
 ## v0.9.30 — 2026-08-16
 - **修复：文件处理完成后自动在右栏「工作完成」打开**（之前只有 AI 对话里助手写/改的文件会进右栏，app 自带文件处理完成不展开右栏）：
   - 抽出共享 `addWorkItem(item)`，AI 对话路径（`captureWorkItem` → `write_file` / `edit_file` / `open_file` / `open_url`）与自带文件处理完成点统一走它，完成即把产出文件写入右栏「工作完成」列表并自动展开右栏、切到「工作完成」标签。

@@ -1804,6 +1804,15 @@ ipcMain.handle('memory-enabled-get', () => aiConfig.getMemoryEnabled());
 ipcMain.handle('memory-enabled-set', (_e, enabled) => aiConfig.setMemoryEnabled(enabled));
 ipcMain.handle('ai-voice-config-get', () => aiConfig.getVoiceConfig());
 ipcMain.handle('ai-voice-config-set', (_e, cfg) => aiConfig.setVoiceConfig(cfg));
+ipcMain.handle('ai-voice-default-voices', () => aiConfig.DEFAULT_MINIMAX_VOICE_IDS || []);
+ipcMain.handle('ai-voice-fetch-voices', async (_e, { apiKey, baseUrl }) => {
+  try {
+    const voices = await aiConfig.fetchMinimaxVoices(apiKey, baseUrl);
+    return { ok: true, voices };
+  } catch (e) {
+    return { ok: false, error: e && e.message ? e.message : String(e) };
+  }
+});
 ipcMain.handle('ai-voice-fetch-models', async (_e, { apiKey, baseUrl }) => {
   try {
     const models = await aiConfig.fetchVoiceModels({ apiKey, baseUrl });
@@ -1831,11 +1840,50 @@ async function readJsonResponse(resp) {
 
 ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
   try {
+    const provider = config && config.provider;
     const key = String(config.apiKey || '').trim();
+
+    // 本地语音：由渲染进程用 Web Speech API 处理，主进程不发声
+    if (provider === 'local') {
+      return { ok: true, local: true };
+    }
+
+    // MiniMax 海螺
+    if (provider === 'minimax') {
+      if (!key) throw new Error('请先填写 MiniMax API Key 并保存');
+      const baseUrl = 'https://api.minimax.chat/v1';
+      const model = String(config.model || 'speech-2.8-turbo').trim();
+      const voiceId = String(config.voiceId || '').trim();
+      if (!voiceId) throw new Error('请先选择 MiniMax 音色');
+      const speed = Number(config.speed) || 1.0;
+      const body = {
+        model,
+        text,
+        stream: false,
+        voice_setting: { voice_id: voiceId, speed: Math.max(0.5, Math.min(2, speed)) },
+        audio_setting: { sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 1 },
+      };
+      const resp = await fetch(`${baseUrl}/t2a_v2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify(body),
+      });
+      const { status, data } = await readJsonResponse(resp);
+      if (status < 200 || status >= 300 || (data && data.base_resp && data.base_resp.status_code !== 0)) {
+        throw new Error((data && data.base_resp && data.base_resp.status_msg) || `HTTP ${status}`);
+      }
+      let audioBase64 = null;
+      if (data.audio && typeof data.audio === 'string') audioBase64 = data.audio;
+      else if (data.data && typeof data.data.audio === 'string') audioBase64 = data.data.audio;
+      if (!audioBase64) throw new Error('响应中未找到音频内容');
+      return { ok: true, audioBase64, mime: 'audio/mp3' };
+    }
+
+    // 自定义 OpenAI 兼容
     if (!key) throw new Error('请先填写 API Key 并保存');
     const baseUrl = String(config.baseUrl || '').replace(/\/$/, '');
     if (!baseUrl) throw new Error('请先填写 API 地址并保存');
-    const model = String(config.model || '').trim();
+    const model = String(config.customModel || '').trim();
     if (!model) throw new Error('请先拉取并选择 TTS 模型');
     const body = {
       model,
@@ -1877,10 +1925,13 @@ ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
 
 ipcMain.handle('ai-voice-stt', async (_e, { audioBase64, mime, config }) => {
   try {
+    const provider = config && config.provider;
     const key = String((config && config.apiKey) || '').trim();
     if (!key) throw new Error('请先在「AI 语音」设置中填写 API Key 并保存');
-    // 语音识别走 OpenAI 兼容的 /audio/transcriptions（与 TTS 同域名的 baseUrl）
-    const baseUrl = String((config && config.baseUrl) || '').replace(/\/$/, '');
+    if (provider === 'local') throw new Error('本地离线模式不支持语音识别，请切换到 MiniMax 或 自定义');
+    const baseUrl = provider === 'minimax'
+      ? 'https://api.minimax.chat/v1'
+      : String((config && config.baseUrl) || '').replace(/\/$/, '');
     if (!baseUrl) throw new Error('请先填写 API 地址并保存');
     const url = `${baseUrl}/audio/transcriptions`;
     const buf = Buffer.from(String(audioBase64 || ''), 'base64');

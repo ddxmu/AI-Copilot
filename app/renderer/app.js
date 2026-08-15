@@ -883,47 +883,18 @@ function initMemorySettings() {
   }
 }
 
-/* ================= AI 语音设置（通用 OpenAI 兼容 TTS） ================= */
-let voiceConfig = { enabled: false, baseUrl: '', apiKey: '', model: '' };
-
-async function speakText(text, { bypassEnabled = false } = {}) {
-  if (!bypassEnabled && !voiceConfig.enabled) return;
-  if (!text) return;
-  const clean = String(text).trim();
-  if (!clean) return;
-  try {
-    await speakTTS(clean);
-  } catch (e) { console.error('speak failed', e); throw e; }
-}
-
-async function speakTTS(text) {
-  const key = voiceConfig.apiKey;
-  if (!key) throw new Error('请先填写 API Key 并保存');
-  const baseUrl = voiceConfig.baseUrl;
-  if (!baseUrl) throw new Error('请先填写 API 地址并保存');
-  const model = voiceConfig.model;
-  if (!model) throw new Error('请先拉取并选择 TTS 模型');
-
-  // 走主进程 IPC 请求 TTS（OpenAI 兼容 /audio/speech），绕过渲染进程 CSP 对 fetch 的限制
-  const resp = await window.api.aiVoiceTTS({ text, config: voiceConfig });
-  if (!resp || !resp.ok) throw new Error((resp && resp.error) || 'TTS 请求失败');
-
-  let audioSrc = null;
-  if (resp.audioBase64 && typeof resp.audioBase64 === 'string') {
-    const blob = base64ToBlob(resp.audioBase64, resp.mime || 'audio/mp3');
-    audioSrc = URL.createObjectURL(blob);
-  } else if (resp.audioUrl && typeof resp.audioUrl === 'string') {
-    audioSrc = resp.audioUrl;
-  }
-  if (!audioSrc) throw new Error('响应中未找到音频内容');
-  const a = new Audio(audioSrc);
-  a.playbackRate = 1;
-  return new Promise((resolve, reject) => {
-    a.onended = resolve;
-    a.onerror = () => reject(new Error('音频播放失败'));
-    a.play().catch(reject);
-  });
-}
+/* ================= AI 语音设置（本地 / MiniMax / 自定义） ================= */
+let voiceConfig = {
+  enabled: false,
+  provider: 'local',
+  apiKey: '',
+  baseUrl: '',
+  voiceId: '',
+  voiceName: '',
+  model: 'speech-2.8-turbo',
+  speed: 1.0,
+  customModel: '',
+};
 
 function base64ToBlob(base64, mime) {
   const bin = atob(base64);
@@ -945,69 +916,225 @@ function blobToBase64(blob) {
   });
 }
 
+async function speakText(text, { bypassEnabled = false } = {}) {
+  if (!bypassEnabled && !voiceConfig.enabled) return;
+  if (!text) return;
+  const clean = String(text).trim();
+  if (!clean) return;
+  try {
+    if (voiceConfig.provider === 'local') {
+      await speakLocal(clean);
+    } else if (voiceConfig.provider === 'minimax') {
+      await speakMinimax(clean);
+    } else {
+      await speakCustom(clean);
+    }
+  } catch (e) {
+    console.error('speak failed', e);
+    // 云端失败时自动回退本地声音
+    if (voiceConfig.provider !== 'local') {
+      try { await speakLocal(clean); return; } catch (_) { /* 忽略本地失败，抛出原错误 */ }
+    }
+    throw e;
+  }
+}
+
+function speakLocal(text) {
+  if (!window.speechSynthesis) throw new Error('当前系统不支持本地语音合成');
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'zh-CN';
+  utter.rate = 1;
+  const voices = window.speechSynthesis.getVoices() || [];
+  const savedId = voiceConfig.voiceId;
+  let voice = null;
+  if (savedId) voice = voices.find((v) => v.voiceURI === savedId);
+  if (!voice) voice = voices.find((v) => String(v.lang || '').toLowerCase().startsWith('zh'));
+  if (voice) utter.voice = voice;
+  return new Promise((resolve, reject) => {
+    utter.onend = resolve;
+    utter.onerror = () => reject(new Error('本地语音播放失败'));
+    window.speechSynthesis.speak(utter);
+  });
+}
+
+async function speakMinimax(text) {
+  const resp = await window.api.aiVoiceTTS({ text, config: voiceConfig });
+  if (!resp || !resp.ok) throw new Error((resp && resp.error) || 'TTS 请求失败');
+  return playAudioBase64(resp.audioBase64, resp.mime);
+}
+
+async function speakCustom(text) {
+  const resp = await window.api.aiVoiceTTS({ text, config: voiceConfig });
+  if (!resp || !resp.ok) throw new Error((resp && resp.error) || 'TTS 请求失败');
+  return playAudioBase64(resp.audioBase64, resp.mime);
+}
+
+function playAudioBase64(audioBase64, mime) {
+  if (!audioBase64 || typeof audioBase64 !== 'string') throw new Error('响应中未找到音频内容');
+  const blob = base64ToBlob(audioBase64, mime || 'audio/mp3');
+  const audioSrc = URL.createObjectURL(blob);
+  const a = new Audio(audioSrc);
+  a.playbackRate = 1;
+  return new Promise((resolve, reject) => {
+    a.onended = resolve;
+    a.onerror = () => reject(new Error('音频播放失败'));
+    a.play().catch(reject);
+  });
+}
+
+function fillSelectOptions(selectEl, list, selectedId, placeholder) {
+  if (!selectEl) return;
+  const opts = Array.isArray(list) ? list : [];
+  selectEl.innerHTML = (placeholder ? `<option value="">${escapeHtml(placeholder)}</option>` : '') +
+    opts.map((o) => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.name || o.id)}</option>`).join('');
+  if (selectedId) selectEl.value = selectedId;
+}
+
+function setupApiKeyToggle(inputId, btnId) {
+  const input = document.getElementById(inputId);
+  const btn = document.getElementById(btnId);
+  if (!input || !btn) return;
+  btn.addEventListener('click', () => {
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    btn.textContent = showing ? '👁' : '🙈';
+  });
+}
+
+function updateKeyHint(hintEl, hasKey) {
+  if (!hintEl) return;
+  if (hasKey) {
+    hintEl.classList.remove('hidden');
+    hintEl.textContent = '已保存 API Key（圆点为已保存内容，点眼睛可查看）';
+  } else {
+    hintEl.classList.add('hidden');
+  }
+}
+
 async function initVoiceSettings() {
   try { voiceConfig = await window.api.aiVoiceConfigGet(); } catch (e) { voiceConfig = { ...voiceConfig }; }
 
   const enabledToggle = document.getElementById('voice-enabled-toggle');
-  const apiKeyInput = document.getElementById('voice-apikey');
-  const baseUrlInput = document.getElementById('voice-baseurl');
-  const modelSelect = document.getElementById('voice-model');
+  const tabs = document.querySelectorAll('.voice-tab');
+  const panels = document.querySelectorAll('.voice-panel');
   const fetchStatus = document.getElementById('voice-fetch-status');
   const testStatus = document.getElementById('voice-test-status');
-  const keyHint = document.getElementById('voice-key-hint');
-  const apiKeyToggle = document.getElementById('voice-apikey-toggle');
 
+  // 本地元素
+  const localVoiceSelect = document.getElementById('voice-local-voice');
+
+  // MiniMax 元素
+  const minimaxApiKey = document.getElementById('voice-minimax-apikey');
+  const minimaxKeyHint = document.getElementById('voice-minimax-key-hint');
+  const minimaxVoiceSelect = document.getElementById('voice-minimax-voiceid');
+  const minimaxModelSelect = document.getElementById('voice-minimax-model');
+  const minimaxSpeed = document.getElementById('voice-minimax-speed');
+  const minimaxSpeedVal = document.getElementById('voice-minimax-speed-val');
+  const fetchVoicesBtn = document.getElementById('btn-voice-fetch-voices');
+
+  // 自定义元素
+  const customApiKey = document.getElementById('voice-custom-apikey');
+  const customKeyHint = document.getElementById('voice-custom-key-hint');
+  const customBaseUrl = document.getElementById('voice-custom-baseurl');
+  const customModelSelect = document.getElementById('voice-custom-model');
+  const fetchCustomModelsBtn = document.getElementById('btn-voice-custom-fetch-models');
+
+  // 启用开关
   if (enabledToggle) enabledToggle.checked = !!voiceConfig.enabled;
-  if (baseUrlInput) baseUrlInput.value = voiceConfig.baseUrl || '';
-  if (apiKeyInput) apiKeyInput.value = voiceConfig.apiKey || '';
 
-  // 模型下拉：先填占位，再根据已保存项选中；拉取模型后刷新列表
-  function fillModelOptions(models, selectedId) {
-    const list = Array.isArray(models) ? models : [];
-    modelSelect.innerHTML = `<option value="">请选择模型</option>` +
-      list.map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.id)}</option>`).join('');
-    if (selectedId) modelSelect.value = selectedId;
+  // 选项卡切换
+  let activeProvider = voiceConfig.provider || 'local';
+  function switchProvider(p) {
+    activeProvider = p;
+    tabs.forEach((t) => t.classList.toggle('active', t.dataset.provider === p));
+    panels.forEach((panel) => panel.classList.toggle('active', panel.id === `voice-panel-${p}`));
   }
-  fillModelOptions([], voiceConfig.model);
+  tabs.forEach((tab) => tab.addEventListener('click', () => switchProvider(tab.dataset.provider)));
+  switchProvider(activeProvider);
 
-  if (apiKeyInput && keyHint) {
-    if (voiceConfig.apiKey) {
-      keyHint.classList.remove('hidden');
-      keyHint.textContent = '已保存 API Key（圆点为已保存内容，点眼睛可查看）';
-    } else {
-      keyHint.classList.add('hidden');
-    }
+  // 本地语音列表
+  function refreshLocalVoices() {
+    if (!window.speechSynthesis) return;
+    const voices = window.speechSynthesis.getVoices() || [];
+    const zhVoices = voices.filter((v) => String(v.lang || '').toLowerCase().startsWith('zh'));
+    const list = (zhVoices.length ? zhVoices : voices).map((v) => ({ id: v.voiceURI, name: `${v.name} (${v.lang})` }));
+    fillSelectOptions(localVoiceSelect, list, voiceConfig.voiceId, '系统默认');
   }
-  // 眼睛按钮：切换 Key 明文 / 密文显示
-  if (apiKeyInput && apiKeyToggle) {
-    apiKeyToggle.addEventListener('click', () => {
-      const showing = apiKeyInput.type === 'text';
-      apiKeyInput.type = showing ? 'password' : 'text';
-      apiKeyToggle.textContent = showing ? '👁' : '🙈';
+  if (window.speechSynthesis) {
+    refreshLocalVoices();
+    window.speechSynthesis.onvoiceschanged = refreshLocalVoices;
+  }
+
+  // MiniMax 默认值
+  if (minimaxApiKey) minimaxApiKey.value = voiceConfig.apiKey || '';
+  if (minimaxModelSelect) minimaxModelSelect.value = voiceConfig.model || 'speech-2.8-turbo';
+  if (minimaxSpeed) minimaxSpeed.value = Number(voiceConfig.speed) || 1.0;
+  if (minimaxSpeedVal) minimaxSpeedVal.textContent = (Number(voiceConfig.speed) || 1.0).toFixed(1) + 'x';
+  updateKeyHint(minimaxKeyHint, voiceConfig.apiKey);
+  setupApiKeyToggle('voice-minimax-apikey', 'voice-minimax-apikey-toggle');
+
+  // MiniMax 音色下拉：先填内置推荐，选中已保存项
+  const curatedVoices = (await window.api.aiVoiceDefaultVoices()) || [];
+  fillSelectOptions(minimaxVoiceSelect, curatedVoices, voiceConfig.voiceId, '请选择音色');
+
+  // MiniMax 拉取音色
+  if (fetchVoicesBtn) {
+    fetchVoicesBtn.addEventListener('click', async () => {
+      fetchStatus.textContent = '';
+      const key = minimaxApiKey ? minimaxApiKey.value.trim() : '';
+      if (!key) { fetchStatus.textContent = '请先填写 MiniMax API Key'; return; }
+      fetchVoicesBtn.disabled = true; fetchVoicesBtn.textContent = '拉取中…';
+      try {
+        const r = await window.api.aiVoiceFetchVoices(key, 'https://api.minimax.chat/v1');
+        fetchVoicesBtn.disabled = false; fetchVoicesBtn.textContent = '拉取我的音色';
+        if (r.ok && Array.isArray(r.voices) && r.voices.length) {
+          fillSelectOptions(minimaxVoiceSelect, r.voices, voiceConfig.voiceId, '请选择音色');
+          fetchStatus.textContent = `已拉取 ${r.voices.length} 个音色（来自接口）`;
+        } else {
+          fetchStatus.textContent = `拉取失败：${r.error || '未知错误'}。已保留内置推荐音色。`;
+        }
+      } catch (e) {
+        fetchVoicesBtn.disabled = false; fetchVoicesBtn.textContent = '拉取我的音色';
+        fetchStatus.textContent = '拉取失败：' + (e && e.message ? e.message : String(e)) + '。已保留内置推荐音色。';
+      }
     });
   }
 
-  // 拉取模型（GET {base}/v1/models，成功替换下拉并选中已保存项）
-  const fetchBtn = document.getElementById('btn-voice-fetch-models');
-  if (fetchBtn) {
-    fetchBtn.addEventListener('click', async () => {
+  // MiniMax 语速
+  if (minimaxSpeed && minimaxSpeedVal) {
+    minimaxSpeed.addEventListener('input', () => {
+      minimaxSpeedVal.textContent = Number(minimaxSpeed.value).toFixed(1) + 'x';
+    });
+  }
+
+  // 自定义默认值
+  if (customApiKey) customApiKey.value = voiceConfig.apiKey || '';
+  if (customBaseUrl) customBaseUrl.value = voiceConfig.baseUrl || '';
+  updateKeyHint(customKeyHint, voiceConfig.apiKey);
+  setupApiKeyToggle('voice-custom-apikey', 'voice-custom-apikey-toggle');
+  fillSelectOptions(customModelSelect, [], voiceConfig.customModel, '请选择模型');
+
+  // 自定义拉取模型
+  if (fetchCustomModelsBtn) {
+    fetchCustomModelsBtn.addEventListener('click', async () => {
       fetchStatus.textContent = '';
-      const key = apiKeyInput ? apiKeyInput.value.trim() : '';
-      const base = baseUrlInput ? baseUrlInput.value.trim() : '';
+      const key = customApiKey ? customApiKey.value.trim() : '';
+      const base = customBaseUrl ? customBaseUrl.value.trim() : '';
       if (!key) { fetchStatus.textContent = '请先填写 API Key'; return; }
       if (!base) { fetchStatus.textContent = '请先填写 API 地址'; return; }
-      fetchBtn.disabled = true; fetchBtn.textContent = '拉取中…';
+      fetchCustomModelsBtn.disabled = true; fetchCustomModelsBtn.textContent = '拉取中…';
       try {
         const r = await window.api.aiVoiceFetchModels(key, base);
-        fetchBtn.disabled = false; fetchBtn.textContent = '拉取模型';
+        fetchCustomModelsBtn.disabled = false; fetchCustomModelsBtn.textContent = '拉取模型';
         if (r.ok && Array.isArray(r.models) && r.models.length) {
-          fillModelOptions(r.models, voiceConfig.model);
+          fillSelectOptions(customModelSelect, r.models, voiceConfig.customModel, '请选择模型');
           fetchStatus.textContent = `已拉取 ${r.models.length} 个模型（来自接口）`;
         } else {
           fetchStatus.textContent = `拉取失败：${r.error || '未知错误'}`;
         }
       } catch (e) {
-        fetchBtn.disabled = false; fetchBtn.textContent = '拉取模型';
+        fetchCustomModelsBtn.disabled = false; fetchCustomModelsBtn.textContent = '拉取模型';
         fetchStatus.textContent = '拉取失败：' + (e && e.message ? e.message : String(e));
       }
     });
@@ -1017,26 +1144,55 @@ async function initVoiceSettings() {
   const saveBtn = document.getElementById('btn-voice-save');
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
-      const sel = modelSelect ? modelSelect.selectedOptions[0] : null;
-      const newCfg = {
-        enabled: enabledToggle ? enabledToggle.checked : false,
-        baseUrl: baseUrlInput ? baseUrlInput.value.trim() : '',
-        apiKey: apiKeyInput ? apiKeyInput.value.trim() : '',
-        model: modelSelect ? modelSelect.value : '',
-      };
+      let newCfg = { enabled: enabledToggle ? enabledToggle.checked : false, provider: activeProvider };
+      if (activeProvider === 'local') {
+        const sel = localVoiceSelect ? localVoiceSelect.selectedOptions[0] : null;
+        newCfg = {
+          ...newCfg,
+          apiKey: '',
+          baseUrl: '',
+          customModel: '',
+          model: '',
+          voiceId: localVoiceSelect ? localVoiceSelect.value : '',
+          voiceName: sel ? sel.textContent : '',
+          speed: 1.0,
+        };
+      } else if (activeProvider === 'minimax') {
+        const sel = minimaxVoiceSelect ? minimaxVoiceSelect.selectedOptions[0] : null;
+        newCfg = {
+          ...newCfg,
+          apiKey: minimaxApiKey ? minimaxApiKey.value.trim() : '',
+          baseUrl: '',
+          customModel: '',
+          voiceId: minimaxVoiceSelect ? minimaxVoiceSelect.value : '',
+          voiceName: sel ? sel.textContent : '',
+          model: minimaxModelSelect ? minimaxModelSelect.value : 'speech-2.8-turbo',
+          speed: minimaxSpeed ? Number(minimaxSpeed.value) : 1.0,
+        };
+      } else {
+        newCfg = {
+          ...newCfg,
+          apiKey: customApiKey ? customApiKey.value.trim() : '',
+          baseUrl: customBaseUrl ? customBaseUrl.value.trim() : '',
+          customModel: customModelSelect ? customModelSelect.value : '',
+          voiceId: '',
+          voiceName: '',
+          model: '',
+          speed: 1.0,
+        };
+      }
       try {
         voiceConfig = await window.api.aiVoiceConfigSet(newCfg);
         testStatus.textContent = '✓ 语音设置已保存';
-        if (apiKeyInput) apiKeyInput.value = voiceConfig.apiKey || '';
-        if (keyHint) {
-          keyHint.classList.toggle('hidden', !voiceConfig.apiKey);
-          if (voiceConfig.apiKey) keyHint.textContent = '已保存 API Key（圆点为已保存内容，点眼睛可查看）';
-        }
+        if (minimaxApiKey) minimaxApiKey.value = voiceConfig.apiKey || '';
+        if (customApiKey) customApiKey.value = voiceConfig.apiKey || '';
+        updateKeyHint(minimaxKeyHint, voiceConfig.apiKey);
+        updateKeyHint(customKeyHint, voiceConfig.apiKey);
       } catch (e) { testStatus.textContent = '保存失败：' + (e && e.message ? e.message : String(e)); }
     });
   }
 
-  // 测试（测试语音不受 enabled 开关限制，可直接试听）
+  // 测试语音
   const testBtn = document.getElementById('btn-voice-test');
   if (testBtn) {
     testBtn.addEventListener('click', async () => {

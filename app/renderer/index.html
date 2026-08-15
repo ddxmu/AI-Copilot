@@ -1211,31 +1211,89 @@
                         <span class="slider"></span>
                       </label>
                     </div>
-                    <p class="hint" style="margin:4px 0 18px">开启后 AI 回复会自动朗读。支持任意 OpenAI 兼容的语音接口：填写 API 地址与 API Key，点「拉取模型」选择 TTS 模型并保存；点「测试语音」可立即试听。</p>
+                    <p class="hint" style="margin:4px 0 18px">开启后 AI 回复会自动朗读。选择语音来源、填写必要信息并保存即可使用。</p>
 
-                    <div class="form-cell" style="margin-top:14px">
-                      <label>API Key</label>
-                      <div class="apikey-row">
-                        <input id="voice-apikey" type="password" placeholder="填写 API Key" autocomplete="off" />
-                        <button type="button" id="voice-apikey-toggle" class="btn-icon" title="显示 / 隐藏 Key">👁</button>
+                    <div class="voice-provider-tabs" style="margin:14px 0 18px">
+                      <button type="button" class="voice-tab active" data-provider="local">本地（免费 / 离线）</button>
+                      <button type="button" class="voice-tab" data-provider="minimax">MiniMax 海螺（高质量）</button>
+                      <button type="button" class="voice-tab" data-provider="custom">自定义</button>
+                    </div>
+
+                    <!-- 本地 -->
+                    <div class="voice-panel active" id="voice-panel-local">
+                      <p class="hint">使用 macOS 系统语音合成，无需联网。选择中文语音后保存即可试听。</p>
+                      <div class="form-cell" style="margin-top:14px">
+                        <label>本地语音</label>
+                        <select id="voice-local-voice"></select>
                       </div>
-                      <div id="voice-key-hint" class="field-hint hidden"></div>
                     </div>
 
-                    <div class="form-cell" style="margin-top:14px">
-                      <label>API 地址</label>
-                      <input id="voice-baseurl" type="text" value="" placeholder="https://api.openai.com/v1" />
-                    </div>
+                    <!-- MiniMax -->
+                    <div class="voice-panel" id="voice-panel-minimax">
+                      <div class="form-cell" style="margin-top:14px">
+                        <label>API Key</label>
+                        <div class="apikey-row">
+                          <input id="voice-minimax-apikey" type="password" placeholder="在 platform.minimaxi.com 获取" autocomplete="off" />
+                          <button type="button" id="voice-minimax-apikey-toggle" class="btn-icon" title="显示 / 隐藏 Key">👁</button>
+                        </div>
+                        <div id="voice-minimax-key-hint" class="field-hint hidden"></div>
+                      </div>
 
-                    <div class="form-grid" style="margin-top:14px">
-                      <div class="form-cell">
-                        <label>语音模型</label>
-                        <select id="voice-model">
-                          <option value="">请选择模型</option>
+                      <div class="form-grid" style="margin-top:14px">
+                        <div class="form-cell">
+                          <label>音色</label>
+                          <select id="voice-minimax-voiceid">
+                            <option value="">请选择音色</option>
+                          </select>
+                        </div>
+                        <div class="form-cell" style="display:flex;align-items:flex-end">
+                          <button id="btn-voice-fetch-voices" class="btn" style="height:34px;width:100%">拉取我的音色</button>
+                        </div>
+                      </div>
+
+                      <div class="form-cell" style="margin-top:14px">
+                        <label>音质模型</label>
+                        <select id="voice-minimax-model">
+                          <option value="speech-2.8-turbo">speech-2.8-turbo（最新 · 极速）</option>
+                          <option value="speech-01-turbo">speech-01-turbo（均衡）</option>
+                          <option value="speech-01">speech-01（高音质）</option>
                         </select>
                       </div>
-                      <div class="form-cell" style="display:flex;align-items:flex-end">
-                        <button id="btn-voice-fetch-models" class="btn" style="height:34px;width:100%">拉取模型</button>
+
+                      <div class="form-cell" style="margin-top:14px">
+                        <label>语速 <span id="voice-minimax-speed-val">1.0x</span></label>
+                        <input id="voice-minimax-speed" type="range" min="0.5" max="2.0" step="0.1" value="1.0" />
+                      </div>
+
+                      <p class="hint" style="margin-top:12px">在 platform.minimaxi.com 获取，仅保存在本机、用于语音合成。云端音色需联网，每句多一点延迟；失败会自动回退本地声音。</p>
+                    </div>
+
+                    <!-- 自定义 -->
+                    <div class="voice-panel" id="voice-panel-custom">
+                      <div class="form-cell" style="margin-top:14px">
+                        <label>API Key</label>
+                        <div class="apikey-row">
+                          <input id="voice-custom-apikey" type="password" placeholder="填写 API Key" autocomplete="off" />
+                          <button type="button" id="voice-custom-apikey-toggle" class="btn-icon" title="显示 / 隐藏 Key">👁</button>
+                        </div>
+                        <div id="voice-custom-key-hint" class="field-hint hidden"></div>
+                      </div>
+
+                      <div class="form-cell" style="margin-top:14px">
+                        <label>API 地址</label>
+                        <input id="voice-custom-baseurl" type="text" value="" placeholder="https://api.openai.com/v1" />
+                      </div>
+
+                      <div class="form-grid" style="margin-top:14px">
+                        <div class="form-cell">
+                          <label>语音模型</label>
+                          <select id="voice-custom-model">
+                            <option value="">请选择模型</option>
+                          </select>
+                        </div>
+                        <div class="form-cell" style="display:flex;align-items:flex-end">
+                          <button id="btn-voice-custom-fetch-models" class="btn" style="height:34px;width:100%">拉取模型</button>
+                        </div>
                       </div>
                     </div>
 
@@ -1246,6 +1304,7 @@
                       <button id="btn-voice-test" class="btn">测试语音</button>
                     </div>
                     <div id="voice-test-status" class="fetch-status"></div>
+                    <p class="hint" style="margin-top:12px">语音陪聊（⌘⇧L）里 AI 说话用的声音。本地免费离线但音质有限；想要真人感可切到 MiniMax 海螺云端音色。</p>
                   </div>
                 </div>
 

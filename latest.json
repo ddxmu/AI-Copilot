@@ -1,16 +1,17 @@
 {
-  "version": "0.9.30",
-  "notes": "修复：文件处理完成后自动在右栏「工作完成」打开。抽出共享 addWorkItem，AI 对话里助手写/改的文件、以及 app 自带文件处理（PDF 去水印 / 格式转换 / 文件重命名 / 规则导出）完成后，都会把产出文件写入右栏「工作完成」列表并自动展开右栏、切到「工作完成」标签（点击在 Finder 中定位）。",
-  "pubDate": "2026-08-16T01:05:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.30/AI.Copilot-0.9.30-arm64.dmg",
-  "sha256": "8dcb1bcf34d916057a2cb21242cd447d73a88333e69b94d0dfa6da56f2a143d4",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.30/AI.Copilot-0.9.30.zip",
-  "patchSha256": "f998c9dab9adb0b5c187baf7abe70e34c70cced39cad767b130f46a8a38a2544",
+  "version": "0.9.31",
+  "minimumVersion": "0.8.25",
+  "releaseDate": "2026-08-16",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.31/AI.Copilot-0.9.31-arm64.dmg",
+  "dmgSha256": "89d5a30299db938b2caa0adadf38a034cd0a8c22c138d5a5374cbbd327dce62c",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.31/AI.Copilot-0.9.31.zip",
+  "patchSha256": "a1a9eb52c847a604b58aafd18e70e8942dc49c1a477b0ec1665066106610160d",
+  "notes": "AI 语音设置重做：本地 / MiniMax 海螺 / 自定义 三栏；文件处理完成后自动在右栏「工作完成」打开。",
   "deltas": [
     {
-      "from": "0.9.29",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.30/AI.Copilot-0.9.30.zip",
-      "sha256": "f998c9dab9adb0b5c187baf7abe70e34c70cced39cad767b130f46a8a38a2544"
+      "from": "0.9.30",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.31/AI.Copilot-0.9.31.zip",
+      "sha256": "a1a9eb52c847a604b58aafd18e70e8942dc49c1a477b0ec1665066106610160d"
     }
   ]
 }
