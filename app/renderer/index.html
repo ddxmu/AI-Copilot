@@ -1215,15 +1215,7 @@
 
                     <div class="voice-provider-tabs">
                       <button class="voice-provider-tab" data-provider="local">本地（免费 / 离线）</button>
-                      <button class="voice-provider-tab" data-provider="minimax">MiniMax 海螺（高质量）</button>
-                    </div>
-
-                    <div class="form-cell" style="margin-top:14px">
-                      <label>语音识别来源</label>
-                      <select id="voice-stt-provider">
-                        <option value="minimax">MiniMax ASR（使用上方 MiniMax Key）</option>
-                      </select>
-                      <div class="field-hint">点击麦克风后，录音会发给 MiniMax ASR 转成文字。AI 语音设置独立，不与「AI 配置」中的 Key 关联。</div>
+                      <button class="voice-provider-tab" data-provider="minimax">AI语音（高质量）</button>
                     </div>
 
                     <div id="voice-provider-local" class="voice-provider-panel">
@@ -1232,8 +1224,11 @@
 
                     <div id="voice-provider-minimax" class="voice-provider-panel hidden">
                       <div class="form-cell" style="margin-top:14px">
-                        <label>MiniMax API Key</label>
-                        <input id="voice-apikey" type="password" placeholder="已保存，留空保持原 Key" />
+                        <label>API Key</label>
+                        <div class="apikey-row">
+                          <input id="voice-apikey" type="password" placeholder="已保存，留空保持原 Key" autocomplete="off" />
+                          <button type="button" id="voice-apikey-toggle" class="btn-icon" title="显示 / 隐藏 Key">👁</button>
+                        </div>
                         <div id="voice-key-hint" class="field-hint hidden">已保存，留空保持原 Key</div>
                       </div>
 
@@ -1274,7 +1269,7 @@
                       <div id="voice-fetch-status" class="fetch-status"></div>
 
                       <label style="margin-top:12px;display:flex;align-items:center;gap:8px;font-weight:400">
-                        <input id="voice-clear-key" type="checkbox" style="width:auto" /> 清除已保存的 MiniMax API Key
+                        <input id="voice-clear-key" type="checkbox" style="width:auto" /> 清除已保存的 API Key
                       </label>
                     </div>
 

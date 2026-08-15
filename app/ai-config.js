@@ -11,13 +11,13 @@ function configPath() {
 
 const DEFAULT_VOICE = {
   enabled: false,
-  provider: 'local',      // 'local' 使用系统 speechSynthesis；'minimax' 使用 MiniMax 海螺 TTS
+  provider: 'local',      // 'local' 使用系统 speechSynthesis；'minimax' 使用 AI 语音 TTS
   baseUrl: 'https://api.minimax.chat/v1',
   apiKey: '',
   model: 'speech-01-turbo',
   voiceId: '',
   speed: 1.0,
-  // 语音识别（STT）固定走 MiniMax ASR，使用上方 MiniMax Key，与 AI 配置解耦
+  // 语音识别（STT）固定走 AI 语音的 Key + 接口地址（OpenAI 兼容 /audio/transcriptions）
   sttProvider: 'minimax',
 };
 
@@ -150,7 +150,7 @@ async function fetchMinimaxVoices(apiKey, baseUrl) {
   const key = String(apiKey || '').trim();
   if (!key) throw new Error('请先填写 MiniMax API Key');
   const url = String(baseUrl || DEFAULT_VOICE.baseUrl).replace(/\/$/, '');
-  const candidates = ['/voice_identity', '/voices', '/voice_id'];
+  const candidates = ['/get_voice', '/voice_identity', '/voices', '/voice_id'];
   let lastErr = null;
   for (const p of candidates) {
     try {

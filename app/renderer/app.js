@@ -942,9 +942,9 @@ async function speakLocal(text) {
 
 async function speakMinimax(text) {
   const key = voiceConfig.apiKey;
-  if (!key) throw new Error('请先填写 MiniMax API Key 并保存');
+  if (!key) throw new Error('请先填写 API Key 并保存');
   const voiceId = voiceConfig.voiceId;
-  if (!voiceId) throw new Error('请先选择 MiniMax 音色');
+  if (!voiceId) throw new Error('请先选择音色');
 
   // 走主进程 IPC 请求 TTS，绕过渲染进程 CSP 对 fetch 的限制
   const resp = await window.api.aiVoiceTTS({ text, config: voiceConfig });
@@ -1002,7 +1002,7 @@ async function initVoiceSettings() {
   const testStatus = document.getElementById('voice-test-status');
   const keyHint = document.getElementById('voice-key-hint');
   const clearKeyCb = document.getElementById('voice-clear-key');
-  const sttProviderSel = document.getElementById('voice-stt-provider');
+  const apiKeyToggle = document.getElementById('voice-apikey-toggle');
 
   if (enabledToggle) enabledToggle.checked = !!voiceConfig.enabled;
   applyVoiceProviderUI(voiceConfig.provider || 'local');
@@ -1018,11 +1018,17 @@ async function initVoiceSettings() {
   }
   if (speedInput) speedInput.value = Number(voiceConfig.speed) || 1.0;
   if (speedVal) speedVal.textContent = (Number(voiceConfig.speed) || 1.0).toFixed(1) + 'x';
-  // STT 固定为 MiniMax，与 AI 配置解耦
-  if (sttProviderSel) sttProviderSel.value = 'minimax';
   if (apiKeyInput && keyHint) {
     if (voiceConfig.apiKey) keyHint.classList.remove('hidden');
     else keyHint.classList.add('hidden');
+  }
+  // 眼睛按钮：切换 Key 明文 / 密文显示
+  if (apiKeyInput && apiKeyToggle) {
+    apiKeyToggle.addEventListener('click', () => {
+      const showing = apiKeyInput.type === 'text';
+      apiKeyInput.type = showing ? 'password' : 'text';
+      apiKeyToggle.textContent = showing ? '👁' : '🙈';
+    });
   }
 
   // 切换模式
@@ -1046,7 +1052,7 @@ async function initVoiceSettings() {
     fetchBtn.addEventListener('click', async () => {
       fetchStatus.textContent = '';
       const key = apiKeyInput ? apiKeyInput.value.trim() : '';
-      if (!key) { fetchStatus.textContent = '请先输入 MiniMax API Key'; return; }
+      if (!key) { fetchStatus.textContent = '请先输入 API Key'; return; }
       fetchBtn.disabled = true; fetchBtn.textContent = '拉取中…';
       try {
         const r = await window.api.aiVoiceFetchVoices(key, baseUrlInput ? baseUrlInput.value.trim() : '');
@@ -1074,7 +1080,6 @@ async function initVoiceSettings() {
         model: modelSelect ? modelSelect.value : 'speech-01-turbo',
         voiceId: voiceSelect ? voiceSelect.value : '',
         speed: speedInput ? Number(speedInput.value) : 1.0,
-        sttProvider: 'minimax',
       };
       if (clearKeyCb && clearKeyCb.checked) {
         newCfg.apiKey = '';
@@ -1083,9 +1088,9 @@ async function initVoiceSettings() {
       }
       try {
         voiceConfig = await window.api.aiVoiceConfigSet(newCfg);
-        testStatus.textContent = '✓ 语音设置已保存';
+        testStatus.textContent = '✓ 语音设置已保存（API Key 已写入本地）';
         if (keyHint) keyHint.classList.toggle('hidden', !voiceConfig.apiKey);
-        if (apiKeyInput && newCfg.apiKey) apiKeyInput.value = '';
+        // 保存后保留输入框内容，配合眼睛按钮可确认 Key 已写入
       } catch (e) { testStatus.textContent = '保存失败：' + (e && e.message ? e.message : String(e)); }
     });
   }
@@ -2454,8 +2459,8 @@ async function transcribeWithActiveProfile(blob) {
 
 async function transcribeWithMinimax(blob) {
   const key = voiceConfig.apiKey;
-  if (!key) throw new Error('请先填写 MiniMax API Key 并保存');
-  // MiniMax ASR 需要 wav/16kHz base64
+  if (!key) throw new Error('请先填写 API Key 并保存');
+  // 语音识别需要 wav/16kHz base64
   const base64 = await blobToWavBase16(blob, 16000);
   const resp = await window.api.aiVoiceSTT({
     provider: 'minimax',

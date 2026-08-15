@@ -1867,20 +1867,27 @@ ipcMain.handle('ai-voice-stt', async (_e, { provider, audioBase64, mime, profile
   try {
     if (provider === 'minimax') {
       const key = String(config.apiKey || '').trim();
-      if (!key) throw new Error('请先填写 MiniMax API Key 并保存');
+      if (!key) throw new Error('请先填写 API Key 并保存');
       const baseUrl = String(config.baseUrl || 'https://api.minimax.chat/v1').replace(/\/$/, '');
-      // MiniMax ASR 接口在 api.minimaxi.com 上；若用户配置的是旧域名 api.minimax.chat，自动映射
-      const asrBaseUrl = baseUrl.replace('api.minimax.chat', 'api.minimaxi.com');
-      const resp = await fetch(`${asrBaseUrl}/audio/asr`, {
+      // 通用 OpenAI 兼容语音识别接口：接口地址 + /audio/transcriptions（MiniMax / OpenAI 等均支持）
+      const url = `${baseUrl}/audio/transcriptions`;
+      const buf = Buffer.from(String(audioBase64 || ''), 'base64');
+      const form = new FormData();
+      form.append('file', new Blob([buf], { type: 'audio/wav' }), 'voice.wav');
+      form.append('model', 'whisper-1');
+      form.append('language', 'zh');
+      const resp = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({ audio_format: 'wav', sample_rate: 16000, language: 'zh-CN', audio_data: audioBase64 }),
+        headers: { 'Authorization': `Bearer ${key}` },
+        body: form,
       });
       const { status, data } = await readJsonResponse(resp);
-      if (status < 200 || status >= 300 || (data && data.base_resp && data.base_resp.status_code !== 0)) {
-        throw new Error((data && data.base_resp && data.base_resp.status_msg) || `HTTP ${status}`);
+      if (status < 200 || status >= 300) {
+        const msg = (data && data.error && data.error.message) || (data && data.base_resp && data.base_resp.status_msg) || `HTTP ${status}`;
+        const tip = status === 404 ? '：该接口不存在，或此 API Key 不含语音识别(ASR)权限，请改用含 ASR 权限的 Key' : '';
+        throw new Error(`语音识别失败（${msg}）${tip}`);
       }
-      return { ok: true, text: data.text || '' };
+      return { ok: true, text: (data && data.text) || '' };
     }
     // 默认：跟随当前 AI 配置，走 OpenAI 兼容 /audio/transcriptions
     const active = profile;

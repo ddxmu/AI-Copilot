@@ -1,3 +1,7 @@
+## v0.9.20 — 2026-08-15
+- **修复麦克风语音识别 404**：MiniMax 实际没有 `/audio/asr` 这个路径，正确是 OpenAI 兼容的 `/audio/transcriptions`。现把语音识别改为走「接口地址 + /audio/transcriptions」（通用 OpenAI 兼容接口，MiniMax / OpenAI 等均支持），不再硬编码域名映射。注意：若 API Key 不含语音识别（ASR）权限（如 MiniMax Token Plan 的 `sk-cp-` Key 仅含 TTS 权限），仍会返回 404，需改用含 ASR 权限的 Key。
+- **AI 语音面板去 MiniMax 字样、仅留 API + 接口地址**：标签页「MiniMax 海螺（高质量）」改为「AI语音（高质量）」；删除「语音识别来源」下拉（固定走 AI 语音的 Key + 接口地址）；API Key 输入框旁新增眼睛按钮，可切换明文/密文显示；保存后保留输入框内容便于确认 Key 已写入；拉取音色候选接口加上 `/get_voice`。
+
 ## v0.9.19 — 2026-08-15
 - **修复 AI 语音测试「音频播放失败」**：渲染进程 CSP 只配置了 `default-src 'self'`，未单独放行 `media-src`，导致 `<audio>` 播放 blob / data / 外部 HTTPS 音频被浏览器拦截。现补充 `media-src 'self' blob: data: https:`，TTS 返回的音频可正常播放。
 - **修复麦克风语音识别 404**：MiniMax ASR（语音转文字）接口部署在 `api.minimaxi.com`，而用户配置的是 TTS 所在的 `api.minimax.chat`，导致 `/audio/asr` 返回 `404 page not found`。现自动把 ASR 请求从 `api.minimax.chat` 映射到 `api.minimaxi.com`，TTS 仍走用户配置的地址。
