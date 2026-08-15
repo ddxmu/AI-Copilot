@@ -1,16 +1,16 @@
 {
-  "version": "0.9.23",
-  "notes": "修复麦克风语音识别 ASR 404：MiniMax 语音识别是 OpenAI 兼容接口 /audio/transcriptions（与 TTS 同域名 api.minimax.chat/v1，使用 multipart 表单），此前错误地请求 api.minimaxi.com/audio/asr 导致恒返回 404。现改走正确的接口（渲染进程已先把录音转成 16kHz WAV 上传）。注意：MiniMax Token Plan（sk-cp- 开头）Key 仅含 TTS 权限、无 ASR 权限，会返回 401/403，需改用含 ASR 权限的按量付费 Key。",
-  "pubDate": "2026-08-15T20:40:00+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.23/AI.Copilot-0.9.23-arm64.dmg",
-  "sha256": "e26958876f6f471b5a68b9551d07eb44d3e6ef75f4693d9c4ce19f5dd540bbc0",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.23/AI.Copilot-0.9.23.zip",
-  "patchSha256": "323fff1b897f9137c94703e1967197162d75ef302af4767597691f28b847be7a",
+  "version": "0.9.24",
+  "notes": "修复 AI 语音 API Key 看起来「保存后消失」：Key 一直正确写入本地 userData/ai-config.json（已验证持久化有效），但打开设置时密码框从不回填已保存的 Key，只显示一个不起眼的「已保存」小提示，导致关闭/重开后空框被误认为没保存。现已改为：打开设置即用圆点回显已保存的 Key（点眼睛按钮可查看明文），并提示「已保存 API Key（圆点为已保存内容，留空保持原 Key）」；保存成功后也立即回填，确保关掉重开仍能看到。",
+  "pubDate": "2026-08-15T21:10:00+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.24/AI.Copilot-0.9.24-arm64.dmg",
+  "sha256": "f5150a16d287c628456c51f1e0c7f9862b0973d529c35d9b7885d112bfd32bcf",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.24/AI.Copilot-0.9.24.zip",
+  "patchSha256": "3e16cc51d43bc9847942827ba5a48dde42f62f79b2573320107bf2e2aaa6d3bf",
   "deltas": [
     {
-      "from": "0.9.22",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.23/AI.Copilot-0.9.23.zip",
-      "sha256": "323fff1b897f9137c94703e1967197162d75ef302af4767597691f28b847be7a"
+      "from": "0.9.23",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.24/AI.Copilot-0.9.24.zip",
+      "sha256": "3e16cc51d43bc9847942827ba5a48dde42f62f79b2573320107bf2e2aaa6d3bf"
     }
   ]
 }

@@ -1018,9 +1018,15 @@ async function initVoiceSettings() {
   }
   if (speedInput) speedInput.value = Number(voiceConfig.speed) || 1.0;
   if (speedVal) speedVal.textContent = (Number(voiceConfig.speed) || 1.0).toFixed(1) + 'x';
+  // 回显已保存的 Key：密码框以圆点显示，眼睛按钮可点开查看，避免关闭/重开后空框误以为没保存
+  if (apiKeyInput) apiKeyInput.value = voiceConfig.apiKey || '';
   if (apiKeyInput && keyHint) {
-    if (voiceConfig.apiKey) keyHint.classList.remove('hidden');
-    else keyHint.classList.add('hidden');
+    if (voiceConfig.apiKey) {
+      keyHint.classList.remove('hidden');
+      keyHint.textContent = '已保存 API Key（圆点为已保存内容，留空保持原 Key，点眼睛可查看）';
+    } else {
+      keyHint.classList.add('hidden');
+    }
   }
   // 眼睛按钮：切换 Key 明文 / 密文显示
   if (apiKeyInput && apiKeyToggle) {
@@ -1105,8 +1111,12 @@ async function initVoiceSettings() {
       try {
         voiceConfig = await window.api.aiVoiceConfigSet(newCfg);
         testStatus.textContent = '✓ 语音设置已保存（API Key 已写入本地）';
-        if (keyHint) keyHint.classList.toggle('hidden', !voiceConfig.apiKey);
-        // 保存后保留输入框内容，配合眼睛按钮可确认 Key 已写入
+        // 保存后把输入框回填为已持久化的 Key（圆点显示），保证关掉重开也能看到已保存
+        if (apiKeyInput) apiKeyInput.value = voiceConfig.apiKey || '';
+        if (keyHint) {
+          keyHint.classList.toggle('hidden', !voiceConfig.apiKey);
+          if (voiceConfig.apiKey) keyHint.textContent = '已保存 API Key（圆点为已保存内容，留空保持原 Key，点眼睛可查看）';
+        }
       } catch (e) { testStatus.textContent = '保存失败：' + (e && e.message ? e.message : String(e)); }
     });
   }

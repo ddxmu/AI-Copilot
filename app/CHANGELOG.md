@@ -1,3 +1,6 @@
+## v0.9.24 — 2026-08-15
+- **修复 AI 语音 API Key 看起来「保存后消失」**：Key 其实一直正确写入本地 `userData/ai-config.json`（已验证持久化有效），但打开设置时密码框从不回填已保存的 Key，只显示一个不起眼的「已保存」小提示，导致关闭/重开后空框被误认为没保存。现已改为：打开设置即用圆点回显已保存的 Key（点眼睛按钮可查看明文），并提示「已保存 API Key（圆点为已保存内容，留空保持原 Key）」；保存成功后也立即回填，确保关掉重开仍能看到。
+
 ## v0.9.23 — 2026-08-15
 - **彻底修复麦克风语音识别 404（ASR）**：此前 `ai-voice-stt` 的 minimax 分支把请求发到 `api.minimaxi.com/v1/audio/asr`（JSON 格式），该路径并不存在，恒返回 `404 page not found`。经核实，MiniMax 语音识别是 OpenAI 兼容接口，正确地址为 `api.minimax.chat/v1/audio/transcriptions`（与 TTS 同域名，使用 multipart 表单：`file` + `language`）。现已改正：去掉错误的 `api.minimaxi.com` 域名映射与 JSON body，改为在用户配置的「接口地址」后拼接 `/audio/transcriptions` 并以表单提交录音（渲染进程已先把录音转成 16kHz WAV）。仍要注意：MiniMax Token Plan（`sk-cp-` 开头）Key 仅含 TTS 权限、无 ASR 权限，会返回 401/403，需改用含 ASR 权限的按量付费 Key。
 
