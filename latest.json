@@ -4,13 +4,13 @@
   "releaseDate": "2026-08-16",
   "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.50/AI.Copilot-0.9.50-arm64.dmg",
   "dmgSha256": "703dc6e6be52b2e405db6ae9882cda11505524b522b48dcc4ed44dcb4368406d",
-  "patchUrl": "https://raw.githubusercontent.com/ddxmu/AI-Copilot/main/dist/AI.Copilot-0.9.50.zip",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.50/AI.Copilot-0.9.50.zip",
   "patchSha256": "a3050227b14b20fa8c664d6276bb2cb15b3ef43856270ecaa602ed7de0405795",
   "notes": "### Computer Use 修复与能力补齐（#342–#346）\n- **修复截图「无法解析屏幕尺寸：0, 0, 1512, 982」致命 bug**：取屏方式由 Finder 桌面 bounds（返回无花括号 0, 0, 1512, 982，旧正则强制要求 {…} 永远不匹配）改为 NSScreen JXA（免辅助功能权限，最稳），并保留 Finder 回退 + 去花括号正则。screenshot / get_screen_size 恢复正常，鼠标截图可用。\n- **截图降采样 + 坐标系换算**：截图等比缩放到上限约 1366×887，模型看到的图像像素即坐标空间；move/click/double_click/right_click/drag/scroll 自动按 coordScale 把图像坐标还原回逻辑点，红圈标注同步落在图像坐标系。\n- **focus_app（#343）**：新增工具，把指定应用（应用名或 bundle id）切换/启动到前台（NSWorkspace launchApplication + AppleScript activate 回退）。\n- **危险快捷键二次确认（#345）**：key/hotkey 识别 ⌘Q/⌘W/⌘⇧Q/⌘⌥Esc 等危险组合，未显式 confirm:true 时拒绝执行，避免误关应用/退出登录。\n- **多显示器支持（#346）**：新增 get_displays 枚举所有显示器（逻辑分辨率 / 图像坐标系尺寸 / CoreGraphics 全局原点）；screenshot 与所有鼠标工具支持 display 参数（1=主屏），截图走 screencapture -D，鼠标坐标按各显示器原点与缩放换算。\n- **全局停止 / 中断（#342）**：Esc 或点击发送按钮（AI 在途时）即中断当前在途 Computer Use 操作——杀在途 osascript、安全释放鼠标左键、下次工具调用返回「操作已被用户中断」。链路 renderer → preload → main(ipc) → mcp.cancelTool → computer-use(__abort)。\n- ComputerUse MCP SERVER_VERSION 1.3.0 → 1.4.0。",
   "deltas": [
     {
       "from": "0.9.49",
-      "url": "https://raw.githubusercontent.com/ddxmu/AI-Copilot/main/dist/AI.Copilot-0.9.50.zip",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.50/AI.Copilot-0.9.50.zip",
       "sha256": "a3050227b14b20fa8c664d6276bb2cb15b3ef43856270ecaa602ed7de0405795"
     }
   ]
