@@ -4280,7 +4280,7 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
 /* ===== 升级成功提示条（升级后首次启动显示） ===== */
 .upgrade-toast {
   position: fixed;
-  top: 16px;
+  top: 56px; /* 避开顶部 drag 区域（topbar 48px + 间隙），防止关闭按钮被拖动事件吞掉 */
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;

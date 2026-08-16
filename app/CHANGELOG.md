@@ -1,3 +1,6 @@
+## v0.9.45 — 2026-08-16
+- **升级提示条仅显示一次且可关闭（用户反馈）**：v0.9.44 的提示条仍位于顶部 drag 区域，关闭按钮继续被系统拖动事件拦截。`style.css` 将 `.upgrade-toast` 的 `top` 从 `16px` 下移到 `56px`，彻底避开 `.topbar` 的 drag 区域；`app.js` 在关闭或 10 秒自动隐藏后把版本号写入 `localStorage`（`aicopilot-upgrade-shown-<version>`），同版本升级提示只会出现一次，重启后不再重复显示。
+
 ## v0.9.44 — 2026-08-16
 - **修复升级成功提示条无法关闭（用户反馈）**：v0.9.42 隐藏 macOS 原生标题栏后，`.topbar` 设为 `-webkit-app-region: drag`，导致顶部固定定位的升级提示条区域也被系统 drag 处理吞掉点击事件，提示条右上角的 `×` 关闭按钮点不动。`style.css` 给 `.upgrade-toast` 和 `.ut-close` 加 `-webkit-app-region: no-drag` 脱离拖动区域，并增大关闭按钮点击区域；`app.js` 把 `onclick` 改为 `addEventListener('click')`，并阻止事件冒泡/默认行为。
 

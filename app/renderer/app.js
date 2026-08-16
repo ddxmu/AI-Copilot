@@ -5407,11 +5407,13 @@ renderWmCandidates();
 renderChangelog();
 showUpgradeToast();
 
-// 升级成功提示条：本次启动的版本高于上次运行版本时显示，用于确认升级真正生效
+// 升级成功提示条：升级后首次启动时显示一次，关闭或自动隐藏后不再重复显示
 async function showUpgradeToast() {
   let flag = null;
   try { flag = await window.api.getUpgradeFlag(); } catch (e) { return; }
-  if (!flag || !flag.upgraded) return;
+  if (!flag || !flag.upgraded || !flag.to) return;
+  const shownKey = 'aicopilot-upgrade-shown-' + flag.to;
+  try { if (localStorage.getItem(shownKey) === '1') return; } catch (e) { /* ignore */ }
   const el = document.getElementById('upgrade-toast');
   if (!el) return;
   const fromTxt = flag.from ? '（原 v' + flag.from + '）' : '';
@@ -5420,15 +5422,19 @@ async function showUpgradeToast() {
     '<span class="ut-text">已升级到 <b>v' + flag.to + '</b>' + fromTxt + '</span>' +
     '<button class="ut-close" id="upgrade-toast-close" title="关闭">×</button>';
   el.classList.remove('hidden');
+  const dismiss = () => {
+    try { localStorage.setItem(shownKey, '1'); } catch (e) { /* ignore */ }
+    el.classList.add('hidden');
+  };
   const close = (e) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
-    el.classList.add('hidden');
+    dismiss();
   };
   const btn = document.getElementById('upgrade-toast-close');
   if (btn) {
     btn.addEventListener('click', close);
   }
-  setTimeout(close, 10000);
+  setTimeout(dismiss, 10000);
 }
 
 // 加载对话历史
