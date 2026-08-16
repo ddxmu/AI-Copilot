@@ -4295,6 +4295,7 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   font-size: 13px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
   animation: upgradeToastIn 0.28s ease-out;
+  -webkit-app-region: no-drag; /* 无框窗口下顶部条可拖动，提示条本身必须脱离 drag 才能点击 */
 }
 @keyframes upgradeToastIn {
   from { opacity: 0; transform: translate(-50%, -12px); }
@@ -4322,9 +4323,12 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
-  padding: 0 2px;
+  padding: 4px 6px; /* 加大点击区域 */
+  margin: -4px -6px -4px 0;
+  border-radius: 4px;
+  -webkit-app-region: no-drag; /* 确保关闭按钮在无框窗口下可点击 */
 }
-.upgrade-toast .ut-close:hover { opacity: 1; }
+.upgrade-toast .ut-close:hover { opacity: 1; background: rgba(0,0,0,0.06); }
 :root.dark .upgrade-toast {
   background: #1b2a20;
   border-color: #2f5c40;

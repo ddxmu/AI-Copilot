@@ -1,17 +1,17 @@
 {
-  "version": "0.9.43",
+  "version": "0.9.44",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.43/AI.Copilot-0.9.43-arm64.dmg",
-  "dmgSha256": "c45cad7a1c6d35ef3fcfdf976441fec38713b04b9d3ce7253bb769252047303b",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.43/AI.Copilot-0.9.43.zip",
-  "patchSha256": "03a71c992c51827831233c3e6bc8cb91cf2fcaa9665e594ef493b177c70dcab5",
-  "notes": "左侧栏 logo 与 App 名字下移避让左上角红绿灯按钮，不再被系统关闭/最小/最大化按钮遮挡。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.44/AI.Copilot-0.9.44-arm64.dmg",
+  "dmgSha256": "4b819790621f43e469be2cc3d165fcc026e33fb4752caae97b98ba266d540d8f",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.44/AI.Copilot-0.9.44.zip",
+  "patchSha256": "c9f5b5c859b864a155fb23a19d0f458aaf3cdfdf423d6c3f92e4650be649e973",
+  "notes": "修复升级成功提示条右上角关闭按钮点不动的问题：提示条脱离顶部拖动区域，并增大关闭按钮点击区域。",
   "deltas": [
     {
-      "from": "0.9.42",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.43/AI.Copilot-0.9.43.zip",
-      "sha256": "03a71c992c51827831233c3e6bc8cb91cf2fcaa9665e594ef493b177c70dcab5"
+      "from": "0.9.43",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.44/AI.Copilot-0.9.44.zip",
+      "sha256": "c9f5b5c859b864a155fb23a19d0f458aaf3cdfdf423d6c3f92e4650be649e973"
     }
   ]
 }

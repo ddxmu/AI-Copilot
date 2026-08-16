@@ -1,3 +1,6 @@
+## v0.9.44 — 2026-08-16
+- **修复升级成功提示条无法关闭（用户反馈）**：v0.9.42 隐藏 macOS 原生标题栏后，`.topbar` 设为 `-webkit-app-region: drag`，导致顶部固定定位的升级提示条区域也被系统 drag 处理吞掉点击事件，提示条右上角的 `×` 关闭按钮点不动。`style.css` 给 `.upgrade-toast` 和 `.ut-close` 加 `-webkit-app-region: no-drag` 脱离拖动区域，并增大关闭按钮点击区域；`app.js` 把 `onclick` 改为 `addEventListener('click')`，并阻止事件冒泡/默认行为。
+
 ## v0.9.43 — 2026-08-16
 - **左侧 logo 下移避让红绿灯（用户反馈）**：v0.9.42 隐藏原生标题栏后，左上角系统红绿灯按钮遮挡了左侧栏顶部的 logo 与「AI Copilot」应用名。`style.css` 将 `.app-title` 的 `padding-top` 从 18px 加大到 38px，让 logo/名字整体下移，不再与红绿灯重叠。
 

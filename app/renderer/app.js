@@ -5420,9 +5420,14 @@ async function showUpgradeToast() {
     '<span class="ut-text">已升级到 <b>v' + flag.to + '</b>' + fromTxt + '</span>' +
     '<button class="ut-close" id="upgrade-toast-close" title="关闭">×</button>';
   el.classList.remove('hidden');
-  const close = () => el.classList.add('hidden');
+  const close = (e) => {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
+    el.classList.add('hidden');
+  };
   const btn = document.getElementById('upgrade-toast-close');
-  if (btn) btn.onclick = close;
+  if (btn) {
+    btn.addEventListener('click', close);
+  }
   setTimeout(close, 10000);
 }
 
