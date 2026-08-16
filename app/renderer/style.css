@@ -400,9 +400,17 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
+  padding-left: 82px; /* 给左上角红绿灯按钮留空间 */
   background: var(--card-bg);
   border-bottom: 1px solid var(--border);
   z-index: 10;
+  -webkit-app-region: drag; /* 无原生标题栏后，顶部条可拖动窗口 */
+}
+
+.topbar-btn,
+.topbar-search,
+.topbar-search input {
+  -webkit-app-region: no-drag;
 }
 
 .topbar-left,

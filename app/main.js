@@ -36,6 +36,8 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: 'AI Copilot',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 12, y: 12 },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
