@@ -3,15 +3,15 @@
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-17",
   "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.55/AI.Copilot-0.9.55-arm64.dmg",
-  "dmgSha256": "095ad7fafe95aa505eb50dd384f993a1e64e2d59c6e50e8a13fd16eb63a58d29",
+  "dmgSha256": "c3d34997111220684e172d4800aba31d6326290fa46d4f6b58b7ee864df1f23e",
   "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.55/AI.Copilot-0.9.55.zip",
-  "patchSha256": "02ddc72272a2164602440c87bf4cc6e54333938b8ed78c56d1495539bf8ffbda",
+  "patchSha256": "6d24513ef02cb4d8e5f51669b74d0d893673ffe2254a7208cbbbaf4a85d31d14",
   "notes": "### ComputerUse 输入（type）修复（v0.9.55）\n- 根因：组合键事件缺少正确的 CoreGraphics 修饰键掩码，Chrome/Electron 把 ⌘V 误判为裸 v（只落一个字母、不粘贴）；旧逻辑仅凭剪贴板回读就报成功，未验证 ⌘V 真正进入窗口。\n- 修复：MOD_MASK 恢复为真实 CoreGraphics 掩码（command=1048576 / shift=131072 / control=262144 / option=524288 / fn=8388608），主键事件自身注入完整修饰掩码，⌘V/⌘C/⌘A/⌘L 在 Chrome、Electron、普通输入框均正确识别。\n- 防假报成功：粘贴前检查聚焦控件、粘贴后用 ⌘A+⌘C 回读字段严格判定（不含量=fail、确实读不到才 unknown），失败时如实上报，不再用 keystroke 重输整段。\n- 保留中文/长文本/换行（剪贴板 ⌘V）、剪贴板还原、点击/坐标映射/72 DPI 截图不变。",
   "deltas": [
     {
       "from": "0.9.54",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.55/AI.Copilot-0.9.55.zip",
-      "sha256": "02ddc72272a2164602440c87bf4cc6e54333938b8ed78c56d1495539bf8ffbda"
+      "sha256": "6d24513ef02cb4d8e5f51669b74d0d893673ffe2254a7208cbbbaf4a85d31d14"
     }
   ]
 }
