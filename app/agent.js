@@ -1388,12 +1388,16 @@ function buildMcpToolList(serverName) {
       isMcp: true,
       async run(args, ctx) {
         const brief = JSON.stringify(args || {}).slice(0, 300);
-        const ok = await ctx.confirm({
-          type: 'mcp',
-          title: `调用 MCP 工具（${d.serverName}）`,
-          desc: `${d.originalName}\n参数：${brief}`,
-        });
-        if (!ok) return '用户取消了该操作';
+        // 内置 Computer Use 服务器：用户已主动开启，视为已授权，跳过逐次确认直接执行
+        const trusted = d.serverName === 'ComputerUse';
+        if (!trusted) {
+          const ok = await ctx.confirm({
+            type: 'mcp',
+            title: `调用 MCP 工具（${d.serverName}）`,
+            desc: `${d.originalName}\n参数：${brief}`,
+          });
+          if (!ok) return '用户取消了该操作';
+        }
         try {
           const mcp = require('./mcp');
           return await mcp.callTool(d.serverName, d.originalName, args || {});

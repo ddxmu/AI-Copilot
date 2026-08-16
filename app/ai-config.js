@@ -31,6 +31,7 @@ const DEFAULT_STATE = {
   webAccess: false,
   memoryEnabled: true,
   mcpServers: [],
+  computerUseEnabled: false, // 内置 Computer Use（鼠标/键盘模拟操作电脑）总开关
   voice: { ...DEFAULT_VOICE },
 };
 
@@ -58,6 +59,7 @@ function loadState() {
       webAccess: data.webAccess ?? false,
       memoryEnabled: data.memoryEnabled ?? true,
       mcpServers: Array.isArray(data.mcpServers) ? data.mcpServers : [],
+      computerUseEnabled: data.computerUseEnabled ?? false,
       voice,
     };
   } catch (e) {
@@ -132,6 +134,18 @@ function setMemoryEnabled(enabled) {
 
 function getMemoryEnabled() {
   return loadState().memoryEnabled ?? true;
+}
+
+// 内置 Computer Use（模拟鼠标/键盘操作电脑）总开关
+function isComputerUseEnabled() {
+  return loadState().computerUseEnabled === true;
+}
+
+function setComputerUseEnabled(enabled) {
+  const state = loadState();
+  state.computerUseEnabled = !!enabled;
+  saveState(state);
+  return state.computerUseEnabled;
 }
 
 /* ---------------- AI 语音配置（本地 / MiniMax / 自定义） ---------------- */
@@ -504,6 +518,8 @@ module.exports = {
   getWebAccess,
   setMemoryEnabled,
   getMemoryEnabled,
+  isComputerUseEnabled,
+  setComputerUseEnabled,
   getMcpServers,
   upsertMcpServer,
   deleteMcpServer,

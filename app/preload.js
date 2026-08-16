@@ -80,6 +80,8 @@ contextBridge.exposeInMainWorld('api', {
   setPermissionMode: (mode) => ipcRenderer.invoke('set-permission-mode', mode),
   setMcpEnabled: (enabled) => ipcRenderer.invoke('set-mcp-enabled', enabled),
   setMcpServer: (name) => ipcRenderer.invoke('set-mcp-server', name),
+  setComputerUse: (enabled) => ipcRenderer.invoke('set-computer-use', enabled),
+  openComputerUsePerms: () => ipcRenderer.invoke('open-computer-use-perms'),
   syncRules: (rules) => ipcRenderer.send('sync-rules', rules),
   // 文件自动化：编写规范预设
   automationGetPresets: () => ipcRenderer.invoke('automation-get-presets'),

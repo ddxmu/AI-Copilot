@@ -812,6 +812,7 @@ async function initAiSettings() {
   const state = await window.api.aiGetState();
   aiState.profiles = state.profiles;
   aiState.activeId = state.activeId;
+  aiState.computerUseEnabled = state.computerUseEnabled === true;
   renderProfiles();
   // 联网开关
   const webToggle = document.getElementById('web-access-toggle');
@@ -827,6 +828,7 @@ async function initAiSettings() {
   initMemorySettings();
   initVoiceSettings();
   initMcpSettings();
+  initComputerUseSettings();
 }
 
 /* ================= 长期记忆设置 ================= */
@@ -2771,6 +2773,7 @@ const mcpStateEl = document.getElementById('mcp-state');
 const mcpServerSelect = document.getElementById('mcp-server-select');
 let mcpEnabled = false;
 let mcpSelectedServer = null;
+let computerUseAutoSelect = false; // 开启 Computer Use 后自动把聊天栏 MCP 选到内置 ComputerUse
 
 // 用已连接（ready）的 MCP 服务器填充单选下拉；开启 MCP 时显示，关闭时隐藏
 async function refreshMcpServerSelect() {
@@ -2834,9 +2837,58 @@ if (mcpServerSelect) {
 }
 // MCP 服务器连接状态变化时刷新下拉（只在 MCP 开启时）
 if (window.api.onMcpStatusChanged) {
-  window.api.onMcpStatusChanged(() => { if (mcpEnabled) refreshMcpServerSelect(); });
+  window.api.onMcpStatusChanged(async () => {
+    if (mcpEnabled) {
+      await refreshMcpServerSelect();
+      if (computerUseAutoSelect) selectComputerUseIfReady();
+    }
+  });
 }
 setMcpEnabled(false); // 默认关闭，同步给主进程
+
+/* ================= 内置 Computer Use（电脑操控）设置 ================= */
+function initComputerUseSettings() {
+  const toggle = document.getElementById('computer-use-toggle');
+  const permsBtn = document.getElementById('btn-computer-use-perms');
+  if (!toggle) return;
+  toggle.checked = !!aiState.computerUseEnabled;
+  if (aiState.computerUseEnabled) {
+    // 启动时已是开启状态：开启 MCP 外部工具，并自动选中内置 ComputerUse 服务器
+    computerUseAutoSelect = true;
+    setMcpEnabled(true);
+  }
+  toggle.addEventListener('change', async () => {
+    const on = toggle.checked;
+    aiState.computerUseEnabled = on;
+    await window.api.setComputerUse(on);
+    // 开启 Computer Use 即开启 MCP 外部工具，并优先选中内置 ComputerUse 服务器
+    setMcpEnabled(true);
+    if (on) {
+      computerUseAutoSelect = true;
+      selectComputerUseIfReady(); // 若已连接就绪会立即选中，否则等状态变更回调选中
+    }
+  });
+  if (permsBtn) {
+    permsBtn.addEventListener('click', () => {
+      if (window.api.openComputerUsePerms) window.api.openComputerUsePerms();
+    });
+  }
+}
+
+// 当内置 ComputerUse 服务器出现在下拉（已连接就绪）时，自动选中它
+function selectComputerUseIfReady() {
+  if (!mcpServerSelect) return;
+  const opts = Array.from(mcpServerSelect.options || []).map((o) => o.value);
+  if (opts.includes('ComputerUse')) {
+    mcpServerSelect.value = 'ComputerUse';
+    mcpSelectedServer = 'ComputerUse';
+    if (window.api.setMcpServer) window.api.setMcpServer('ComputerUse');
+    const tip = 'MCP 外部工具：开·ComputerUse';
+    mcpToggle.dataset.tip = tip;
+    mcpToggle.title = tip;
+    computerUseAutoSelect = false;
+  }
+}
 
 // 模型信息显示
 function updateModelInfo() {

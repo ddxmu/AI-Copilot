@@ -1,3 +1,7 @@
+## v0.9.46 — 2026-08-16
+- **内置 Computer Use 电脑操控能力（新增）**：AI 设置 › 电脑操控新增独立开关，开启后自动接入内置的 ComputerUse MCP 服务器（stdio，纯 Node 内置模块，零外部依赖），让 AI 能像人一样操控鼠标/键盘、截图、滚动。提供 11 个工具：截图（screenshot）、移动（move）、点击（click）、双击（double_click）、右键（right_click）、拖拽（drag）、输入文字（type）、按键（key）、组合键（hotkey）、滚动（scroll）、获取屏幕尺寸（get_screen_size）。开启时自动把聊天栏 MCP 选到 ComputerUse 并推送连接状态；关闭即断开。macOS 需授予「辅助功能」+「屏幕录制」权限，设置卡片内提供一键跳转系统设置的「打开权限设置」按钮。
+- **电脑操控权限引导（新增）**：开关卡片内说明 macOS 辅助功能与屏幕录制权限的用途，并提供「打开权限设置」按钮（`x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility`）一键跳转系统隐私与安全设置。
+
 ## v0.9.45 — 2026-08-16
 - **升级提示条仅显示一次且可关闭（用户反馈）**：v0.9.44 的提示条仍位于顶部 drag 区域，关闭按钮继续被系统拖动事件拦截。`style.css` 将 `.upgrade-toast` 的 `top` 从 `16px` 下移到 `56px`，彻底避开 `.topbar` 的 drag 区域；`app.js` 在关闭或 10 秒自动隐藏后把版本号写入 `localStorage`（`aicopilot-upgrade-shown-<version>`），同版本升级提示只会出现一次，重启后不再重复显示。
 

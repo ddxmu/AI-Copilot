@@ -1038,6 +1038,22 @@
 
                 <!-- MCP 服务器 -->
                 <div class="settings-section" id="settings-mcp">
+                  <!-- 内置 Computer Use（模拟鼠标/键盘操作电脑） -->
+                  <div class="card">
+                    <div class="card-title-row">
+                      <h2>Computer Use（电脑操控）</h2>
+                      <label class="switch" id="computer-use-switch-wrap">
+                        <input type="checkbox" id="computer-use-toggle" />
+                        <span class="slider"></span>
+                      </label>
+                    </div>
+                    <p class="hint" style="margin: 4px 0 10px">
+                      开启后，AI 助手可以直接控制你的鼠标和键盘来操作电脑（截图、点击、输入、滚屏等）。这是一项强大的能力，请仅在可信会话中使用。<br />
+                      macOS 需授予两项权限：<b>辅助功能</b> 与 <b>屏幕录制</b>（系统设置 › 隐私与安全性）。未授权时相关操作会返回明确提示。
+                    </p>
+                    <button id="btn-computer-use-perms" class="btn">打开系统权限设置</button>
+                  </div>
+
                   <div class="card">
                     <div class="card-title-row">
                       <h2>MCP 服务器 <span id="mcp-count" class="count">0</span></h2>

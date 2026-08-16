@@ -11,6 +11,17 @@ const memory = require('./memory');
 const https = require('https');
 const pdfwm = require('./pdf-watermark');
 
+// 内置 Computer Use MCP 子进程：本进程以 --run-computer-use 启动时，不创建窗口，
+// 直接作为 MCP stdio 服务器运行（模拟鼠标/键盘操作电脑）。由 mcp.js 以
+// `process.execPath --run-computer-use <脚本>` 拉起，主进程 MCP 连接池复用该子进程。
+if (process.argv.includes('--run-computer-use')) {
+  try { if (app.dock && app.dock.hide) app.dock.hide(); } catch (e) { /* ignore */ }
+  try { require('./mcp-servers/computer-use').start(); } catch (e) {
+    process.stderr.write('computer-use start failed: ' + (e && e.stack || e) + '\n');
+  }
+  return; // 不创建窗口 / 不进入 app.whenReady；stdio 读取维持事件循环
+}
+
 let mainWindow = null;
 let currentChatId = null; // 当前激活的对话 ID（用于对话级记忆）
 
@@ -1542,6 +1553,22 @@ ipcMain.handle('mcp-test', async (_e, server) => {
   } catch (err) {
     return { ok: false, error: err.message };
   }
+});
+
+// 内置 Computer Use 总开关：写配置 → 重连 MCP（注入/移除内置服务器）→ 推送最新状态
+ipcMain.handle('set-computer-use', async (_e, enabled) => {
+  try { aiConfig.setComputerUseEnabled(enabled); } catch (e) { /* ignore */ }
+  try { await mcp.connectFromConfig(); } catch (e) { /* ignore */ }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.webContents.send('mcp-status-changed', mcp.getAllStatus()); } catch (e) { /* ignore */ }
+  }
+  return !!enabled;
+});
+
+// 打开 macOS 系统设置「辅助功能」隐私页（Computer Use 需要辅助功能 + 屏幕录制权限）
+ipcMain.handle('open-computer-use-perms', async () => {
+  try { shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'); } catch (e) { /* ignore */ }
+  return true;
 });
 
 app.on('before-quit', () => {

@@ -540,10 +540,31 @@ function createConnection(cfg) {
 
 const connections = new Map(); // name -> McpConnection
 
+// 内置 Computer Use 服务器配置（macOS 原生模拟鼠标/键盘）
+// 以当前 Electron 进程自身 + --run-computer-use 参数启动，main.js 顶部早退分支接管。
+function getBuiltinComputerUseConfig() {
+  return {
+    id: 'computeruse',
+    name: 'ComputerUse',
+    enabled: true,
+    transport: 'stdio',
+    command: process.execPath,
+    args: ['--run-computer-use', path.join(__dirname, 'mcp-servers', 'computer-use.js')],
+    env: {},
+    cwd: '',
+    builtin: true,
+  };
+}
+
 function getConfigs() {
   try {
     const aiConfig = require('./ai-config');
-    return (aiConfig.getMcpServers() || []).filter((s) => s.enabled !== false);
+    const userServers = (aiConfig.getMcpServers() || []).filter((s) => s.enabled !== false);
+    if (aiConfig.isComputerUseEnabled()) {
+      // 内置服务器排在最前，工具名前缀 mcp__ComputerUse__
+      return [getBuiltinComputerUseConfig(), ...userServers];
+    }
+    return userServers;
   } catch (e) {
     return [];
   }
@@ -604,9 +625,13 @@ function statusOf(conn) {
 }
 
 function getAllStatus() {
-  const cfgList = (() => {
-    try { return require('./ai-config').getMcpServers() || []; } catch (e) { return []; }
-  })();
+  const aiConfig = (() => { try { return require('./ai-config'); } catch (e) { return null; } })();
+  const userServers = aiConfig ? (aiConfig.getMcpServers() || []) : [];
+  const cfgList = userServers.slice();
+  // 内置 Computer Use 服务器也要出现在状态列表里（其连接由 connections 托管）
+  if (aiConfig && aiConfig.isComputerUseEnabled()) {
+    cfgList.push({ id: 'computeruse', name: 'ComputerUse', enabled: true });
+  }
   return cfgList.map((cfg) => {
     const conn = connections.get(cfg.name);
     if (!conn) {
@@ -685,10 +710,30 @@ function extractText(content) {
   return parts.join('\n').slice(0, 20000);
 }
 
+// 从 MCP 返回的 content 中取第一张图片（Computer Use 截图等需要回传给模型「看」）
+function extractFirstImage(result) {
+  if (!result || !Array.isArray(result.content)) return null;
+  for (const c of result.content) {
+    if (c && c.type === 'image' && c.data) {
+      return { base64: String(c.data), mime: c.mimeType || 'image/png' };
+    }
+  }
+  return null;
+}
+
 async function callTool(serverName, toolName, args) {
   const conn = connections.get(serverName);
   if (!conn) throw new Error(`MCP 服务 ${serverName} 未连接`);
   const result = await conn.callTool(toolName, args);
+  // 含图片时，返回特殊对象 {__image,...}，由 agent 的 pendingImages 机制注入视觉输入
+  const img = extractFirstImage(result);
+  if (img) {
+    const textParts = (result.content || [])
+      .filter((c) => c && c.type === 'text' && typeof c.text === 'string')
+      .map((c) => c.text);
+    const note = textParts.join('\n').trim() || `工具 ${toolName} 返回了一张图片`;
+    return { __image: true, mime: img.mime, base64: img.base64, note };
+  }
   return contentToText(result);
 }
 
