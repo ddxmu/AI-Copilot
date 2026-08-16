@@ -1,3 +1,10 @@
+## v0.9.52 — 2026-08-16
+
+### Computer Use 修复：鼠标工具全部报错回归
+- **根因**：v0.9.50 引入多显示器取屏时，`fetchDisplays` 的 JXA 写成 `$.NSScreen.screens`（NSArray 代理不支持数字下标），`screens[0]` 取不到元素，导致 `screens[0].frame` 抛 `TypeError: undefined is not an object (-2700)`。该错误使 `move/click/double_click/right_click/drag` 全部走 `modelToTarget → ensureDisplays → fetchDisplays` 而中断（截图因走带 Finder 回退的 `getDisplaySize` 才勉强成功，所以出现「截图正常但鼠标全报错」的现象）。
+- **修复**：JXA 改为 `$.NSScreen.screens.js`（实测唯一可取屏几何的写法），正确枚举主屏/副屏并返回逻辑分辨率与 CoreGraphics 全局原点。所有鼠标工具与多显示器坐标换算恢复正常。
+- 已在 macOS 实测：单屏返回 `1512|982|0|0`，解析正确。
+
 ## v0.9.51 — 2026-08-16
 
 ### Computer Use 光标图标替换

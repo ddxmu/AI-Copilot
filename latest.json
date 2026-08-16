@@ -1,17 +1,17 @@
 {
-  "version": "0.9.51",
+  "version": "0.9.52",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.51/AI.Copilot-0.9.51-arm64.dmg",
-  "dmgSha256": "d40514571677b86c96e4bfd2d0a28ae04f275579f560ee9a3c3643f55923662f",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.51/AI.Copilot-0.9.51.zip",
-  "patchSha256": "c0d85a94b45420bd02815e54f9131bae02deab4d2a482e2fa61beae618806954",
-  "notes": "### Computer Use 光标图标替换（v0.9.51）\n- 用户反馈光标遮罩过大：将原来 64×72 的粉渐变 SVG 箭头，替换为用户提供的桌面鼠标指针图标（200×200 透明 PNG，系统箭头样式），显示尺寸缩至 40×40，更贴近真实鼠标观感；点击波纹动效保留。\n- 图标落地 `app/renderer/cursor.png`，由 `cursor-overlay.html` 以 `<img>` 引用。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.52/AI.Copilot-0.9.52-arm64.dmg",
+  "dmgSha256": "4ed56ef7f6c53d1796fc1f319ab9a8045bd711e3658682574924b88204b7d823",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.52/AI.Copilot-0.9.52.zip",
+  "patchSha256": "a54769de766b011ec4ed33f3f1e48168789edd3a8482e4bc52c7ce037717b0db",
+  "notes": "### Computer Use 修复：鼠标工具全部报错回归（v0.9.52）\n- 根因：v0.9.50 引入多显示器取屏时 `fetchDisplays` 的 JXA 写成 `$.NSScreen.screens`（NSArray 代理不支持数字下标），`screens[0]` 取不到元素，导致 `screens[0].frame` 抛 `TypeError: undefined is not an object (-2700)`，所有鼠标工具（move/click/double_click/right_click/drag）走 `modelToTarget → ensureDisplays → fetchDisplays` 而中断；截图因走带 Finder 回退的 `getDisplaySize` 才勉强成功，故出现「截图正常但鼠标全报错」。\n- 修复：JXA 改为 `$.NSScreen.screens.js`（实测唯一可取屏几何的写法），正确枚举主屏/副屏并返回逻辑分辨率与 CoreGraphics 全局原点。已在 macOS 实测单屏返回 `1512|982|0|0`。所有鼠标工具与多显示器坐标换算恢复正常。",
   "deltas": [
     {
-      "from": "0.9.50",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.51/AI.Copilot-0.9.51.zip",
-      "sha256": "c0d85a94b45420bd02815e54f9131bae02deab4d2a482e2fa61beae618806954"
+      "from": "0.9.51",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.52/AI.Copilot-0.9.52.zip",
+      "sha256": "a54769de766b011ec4ed33f3f1e48168789edd3a8482e4bc52c7ce037717b0db"
     }
   ]
 }

@@ -143,7 +143,7 @@ let _displaysTime = 0;
 async function fetchDisplays() {
   const out = await runJxa(
     `ObjC.import('Cocoa');\n` +
-    `var screens = $.NSScreen.screens;\n` +
+    `var screens = $.NSScreen.screens.js;\n` + // 关键：.js 转成真实 JS 数组，否则 screens[0] 取不到元素（JXA 的 NSArray 代理不支持数字下标）
     `var primary = screens[0].frame;\n` +
     `var ph = Math.round(primary.size.height);\n` +
     `var res = [];\n` +
