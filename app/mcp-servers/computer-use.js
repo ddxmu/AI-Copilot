@@ -23,7 +23,7 @@ const net = require('net');
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'ComputerUse';
-const SERVER_VERSION = '1.3.0';
+const SERVER_VERSION = '1.4.0';
 
 const TMP = path.join(os.tmpdir(), 'ai-copilot-computer-use');
 try { fs.mkdirSync(TMP, { recursive: true }); } catch (e) { /* ignore */ }
@@ -70,13 +70,16 @@ function sendCursor(t, x, y) {
 function runAppleScript(script) {
   return new Promise((resolve, reject) => {
     const p = spawn('osascript', ['-e', script], { stdio: ['ignore', 'pipe', 'pipe'] });
+    setCurrentChild(p);
     let out = '';
     let err = '';
     p.stdout.on('data', (c) => (out += c));
     p.stderr.on('data', (c) => (err += c));
-    p.on('error', reject);
+    p.on('error', (e) => { clearCurrentChild(p); reject(e); });
     p.on('close', (code) => {
+      clearCurrentChild(p);
       if (code !== 0) {
+        if (_abortKill) { _abortKill = false; return reject(new Error('操作已被用户中断（Esc / 停止按钮）')); }
         const detail = (err || '').trim() || '未知错误';
         if (/not allowed|not authorized|accessibility|Automation|权限违例|-10004/i.test(detail)) {
           return reject(new Error('操作被系统拒绝：请到「系统设置 › 隐私与安全性 › 辅助功能」中允许 AI Copilot，并重试。'));
@@ -92,13 +95,18 @@ function runAppleScript(script) {
 function runJxa(script) {
   return new Promise((resolve, reject) => {
     const p = spawn('osascript', ['-l', 'JavaScript', '-e', script], { stdio: ['ignore', 'pipe', 'pipe'] });
+    setCurrentChild(p);
     let out = '';
     let err = '';
     p.stdout.on('data', (c) => (out += c));
     p.stderr.on('data', (c) => (err += c));
-    p.on('error', reject);
+    p.on('error', (e) => { clearCurrentChild(p); reject(e); });
     p.on('close', (code) => {
-      if (code !== 0) return reject(new Error('JXA 执行失败：' + ((err || '').trim() || '未知错误')));
+      clearCurrentChild(p);
+      if (code !== 0) {
+        if (_abortKill) { _abortKill = false; return reject(new Error('操作已被用户中断（Esc / 停止按钮）')); }
+        return reject(new Error('JXA 执行失败：' + ((err || '').trim() || '未知错误')));
+      }
       resolve(out);
     });
   });
@@ -116,40 +124,122 @@ function asStrLiteral(s) {
     .replace(/\r/g, '');
 }
 
-/* ---------------- 屏幕尺寸（逻辑点） ---------------- */
+/* ---------------- 屏幕尺寸 / 多显示器（逻辑点） ---------------- */
 
-let _screenSize = null;
-function getScreenSize() {
-  return new Promise((resolve, reject) => {
-    // 通过 Finder 桌面窗口 bounds 获取主显示器逻辑分辨率（points）
-    const p = spawn('osascript', ['-e', 'tell application "Finder" to get bounds of window of desktop'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let out = '';
-    let err = '';
-    p.stdout.on('data', (c) => (out += c));
-    p.stderr.on('data', (c) => (err += c));
-    p.on('error', reject);
-    p.on('close', (code) => {
-      if (code !== 0) {
-        const detail = (err || '').trim();
-        if (/not allowed|not authorized|accessibility|权限违例|-10004/i.test(detail)) {
-          return reject(new Error('获取屏幕尺寸被拒绝：请到「系统设置 › 隐私与安全性 › 辅助功能」允许 AI Copilot。'));
-        }
-        return reject(new Error('获取屏幕尺寸失败：' + detail));
-      }
-      const m = out.match(/\{\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\}/);
-      if (!m) return reject(new Error('无法解析屏幕尺寸：' + out));
-      const w = parseInt(m[3], 10) - parseInt(m[1], 10);
-      const h = parseInt(m[4], 10) - parseInt(m[2], 10);
-      resolve({ width: w, height: h });
-    });
+// 截图降采样上限：把截图等比缩到该尺寸以内，既控制发给模型的图片体积/令牌，
+// 又让模型输出坐标时工作在一个固定、较小的「图像坐标系」里；鼠标工具再按 coordScale 还原回逻辑点。
+const MAX_SHOT_W = 1372;
+const MAX_SHOT_H = 887;
+
+// 显示器缓存（2s 内复用，避免每次操作都枚举）
+let _displays = null;
+let _displaysTime = 0;
+
+// 通过 NSScreen(JXA) 枚举显示器：返回 [{width,height,originX,originY}]
+// 坐标为 CoreGraphics 全局坐标系（原点在主显示器左上角，y 向下）。
+// 关键：NSScreen 不需要辅助功能权限，是最稳的取屏方式；
+// 旧实现用 Finder 桌面窗口 bounds 返回 0, 0, 1512, 982（无花括号），
+// 而解析正则强制要求 {…}，导致永远匹配失败、报「无法解析屏幕尺寸」。
+async function fetchDisplays() {
+  const out = await runJxa(
+    `ObjC.import('Cocoa');\n` +
+    `var screens = $.NSScreen.screens;\n` +
+    `var primary = screens[0].frame;\n` +
+    `var ph = Math.round(primary.size.height);\n` +
+    `var res = [];\n` +
+    `for (var i=0;i<screens.length;i++){\n` +
+    `  var f = screens[i].frame;\n` +
+    `  var w = Math.round(f.size.width);\n` +
+    `  var h = Math.round(f.size.height);\n` +
+    `  var ox = Math.round(f.origin.x);\n` +
+    `  var oy = ph - (Math.round(f.origin.y) + h);\n` +
+    `  res.push(w + '|' + h + '|' + ox + '|' + oy);\n` +
+    `}\n` +
+    `res.join(';');`
+  );
+  const list = out.trim().split(';').filter(Boolean).map((s) => {
+    const p = s.split('|').map(Number);
+    return { width: p[0], height: p[1], originX: p[2], originY: p[3] };
   });
+  if (!list.length) throw new Error('未能枚举到任何显示器');
+  return list;
 }
 
-async function ensureScreenSize() {
-  if (!_screenSize) _screenSize = await getScreenSize();
-  return _screenSize;
+async function ensureDisplays(force) {
+  const now = Date.now();
+  if (_displays && !force && now - _displaysTime < 2000) return _displays;
+  _displays = await fetchDisplays();
+  _displaysTime = now;
+  return _displays;
+}
+
+function getDisplay(idx) {
+  const i = Math.max(1, parseInt(idx, 10) || 1);
+  if (_displays && _displays[i - 1]) return _displays[i - 1];
+  return _displays ? _displays[0] : null;
+}
+
+// 把逻辑分辨率等比缩放到截图上限，返回图像尺寸与坐标换算比例（逻辑 / 图像）。
+function computeShotSize(width, height) {
+  const s = Math.min(MAX_SHOT_W / width, MAX_SHOT_H / height, 1);
+  const imgW = Math.max(1, Math.round(width * s));
+  const imgH = Math.max(1, Math.round(height * s));
+  return { imgW, imgH, coordScale: width / imgW };
+}
+
+// 取指定显示器（1=主屏）的逻辑尺寸。NSScreen 优先，失败回退 Finder 桌面 bounds。
+async function getDisplaySize(display) {
+  const idx = Math.max(1, parseInt(display, 10) || 1);
+  try {
+    const displays = await ensureDisplays();
+    const d = displays[idx - 1] || displays[0];
+    return { width: d.width, height: d.height };
+  } catch (e) {
+    // 回退：Finder 桌面窗口 bounds（注意返回形如 0, 0, 1512, 982，无花括号）
+    const out = await runAppleScript('tell application "Finder" to get bounds of window of desktop');
+    const m = out.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    if (!m) throw new Error('无法解析屏幕尺寸：' + out);
+    return { width: parseInt(m[3], 10) - parseInt(m[1], 10), height: parseInt(m[4], 10) - parseInt(m[2], 10) };
+  }
+}
+
+function getScreenSize() {
+  return getDisplaySize(1);
+}
+
+// 将模型给出的「图像坐标系」坐标（按 display 的降采样尺寸）换算为 CoreGraphics 全局坐标，
+// 供鼠标事件使用；同时返回该点在主屏图像坐标系中的位置用于截图红圈标注。
+async function modelToTarget(modelX, modelY, display) {
+  const displays = await ensureDisplays();
+  const idx = Math.max(1, parseInt(display, 10) || 1);
+  const d = displays[idx - 1] || displays[0];
+  const shot = computeShotSize(d.width, d.height);
+  const lx = modelX * shot.coordScale;
+  const ly = modelY * shot.coordScale;
+  return {
+    display: idx,
+    cg: { x: Math.round(d.originX + lx), y: Math.round(d.originY + ly) }, // CoreGraphics 全局坐标
+    logical: { x: lx, y: ly }, // 该显示器内逻辑点（相对显示器左上角）
+  };
+}
+
+/* ---------------- 中断（Esc / 停止按钮 / MCP cancelled） ---------------- */
+let _aborted = false;
+let _abortKill = false;
+let _currentChild = null;
+let _lastCg = { x: 0, y: 0 }; // 最近一次真实鼠标事件的 CG 坐标（用于中断时安全松键）
+
+function setCurrentChild(p) { _currentChild = p; }
+function clearCurrentChild(p) { if (_currentChild === p) _currentChild = null; }
+
+// 中断当前操作：杀掉在途 osascript，并尽力释放鼠标左键（防 drag 中途被杀卡键）。
+function abortCurrent() {
+  _aborted = true;
+  _abortKill = true;
+  if (_lastCg) runJxa(mouseUpJxa(_lastCg.x, _lastCg.y)).catch(() => {});
+  if (_currentChild) {
+    try { _currentChild.kill('SIGTERM'); } catch (e) { /* ignore */ }
+  }
 }
 
 /* ---------------- 按键 / 鼠标映射与 CoreGraphics 实现 ---------------- */
@@ -192,9 +282,12 @@ const FN_KEY_MASK = 8388608;
 // F1-F12 默认被 macOS 当作媒体键，需额外按下 fn 才能发出真正的 F 键
 const FN_KEYCODES = new Set([122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111]);
 
-// 记录鼠标最后位置（逻辑点），用于截图时绘制点击标记
+// 记录鼠标最后位置（图像坐标系，即模型看到的坐标空间）与所在显示器，
+// 用于截图时在该显示器图像上绘制点击红圈；_lastCg 记录最近一次真实鼠标事件的
+// CoreGraphics 全局坐标，供中断时安全释放左键。
 let _lastPos = null;
-function setLastPos(x, y) { _lastPos = { x, y }; }
+let _lastDisplay = 1;
+function setLastPos(x, y, display) { _lastPos = { x, y }; _lastDisplay = display || 1; }
 
 /* ---------- CoreGraphics (JXA) 鼠标/键盘事件 ---------- */
 
@@ -347,22 +440,35 @@ data.writeToFileAtomically(path, true);
 /* ---------------- 工具实现 ---------------- */
 
 const TOOLS = {
-  async get_screen_size() {
-    const s = await ensureScreenSize();
+  async get_screen_size(args) {
+    const display = Math.max(1, parseInt(args && args.display, 10) || 1);
+    const size = await getDisplaySize(display);
+    const shot = computeShotSize(size.width, size.height);
+    const total = _displays ? _displays.length : 1;
     return {
-      content: [{ type: 'text', text: `主显示器逻辑分辨率：${s.width} × ${s.height}（坐标系：原点在左上角，单位为逻辑点 points）。` }],
+      content: [{
+        type: 'text',
+        text:
+          `显示器 ${display}/${total} 图像坐标系尺寸：${shot.imgW} × ${shot.imgH}（逻辑分辨率 ${size.width} × ${size.height}）。` +
+          `后续所有鼠标/点击坐标请基于该图像尺寸输出（原点在左上角，单位=图像像素）。` +
+          (total > 1 ? ` 当前共 ${total} 个显示器；若需操作其它显示器，请先调用 get_displays 查看坐标，并在工具中传 display 参数。` : ''),
+      }],
     };
   },
 
-  async screenshot() {
-    const size = await ensureScreenSize();
+  async screenshot(args) {
+    const display = Math.max(1, parseInt(args && args.display, 10) || 1);
+    const size = await getDisplaySize(display);
+    const shot = computeShotSize(size.width, size.height);
     const src = path.join(TMP, `shot_${Date.now()}.png`);
     const dst = path.join(TMP, `shot_${Date.now()}_s.png`);
     // 截图前临时隐藏 AI 光标遮罩，避免把粉色指针拍进截图干扰模型判断
     sendCursor('hide');
-    // 全屏截图（-C 捕获鼠标光标，-x 静音，png），输出为设备分辨率
+    // 指定显示器截图（-D n，1=主屏；-C 捕获鼠标光标，-x 静音，png）
+    const capArgs = ['-x', '-C', '-t', 'png'];
+    if (display > 1) capArgs.unshift('-D', String(display));
     try {
-      await spawnAsync('screencapture', ['-x', '-C', '-t', 'png', src]);
+      await spawnAsync('screencapture', capArgs.concat([src]));
     } catch (e) {
       sendCursor('show');
       const msg = String(e.message || '');
@@ -375,11 +481,11 @@ const TOOLS = {
       sendCursor('show');
       throw new Error('截图失败：未能生成图片（请确认已在「屏幕录制」中允许 AI Copilot）。');
     }
-    // 等比缩放到逻辑分辨率，使图像像素与逻辑点 1:1 对应
-    await spawnAsync('sips', ['-z', String(size.height), String(size.width), src, '--out', dst]);
+    // 等比缩放到上限尺寸，使图像像素落在「图像坐标系」内，与坐标换算比例 coordScale 对应
+    await spawnAsync('sips', ['-z', String(shot.imgH), String(shot.imgW), src, '--out', dst]);
     const finalFile = fs.existsSync(dst) ? dst : src;
-    // 在最近一次鼠标操作点绘制红色点击环（best-effort，失败不影响返回）
-    if (_lastPos) {
+    // 在最近一次同显示器鼠标操作点绘制红色点击环（图像坐标系，best-effort）
+    if (_lastPos && _lastDisplay === display) {
       try {
         await runJxa(annotateScreenshotJxa(finalFile, _lastPos.x, _lastPos.y));
       } catch (e) {
@@ -389,11 +495,11 @@ const TOOLS = {
     const b64 = fileToBase64(finalFile);
     try { fs.unlinkSync(src); } catch (e) { /* ignore */ }
     try { fs.unlinkSync(dst); } catch (e) { /* ignore */ }
-    const mark = _lastPos ? `截图中已用红圈标出最近一次鼠标操作位置 (${_lastPos.x}, ${_lastPos.y})。` : '';
+    const mark = _lastPos && _lastDisplay === display ? `截图中已用红圈标出最近一次鼠标操作位置 (${_lastPos.x}, ${_lastPos.y})。` : '';
     sendCursor('show');
     return {
       content: [
-        { type: 'text', text: `已截取主屏幕，图像尺寸 ${size.width} × ${size.height}（逻辑点），已包含鼠标光标。${mark}请基于该尺寸输出坐标（原点左上角）。` },
+        { type: 'text', text: `已截取显示器 ${display} 全屏，图像尺寸 ${shot.imgW} × ${shot.imgH}（逻辑分辨率 ${size.width} × ${size.height}），已包含鼠标光标。${mark}请基于此图像尺寸输出坐标（原点左上角）。` },
         { type: 'image', data: b64, mimeType: 'image/png' },
       ],
     };
@@ -401,64 +507,70 @@ const TOOLS = {
 
   async move(args) {
     const { x, y } = numPair(args, 'x', 'y');
-    const from = _lastPos ? _lastPos : { x: 0, y: 0 };
-    sendCursor('move', x, y);
-    await runJxa(mouseMoveJxa(x, y, from.x, from.y));
-    setLastPos(x, y);
-    return okText(`鼠标已移动到 (${x}, ${y})（桌面光标已平滑移动）`);
+    const target = await modelToTarget(x, y, args.display);
+    const from = _lastCg && isFinite(_lastCg.x) ? _lastCg : { x: target.cg.x, y: target.cg.y };
+    _lastCg = target.cg;
+    sendCursor('move', target.cg.x, target.cg.y);
+    await runJxa(mouseMoveJxa(target.cg.x, target.cg.y, from.x, from.y));
+    setLastPos(x, y, target.display);
+    return okText(`鼠标已移动到图像坐标 (${x}, ${y})（显示器 ${target.display}，逻辑点 ${Math.round(target.logical.x)}, ${Math.round(target.logical.y)}）`);
   },
 
   async click(args) {
     const { x, y } = numPair(args, 'x', 'y');
+    const target = await modelToTarget(x, y, args.display);
+    _lastCg = target.cg;
     const button = String(args.button || 'left').toLowerCase();
-    sendCursor('move', x, y);
-    await runJxa(mouseClickJxa(x, y, button, false));
-    setLastPos(x, y);
-    sendCursor('click', x, y);
-    return okText(`已在 (${x}, ${y}) 点击（${button}键，已发出真实鼠标事件）`);
+    sendCursor('move', target.cg.x, target.cg.y);
+    await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
+    setLastPos(x, y, target.display);
+    sendCursor('click', target.cg.x, target.cg.y);
+    return okText(`已在图像坐标 (${x}, ${y}) 点击（${button}键，显示器 ${target.display}）`);
   },
 
   async double_click(args) {
     const { x, y } = numPair(args, 'x', 'y');
-    sendCursor('move', x, y);
-    await runJxa(mouseClickJxa(x, y, 'left', true));
-    setLastPos(x, y);
-    sendCursor('click', x, y);
-    return okText(`已在 (${x}, ${y}) 双击`);
+    const target = await modelToTarget(x, y, args.display);
+    _lastCg = target.cg;
+    sendCursor('move', target.cg.x, target.cg.y);
+    await runJxa(mouseClickJxa(target.cg.x, target.cg.y, 'left', true));
+    setLastPos(x, y, target.display);
+    sendCursor('click', target.cg.x, target.cg.y);
+    return okText(`已在图像坐标 (${x}, ${y}) 双击（显示器 ${target.display}）`);
   },
 
   async right_click(args) {
     const { x, y } = numPair(args, 'x', 'y');
-    sendCursor('move', x, y);
-    await runJxa(mouseClickJxa(x, y, 'right', false));
-    setLastPos(x, y);
-    sendCursor('click', x, y);
-    return okText(`已在 (${x}, ${y}) 右键点击`);
+    const target = await modelToTarget(x, y, args.display);
+    _lastCg = target.cg;
+    sendCursor('move', target.cg.x, target.cg.y);
+    await runJxa(mouseClickJxa(target.cg.x, target.cg.y, 'right', false));
+    setLastPos(x, y, target.display);
+    sendCursor('click', target.cg.x, target.cg.y);
+    return okText(`已在图像坐标 (${x}, ${y}) 右键点击（显示器 ${target.display}）`);
   },
 
   async drag(args) {
-    const fx = Math.round(Number(args.from_x));
-    const fy = Math.round(Number(args.from_y));
-    const tx = Math.round(Number(args.to_x));
-    const ty = Math.round(Number(args.to_y));
-    if ([fx, fy, tx, ty].some((v) => !isFinite(v))) throw new Error('拖拽坐标必须是数字');
+    const f = await modelToTarget(args.from_x, args.from_y, args.display);
+    const t = await modelToTarget(args.to_x, args.to_y, args.display);
+    _lastCg = t.cg;
     // 瞬移到起点（避免中途 hover 触发意外状态），settle 后再按下左键
-    sendCursor('move', fx, fy);
-    await runJxa(mouseMoveInstantJxa(fx, fy));
+    sendCursor('move', f.cg.x, f.cg.y);
+    await runJxa(mouseMoveInstantJxa(f.cg.x, f.cg.y));
     await sleep(50);
-    sendCursor('down', fx, fy);
-    await runJxa(mouseDownJxa(fx, fy));
+    sendCursor('down', f.cg.x, f.cg.y);
+    await runJxa(mouseDownJxa(f.cg.x, f.cg.y));
     await sleep(50);
     try {
       // 缓动动画拖到终点；finally 保证左键必定松开，杜绝卡键
-      await runJxa(mouseDragMoveJxa(fx, fy, tx, ty));
-      sendCursor('move', tx, ty);
+      await runJxa(mouseDragMoveJxa(f.cg.x, f.cg.y, t.cg.x, t.cg.y));
+      sendCursor('move', t.cg.x, t.cg.y);
     } finally {
-      await runJxa(mouseUpJxa(tx, ty));
-      sendCursor('up', tx, ty);
+      await runJxa(mouseUpJxa(t.cg.x, t.cg.y));
+      sendCursor('up', t.cg.x, t.cg.y);
     }
-    setLastPos(tx, ty);
-    return okText(`已从 (${fx}, ${fy}) 拖拽到 (${tx}, ${ty})（缓动动画，左键已安全松开）`);
+    setLastPos(args.to_x, args.to_y, t.display);
+    return okText(`已从 (${args.from_x}, ${args.from_y}) 拖拽到 (${args.to_x}, ${args.to_y})（显示器 ${t.display}）`);
   },
 
   async type(args) {
@@ -484,30 +596,40 @@ const TOOLS = {
     const key = String(args.key || '').toLowerCase();
     const code = KEY_CODES[key];
     if (code == null) throw new Error(`不支持的按键名：${key}（支持 return/tab/space/escape/方向键/command/shift/option/control/f1-f16 等）`);
-    if (_lastPos) sendCursor('move', _lastPos.x, _lastPos.y);
     const mods = (Array.isArray(args.modifiers) ? args.modifiers : []).map(String);
     if (FN_KEYCODES.has(code)) mods.push('fn'); // 功能键需附带 fn 才能发出真正的 F1-F12（而非媒体键）
+    const danger = isDangerousCombo(key, mods);
+    if (danger && !args.confirm) {
+      throw new Error(`危险操作已拦截：${danger}。若你确认要执行，请在同一调用中加上 confirm: true 再次发起。`);
+    }
+    if (_lastCg && isFinite(_lastCg.x)) sendCursor('move', _lastCg.x, _lastCg.y);
     await runJxa(buildKeyScript(code, mods));
-    return okText(`已按下按键 ${key}${mods.length ? '（修饰键：' + mods.join('+') + '）' : ''}`);
+    return okText(`已按下按键 ${key}${mods.length ? '（修饰键：' + mods.join('+') + '）' : ''}${danger ? '（已确认执行危险操作）' : ''}`);
   },
 
   async hotkey(args) {
     const keys = Array.isArray(args.keys) ? args.keys : [];
     if (!keys.length) throw new Error('keys 不能为空，例如 ["command","c"]');
-    if (_lastPos) sendCursor('move', _lastPos.x, _lastPos.y);
     const main = String(keys[keys.length - 1]);
     const mods = keys.slice(0, -1).map(String);
     const mainCode = resolveMainCode(main);
     if (mainCode == null) throw new Error(`不支持的按键：${main}`);
+    const danger = isDangerousCombo(main, mods);
+    if (danger && !args.confirm) {
+      throw new Error(`危险操作已拦截：${danger}。若你确认要执行，请在同一调用中加上 confirm: true 再次发起。`);
+    }
     if (FN_KEYCODES.has(mainCode)) mods.push('fn'); // 功能键自动补 fn
     if (main.length === 1 && main >= 'A' && main <= 'Z') mods.push('shift'); // 大写字母自动补 shift
+    if (_lastCg && isFinite(_lastCg.x)) sendCursor('move', _lastCg.x, _lastCg.y);
     await runJxa(buildKeyScript(mainCode, mods));
-    return okText(`已触发快捷键 ${keys.join('+')}`);
+    return okText(`已触发快捷键 ${keys.join('+')}${danger ? '（已确认执行危险操作）' : ''}`);
   },
 
   async scroll(args) {
     const { x, y } = numPair(args, 'x', 'y');
-    sendCursor('move', x, y);
+    const target = await modelToTarget(x, y, args.display);
+    _lastCg = target.cg;
+    sendCursor('move', target.cg.x, target.cg.y);
     const direction = String(args.direction || 'down').toLowerCase();
     const amount = Math.max(1, Math.min(20, parseInt(args.amount, 10) || 3));
     const dx = direction === 'left' ? -amount : direction === 'right' ? amount : 0;
@@ -522,7 +644,45 @@ const TOOLS = {
       // 兜底：部分 macOS 下 CoreGraphics 桥接不可用，给出清晰提示
       throw new Error('滚动失败：' + e.message + '（部分系统需辅助功能权限，或暂不支持编程滚动）');
     }
-    return okText(`已在 (${x}, ${y}) 向 ${direction} 滚动 ${amount}`);
+    return okText(`已在图像坐标 (${x}, ${y}) 向 ${direction} 滚动 ${amount}（显示器 ${target.display}）`);
+  },
+
+  async focus_app(args) {
+    const name = String(args.name || '').trim();
+    if (!name) throw new Error('name 不能为空，例如 "Safari"、"Finder"，或 bundle id 如 "com.apple.Safari"');
+    let launched = false;
+    try {
+      const out = await runJxa(
+        `ObjC.import('Cocoa');\n` +
+        `var ws = $.NSWorkspace.sharedWorkspace;\n` +
+        `var ok = ws.launchApplication($(${JSON.stringify(name)}));\n` +
+        `ok ? '1' : '0';`
+      );
+      launched = String(out || '').trim() === '1';
+    } catch (e) {
+      logErr('focus_app launchApplication failed: ' + e.message);
+    }
+    if (!launched) {
+      // 回退：AppleScript activate（需要「自动化」授权）
+      await runAppleScript(`tell application "${asStrLiteral(name)}" to activate`);
+    }
+    return okText(`已尝试将「${name}」切换/启动到前台（best-effort）。若未生效，请确认应用名称正确，并在「系统设置 › 隐私与安全性 › 辅助功能 / 自动化」中允许 AI Copilot。`);
+  },
+
+  async get_displays() {
+    const displays = await ensureDisplays(true);
+    const lines = displays.map((d, i) => {
+      const shot = computeShotSize(d.width, d.height);
+      return `显示器 ${i + 1}：逻辑 ${d.width}×${d.height}，图像坐标系 ${shot.imgW}×${shot.imgH}，全局原点 (${d.originX}, ${d.originY})`;
+    });
+    return {
+      content: [{
+        type: 'text',
+        text:
+          `共 ${displays.length} 个显示器（CoreGraphics 全局坐标系，原点在主屏左上角，y 向下）：\n` + lines.join('\n') +
+          `\n提示：截图/鼠标工具可传 display 参数（1=主屏）指定显示器；鼠标坐标请用对应显示器的「图像坐标系」尺寸。`,
+      }],
+    };
   },
 };
 
@@ -537,14 +697,38 @@ function okText(t) {
   return { content: [{ type: 'text', text: t }] };
 }
 
+// 识别危险快捷键组合（退出/关闭窗口/注销/强制退出等），返回中文原因，否则 null。
+// 仅当组合含 command(⌘) 且主键命中受保护键时判定为危险；需模型显式 confirm:true 才放行。
+function isDangerousCombo(main, mods) {
+  const m = String(main || '').toLowerCase();
+  const list = (Array.isArray(mods) ? mods : []).map(String).map((s) => s.toLowerCase());
+  const has = (k) => list.includes(k);
+  const cmd = has('command') || has('cmd');
+  if (!cmd) return null;
+  if (m === 'q') {
+    if (has('shift')) return '退出登录（⌘⇧Q）';
+    return '退出当前应用（⌘Q）';
+  }
+  if (m === 'w') return '关闭当前窗口（⌘W）';
+  if (m === 'escape' || m === 'esc') {
+    if (has('option') || has('alt')) return '强制退出应用（⌘⌥Esc）';
+  }
+  return null;
+}
+
 function spawnAsync(cmd, cmdArgs) {
   return new Promise((resolve, reject) => {
     const p = spawn(cmd, cmdArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    setCurrentChild(p);
     let err = '';
     p.stderr.on('data', (c) => (err += c));
-    p.on('error', reject);
+    p.on('error', (e) => { clearCurrentChild(p); reject(e); });
     p.on('close', (code) => {
-      if (code !== 0) return reject(new Error(`命令 ${cmd} 失败（code=${code}）：${(err || '').trim()}`));
+      clearCurrentChild(p);
+      if (code !== 0) {
+        if (_abortKill) { _abortKill = false; return reject(new Error('操作已被用户中断（Esc / 停止按钮）')); }
+        return reject(new Error(`命令 ${cmd} 失败（code=${code}）：${(err || '').trim()}`));
+      }
       resolve();
     });
   });
@@ -579,62 +763,84 @@ function sleep(ms) {
 const TOOL_DEFS = [
   {
     name: 'get_screen_size',
-    description: '获取主显示器的逻辑分辨率（宽 × 高，单位为逻辑点 points，原点在左上角）。在截图或点击前建议先调用，以了解坐标范围。',
-    inputSchema: { type: 'object', properties: {} },
+    description: '获取指定显示器的「图像坐标系」尺寸（即你截图中看到的像素尺寸，原点左上角）。截图或点击前建议先调用以了解坐标范围；多显示器时传 display 选择显示器（1=主屏）。后续所有坐标都基于此尺寸输出。',
+    inputSchema: {
+      type: 'object',
+      properties: { display: { type: 'number', description: '显示器序号，1=主屏，默认 1' } },
+    },
   },
   {
     name: 'screenshot',
-    description: '截取当前主屏幕全屏，返回一张图片。图像会被缩放到逻辑分辨率，因此你看到的图像像素与后续点击/移动的坐标 1:1 对应。坐标系原点在左上角。每次操作电脑前通常先截图，观察当前界面后再决定下一步动作。',
-    inputSchema: { type: 'object', properties: {} },
+    description: '截取指定显示器全屏并返回一张图片。图像会被等比缩放到上限尺寸（约 1366×887），因此你看到的图像像素即为坐标空间，后续点击/移动请基于该图像尺寸（用 get_screen_size 获取精确值）输出坐标，原点在左上角。多显示器时传 display（1=主屏）。每次操作电脑前通常先截图，观察界面后再决定下一步动作。',
+    inputSchema: {
+      type: 'object',
+      properties: { display: { type: 'number', description: '显示器序号，1=主屏，默认 1' } },
+    },
   },
   {
     name: 'move',
-    description: '把鼠标移动到指定逻辑坐标 (x, y)。',
+    description: '把鼠标移动到指定图像坐标 (x, y)（与截图图像尺寸一致，原点左上角）。多显示器时传 display（1=主屏）。',
     inputSchema: {
       type: 'object',
-      properties: { x: { type: 'number', description: '横坐标（逻辑点）' }, y: { type: 'number', description: '纵坐标（逻辑点）' } },
+      properties: {
+        x: { type: 'number', description: '横坐标（图像像素，与截图尺寸一致）' },
+        y: { type: 'number', description: '纵坐标（图像像素，与截图尺寸一致）' },
+        display: { type: 'number', description: '显示器序号，1=主屏，默认 1' },
+      },
       required: ['x', 'y'],
     },
   },
   {
     name: 'click',
-    description: '在指定逻辑坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。使用 CoreGraphics 真实鼠标事件，点击可靠落点；下一次截图会用红圈标出点击位置。',
+    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。使用 CoreGraphics 真实鼠标事件，点击可靠落点；下一次同显示器截图会用红圈标出点击位置。多显示器时传 display（1=主屏）。',
     inputSchema: {
       type: 'object',
       properties: {
-        x: { type: 'number', description: '横坐标（逻辑点）' },
-        y: { type: 'number', description: '纵坐标（逻辑点）' },
+        x: { type: 'number', description: '横坐标（图像像素，与截图尺寸一致）' },
+        y: { type: 'number', description: '纵坐标（图像像素，与截图尺寸一致）' },
         button: { type: 'string', description: 'left / right / middle，默认 left', enum: ['left', 'right', 'middle'] },
+        display: { type: 'number', description: '显示器序号，1=主屏，默认 1' },
       },
       required: ['x', 'y'],
     },
   },
   {
     name: 'double_click',
-    description: '在指定逻辑坐标 (x, y) 双击鼠标。',
+    description: '在指定图像坐标 (x, y) 双击鼠标。多显示器时传 display（1=主屏）。',
     inputSchema: {
       type: 'object',
-      properties: { x: { type: 'number', description: '横坐标（逻辑点）' }, y: { type: 'number', description: '纵坐标（逻辑点）' } },
+      properties: {
+        x: { type: 'number', description: '横坐标（图像像素，与截图尺寸一致）' },
+        y: { type: 'number', description: '纵坐标（图像像素，与截图尺寸一致）' },
+        display: { type: 'number', description: '显示器序号，1=主屏，默认 1' },
+      },
       required: ['x', 'y'],
     },
   },
   {
     name: 'right_click',
-    description: '在指定逻辑坐标 (x, y) 右键点击。',
+    description: '在指定图像坐标 (x, y) 右键点击。多显示器时传 display（1=主屏）。',
     inputSchema: {
       type: 'object',
-      properties: { x: { type: 'number', description: '横坐标（逻辑点）' }, y: { type: 'number', description: '纵坐标（逻辑点）' } },
+      properties: {
+        x: { type: 'number', description: '横坐标（图像像素，与截图尺寸一致）' },
+        y: { type: 'number', description: '纵坐标（图像像素，与截图尺寸一致）' },
+        display: { type: 'number', description: '显示器序号，1=主屏，默认 1' },
+      },
       required: ['x', 'y'],
     },
   },
   {
     name: 'drag',
-    description: '从 (from_x, from_y) 按住鼠标拖拽到 (to_x, to_y)。',
+    description: '从图像坐标 (from_x, from_y) 按住鼠标拖拽到 (to_x, to_y)。多显示器时传 display（1=主屏）。',
     inputSchema: {
       type: 'object',
       properties: {
-        from_x: { type: 'number' }, from_y: { type: 'number' },
-        to_x: { type: 'number' }, to_y: { type: 'number' },
+        from_x: { type: 'number', description: '起点横坐标（图像像素）' },
+        from_y: { type: 'number', description: '起点纵坐标（图像像素）' },
+        to_x: { type: 'number', description: '终点横坐标（图像像素）' },
+        to_y: { type: 'number', description: '终点纵坐标（图像像素）' },
+        display: { type: 'number', description: '显示器序号，1=主屏，默认 1' },
       },
       required: ['from_x', 'from_y', 'to_x', 'to_y'],
     },
@@ -650,38 +856,57 @@ const TOOL_DEFS = [
   },
   {
     name: 'key',
-    description: '按下单个特殊按键，可同时按住修饰键。key 支持：return/tab/space/escape/left/right/up/down/delete/home/end/pageup/pagedown/f1-f16/command/shift/option/control 等；modifiers 为修饰键数组，如 ["command"]。功能键 F1-F12 会自动附带 fn 修饰键，以发出真正的 F 键而非媒体键。',
+    description: '按下单个特殊按键，可同时按住修饰键。key 支持：return/tab/space/escape/left/right/up/down/delete/home/end/pageup/pagedown/f1-f16/command/shift/option/control 等；modifiers 为修饰键数组，如 ["command"]。功能键 F1-F12 会自动附带 fn 修饰键，以发出真正的 F 键而非媒体键。注意：⌘Q/⌘W/⌘⇧Q/⌘⌥Esc 等危险组合会被拦截，需 confirm:true 才执行。',
     inputSchema: {
       type: 'object',
       properties: {
         key: { type: 'string', description: '按键名' },
         modifiers: { type: 'array', items: { type: 'string' }, description: '修饰键数组，如 ["command","shift"]' },
+        confirm: { type: 'boolean', description: '对危险组合（如 ⌘Q 退出应用）显式二次确认，true 才放行' },
       },
       required: ['key'],
     },
   },
   {
     name: 'hotkey',
-    description: '触发组合快捷键，例如复制 ["command","c"]、保存 ["command","s"]、切换应用 ["command","tab"]。数组中最后一个元素为主键，前面为修饰键。主键为功能键（f1-f12）时会自动附带 fn，大写字母自动补 shift。',
+    description: '触发组合快捷键，例如复制 ["command","c"]、保存 ["command","s"]、切换应用 ["command","tab"]。数组中最后一个元素为主键，前面为修饰键。主键为功能键（f1-f12）时会自动附带 fn，大写字母自动补 shift。注意：含 ⌘Q/⌘W/⌘⇧Q/⌘⌥Esc 的危险组合会被拦截，需 confirm:true 才执行。',
     inputSchema: {
       type: 'object',
-      properties: { keys: { type: 'array', items: { type: 'string' }, description: '按键序列，如 ["command","c"]' } },
+      properties: {
+        keys: { type: 'array', items: { type: 'string' }, description: '按键序列，如 ["command","c"]' },
+        confirm: { type: 'boolean', description: '对危险组合（如 ⌘Q 退出应用）显式二次确认，true 才放行' },
+      },
       required: ['keys'],
     },
   },
   {
     name: 'scroll',
-    description: '在指定坐标处滚动鼠标滚轮。direction 为 up/down/left/right，amount 为滚动量（1-20）。',
+    description: '在指定图像坐标处滚动鼠标滚轮。direction 为 up/down/left/right，amount 为滚动量（1-20）。多显示器时传 display（1=主屏）。',
     inputSchema: {
       type: 'object',
       properties: {
-        x: { type: 'number', description: '横坐标（逻辑点）' },
-        y: { type: 'number', description: '纵坐标（逻辑点）' },
+        x: { type: 'number', description: '横坐标（图像像素，与截图尺寸一致）' },
+        y: { type: 'number', description: '纵坐标（图像像素，与截图尺寸一致）' },
         direction: { type: 'string', enum: ['up', 'down', 'left', 'right'] },
         amount: { type: 'number', description: '滚动量 1-20，默认 3' },
+        display: { type: 'number', description: '显示器序号，1=主屏，默认 1' },
       },
       required: ['x', 'y'],
     },
+  },
+  {
+    name: 'focus_app',
+    description: '将指定应用切换/启动到前台（best-effort）。name 可为应用名（如 "Safari"、"Finder"、"Chrome"）或 bundle id（如 "com.apple.Safari"）。若应用未运行会尝试启动。',
+    inputSchema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: '应用名或 bundle id，如 "Safari" / "com.apple.Safari"' } },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'get_displays',
+    description: '枚举所有显示器（数量、逻辑分辨率、图像坐标系尺寸、CoreGraphics 全局原点）。多显示器环境下用于确定各显示器坐标范围与 display 序号，便于截图/鼠标操作指定显示器。',
+    inputSchema: { type: 'object', properties: {} },
   },
 ];
 
@@ -707,6 +932,10 @@ function handleMessage(msg) {
     return; // 通知无需回复
   }
 
+  // 控制消息：用户中断（Esc / 停止按钮）通过 stdin 注入 __abort，或 MCP cancelled 通知
+  if (msg.__abort) { abortCurrent(); return; }
+  if (msg.method === 'notifications/cancelled') { abortCurrent(); return; }
+
   if (msg.method === 'tools/list') {
     send({ jsonrpc: '2.0', id: msg.id, result: { tools: TOOL_DEFS } });
     return;
@@ -722,6 +951,9 @@ function handleMessage(msg) {
 async function handleToolCall(msg) {
   const name = msg.params && msg.params.name;
   const args = (msg.params && msg.params.arguments) || {};
+  // 新请求开始：清除上一次中断标记（中断只作用于当时在途的那个操作）
+  _aborted = false;
+  _abortKill = false;
   let result;
   const fn = TOOLS[name];
   if (!fn) {

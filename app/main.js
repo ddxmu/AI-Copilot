@@ -1697,6 +1697,17 @@ ipcMain.handle('open-computer-use-perms', async () => {
   return true;
 });
 
+// 中断 Computer Use 当前在途操作（Esc / 停止按钮触发）：杀掉在途 osascript，
+// 并通知渲染进程重置发送状态。
+ipcMain.handle('computer-use-abort', async () => {
+  let ok = false;
+  try { ok = mcp.cancelTool('computeruse'); } catch (e) { /* ignore */ }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.webContents.send('computer-use-aborted'); } catch (e) { /* ignore */ }
+  }
+  return !!ok;
+});
+
 app.on('before-quit', () => {
   try { mcp.disconnectAll(); } catch (e) { /* ignore */ }
   stopCursorServer();

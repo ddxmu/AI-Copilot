@@ -2483,14 +2483,15 @@ const sendIconEl = document.getElementById('send-icon');
 // 发送按钮：空闲=箭头图标；AI 运行中（等待）=「运行」图标 + 脉冲光圈
 function setSending(v) {
   sending = v;
-  btnSend.disabled = v;
+  // 发送中保持按钮可点击：点击它（或按 Esc）即中断 Computer Use / AI 在途操作
+  btnSend.disabled = false;
   btnSend.classList.toggle('running', v);
   if (sendIconEl) {
     sendIconEl.src = v ? 'assets/icon-running.png' : 'assets/icon-send.png';
-    sendIconEl.alt = v ? '运行中' : '发送';
+    sendIconEl.alt = v ? '运行中（点击停止）' : '发送';
   }
-  btnSend.dataset.tip = v ? 'AI 正在运行…' : '发送（Enter）';
-  btnSend.title = v ? 'AI 正在运行…' : '发送';
+  btnSend.dataset.tip = v ? 'AI 正在运行，点击或按 Esc 停止' : '发送（Enter）';
+  btnSend.title = v ? 'AI 正在运行，点击或按 Esc 停止' : '发送';
 }
 
 // 文本框自动增高（面板 display:none 时 scrollHeight 为 0，不能把高度压成 0）
@@ -3019,6 +3020,11 @@ function addBubble(role, text) {
   chatMessagesEl.appendChild(wrap);
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
   return bubble;
+}
+
+// 在对话区追加一条「系统提示」气泡（如中断提示）
+function appendSystemLine(text) {
+  return addBubble('system', text);
 }
 
 // 清理没有任何文字内容的 AI 气泡（防止流式输出或历史恢复时留下空条）
@@ -3585,12 +3591,35 @@ function handleSlashCommand(text) {
 btnSend.addEventListener('click', () => {
   // 录音中点击发送：停止录音并触发语音识别（识别后文字入框并自动发送）
   if (isRecording) { finalizeRecording(); return; }
+  // AI 在途时点击 = 中断 Computer Use / 当前操作（Esc 同效）
+  if (sending) { abortCurrent(); return; }
   sendChat();
 });
+
+// 中断当前 AI / Computer Use 在途操作
+function abortCurrent() {
+  try { window.api.computerUseAbort(); } catch (e) { /* ignore */ }
+  appendSystemLine('已发送停止指令，正在中断 Computer Use 在途操作…');
+}
+
+// Esc 全局中断：窗口聚焦且 AI 在途时，按 Esc 停止当前操作（等价于点击停止按钮）
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && sending) {
+    e.preventDefault();
+    abortCurrent();
+  }
+});
+
+window.api.onComputerUseAborted(() => {
+  if (sending) setSending(false);
+  appendSystemLine('Computer Use 操作已中断。');
+});
+
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     if (isRecording) { finalizeRecording(); return; }
+    if (sending) { abortCurrent(); return; }
     sendChat();
   }
 });

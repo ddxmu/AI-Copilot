@@ -221,6 +221,17 @@ class McpConnection {
     } catch (e) { /* ignore */ }
   }
 
+  // 直接向子进程 stdin 写一行（用于控制消息，如中断 computer-use 在途操作）
+  writeRaw(str) {
+    if (!this.proc || this.proc.killed) return false;
+    try { this.proc.stdin.write(str + '\n'); return true; } catch (e) { return false; }
+  }
+
+  // 中断当前在途工具调用：computer-use 收到后杀掉在途 osascript 并拒绝后续操作
+  cancelTool() {
+    return this.writeRaw(JSON.stringify({ __abort: true }));
+  }
+
   rejectAll(err) {
     for (const [, p] of this.pending) {
       clearTimeout(p.timer);
@@ -740,6 +751,13 @@ async function callTool(serverName, toolName, args) {
   return contentToText(result);
 }
 
+// 中断指定 MCP 服务当前在途的工具调用（目前用于 computer-use 的 Esc / 停止按钮）
+function cancelTool(serverName) {
+  const conn = connections.get(serverName);
+  if (!conn) return false;
+  return conn.cancelTool();
+}
+
 module.exports = {
   connectFromConfig,
   disconnectAll,
@@ -747,6 +765,7 @@ module.exports = {
   testServer,
   getMcpToolDefs,
   callTool,
+  cancelTool,
   contentToText,
   McpConnection,
   McpConnectionSSE,

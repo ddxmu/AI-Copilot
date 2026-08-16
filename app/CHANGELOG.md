@@ -1,3 +1,14 @@
+## v0.9.50 — 2026-08-16
+
+### Computer Use 修复与能力补齐（#342–#346）
+- **修复截图「无法解析屏幕尺寸：0, 0, 1512, 982」致命 bug**：取屏方式由 Finder 桌面 bounds（返回无花括号的 `0, 0, 1512, 982`，旧正则强制要求 `{…}` 永远不匹配）改为 **NSScreen JXA**（免辅助功能权限，最稳），并保留 Finder 回退 + 去花括号正则。现在 `screenshot` / `get_screen_size` 不再报错，鼠标截图恢复正常。
+- **截图降采样 + 坐标系换算**：截图等比缩放到上限约 1366×887，模型看到的图像像素即坐标空间；`move/click/double_click/right_click/drag/scroll` 自动按 `coordScale` 把图像坐标还原回逻辑点，红圈标注同步落在图像坐标系，彻底消除「坐标对不上」。
+- **focus_app（#343）**：新增工具，把指定应用（应用名或 bundle id）切换/启动到前台（NSWorkspace `launchApplication` + AppleScript `activate` 回退）。
+- **危险快捷键二次确认（#345）**：`key`/`hotkey` 识别 ⌘Q/⌘W/⌘⇧Q/⌘⌥Esc 等危险组合，未显式 `confirm:true` 时拒绝执行，避免误关应用/退出登录。
+- **多显示器支持（#346）**：新增 `get_displays` 枚举所有显示器（逻辑分辨率 / 图像坐标系尺寸 / CoreGraphics 全局原点）；`screenshot` 与所有鼠标工具支持 `display` 参数（1=主屏），截图走 `screencapture -D`，鼠标坐标按各显示器原点与缩放换算。
+- **全局停止 / 中断（#342）**：新增 Computer Use 中断机制——`Esc` 或点击发送按钮（AI 在途时）即中断当前在途操作：杀掉在途 osascript、安全释放鼠标左键、下次工具调用返回「操作已被用户中断」。链路 `renderer → preload → main(ipc) → mcp.cancelTool → computer-use(__abort)`。
+- ComputerUse MCP `SERVER_VERSION` 1.3.0 → 1.4.0。
+
 ## v0.9.49 — 2026-08-16
 
 ### Computer Use 光标可视化
