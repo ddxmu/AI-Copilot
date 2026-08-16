@@ -23,7 +23,7 @@ const net = require('net');
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'ComputerUse';
-const SERVER_VERSION = '1.4.1';
+const SERVER_VERSION = '1.4.2';
 
 const TMP = path.join(os.tmpdir(), 'ai-copilot-computer-use');
 try { fs.mkdirSync(TMP, { recursive: true }); } catch (e) { /* ignore */ }
@@ -374,22 +374,45 @@ function mouseDragMoveJxa(fx, fy, tx, ty) {
   return lines.join('\n');
 }
 
-// 组合键：依次 post 修饰键 down → 主键 down/up → 修饰键 up
+// 组合键：依次 post 修饰键 down → 主键 down/up → 修饰键 up。
+// 关键修复：每个事件都要用 CGEventSetFlags 注入「当前已按下的修饰键掩码」。
+// 旧实现只单独 post 修饰键 down/up，主键事件自身不带修饰标志，导致 Chrome/Electron
+// 这类「按事件自身的 flags 判定修饰键」的应用把 ⌘V 误判为裸 v（只落一个字符、不粘贴）。
 function buildKeyScript(mainCode, modNames) {
   const MOD_KC = { command: 55, cmd: 55, shift: 56, option: 58, alt: 58, control: 59, ctrl: 59, fn: 63, function: 63 };
+  // 关键：MOD_MASK 必须是真实的 CoreGraphics 修饰键掩码（CGEventFlags），而非 keycode！
+  //   正确值（macOS CoreGraphics，CGEventFlags 位定义）：
+  //     kCGEventFlagMaskCommand     = 0x100000 (1048576)
+  //     kCGEventFlagMaskShift       = 0x20000  (131072)
+  //     kCGEventFlagMaskControl     = 0x40000  (262144)
+  //     kCGEventFlagMaskAlternate   = 0x80000  (524288)  // option / alt
+  //     kCGEventFlagMaskSecondaryFn = 0x800000 (8388608)  // fn
+  //   误用 0x1000(4096) 等非掩码值会导致 Chrome/Electron 读不到 ⌘、把 ⌘V 当成裸 v（只落一个字符、不粘贴）。
+  const MOD_MASK = { command: 1048576, cmd: 1048576, shift: 131072, option: 524288, alt: 524288, control: 262144, ctrl: 262144, fn: 8388608, function: 8388608 };
   const lines = ['ObjC.import("CoreGraphics");'];
+  let flags = 0;
   const modCodes = [];
+  const modMasks = [];
   for (const m of modNames) {
-    const mc = MOD_KC[String(m).toLowerCase()];
+    const key = String(m).toLowerCase();
+    const mc = MOD_KC[key];
     if (mc == null) continue;
+    const mask = MOD_MASK[key] || 0;
     modCodes.push(mc);
-    lines.push(`var md${mc}=$.CGEventCreateKeyboardEvent(0,${mc},true);$.CGEventPost($.kCGHIDEventTap,md${mc});`);
+    modMasks.push(mask);
+    flags |= mask;
+    lines.push(`var md${mc}=$.CGEventCreateKeyboardEvent(0,${mc},true);$.CGEventSetFlags(md${mc},${flags});$.CGEventPost($.kCGHIDEventTap,md${mc});`);
+    lines.push('$.NSThread.sleepForTimeInterval(0.01);');
   }
-  lines.push(`var kd=$.CGEventCreateKeyboardEvent(0,${mainCode},true);$.CGEventPost($.kCGHIDEventTap,kd);`);
-  lines.push(`var ku=$.CGEventCreateKeyboardEvent(0,${mainCode},false);$.CGEventPost($.kCGHIDEventTap,ku);`);
+  // 主键事件自身携带完整的修饰键掩码，应用才会将其识别为 ⌘V / ⌘C 等组合键
+  lines.push(`var kd=$.CGEventCreateKeyboardEvent(0,${mainCode},true);$.CGEventSetFlags(kd,${flags});$.CGEventPost($.kCGHIDEventTap,kd);`);
+  lines.push('$.NSThread.sleepForTimeInterval(0.01);');
+  lines.push(`var ku=$.CGEventCreateKeyboardEvent(0,${mainCode},false);$.CGEventSetFlags(ku,${flags});$.CGEventPost($.kCGHIDEventTap,ku);`);
+  // 松开修饰键时同步递减 flags
   for (let i = modCodes.length - 1; i >= 0; i--) {
     const mc = modCodes[i];
-    lines.push(`var mu${mc}=$.CGEventCreateKeyboardEvent(0,${mc},false);$.CGEventPost($.kCGHIDEventTap,mu${mc});`);
+    flags &= ~modMasks[i];
+    lines.push(`var mu${mc}=$.CGEventCreateKeyboardEvent(0,${mc},false);$.CGEventSetFlags(mu${mc},${flags});$.CGEventPost($.kCGHIDEventTap,mu${mc});`);
   }
   return lines.join('\n');
 }
@@ -402,27 +425,112 @@ function resolveMainCode(main) {
   return null;
 }
 
-// 对标 Claude Code computer-use 的 typeViaClipboard：用剪贴板写入文本再 Cmd+V 粘贴，
+// 对标 Claude Code computer-use 的 typeViaClipboard：用剪贴板写入文本再 ⌘V 粘贴，
 // 规避 System Events `keystroke` 对中文/长文本丢字、乱序、emoji 截断的问题。
-// 流程：①保存用户剪贴板 ②pbcopy 写入 ③pbpaste 回读校验（不一致视为写入失败）
-//       ④Cmd+V ⑤sleep 100ms（粘贴生效 vs 还原剪贴板的竞态阈值）⑥finally 还原剪贴板。
-// 任何一步失败都抛出，由调用方回退到 keystroke，绝不污染用户剪贴板。
+//
+// 流程与「防假报成功」保证：
+//   ① 保存用户剪贴板（finally 还原，不污染）
+//   ② pbcopy 写入 + pbpaste 回读校验（不一致视为写入失败）
+//   ③ 粘贴前确认前台有「可编辑、聚焦」的文本控件（hasEditableFocus）；若无输入焦点，
+//      粘贴注定无处可去，直接抛错，而非假报成功
+//   ④ ⌘V 粘贴：主键事件已通过 CGEventSetFlags 注入 command 修饰标志（见 buildKeyScript），
+//      解决 Chrome/Electron 把 ⌘V 误判为裸 v、只落一个字符的问题；CoreGraphics 失败时
+//      回退 System Events `keystroke "v" using command down`（同一环境变量下更稳）
+//   ⑤ 按文本长度充分等待，避免 finally 还原剪贴板截断正在进行的粘贴
+//   ⑥ 尽力回读目标字段内容（⌘A+⌘C 读出），确认确实进入窗口（verifyPasteLanded）；
+//      若明确为空则抛错（失败不假报成功），读不到则保守放行（不误杀）
+//   任何一步失败都抛出；调用方不再用 keystroke 重输整段（那会丢中文/长文本/换行且假报成功）。
 async function typeViaClipboard(text) {
   let saved = null;
   try { saved = await runCmdCapture('pbpaste', []); } catch (e) { /* 读不到就算了 */ }
 
   try {
+    // ① 写入剪贴板
     await runCmdCapture('pbcopy', [], text);
     const back = await runCmdCapture('pbpaste', []);
-    if (back !== text) throw new Error('剪贴板回读不一致');
-    // Cmd+V：主键 'v' 键码 = CHAR_KEYCODES['v']，修饰键 command
-    await runJxa(buildKeyScript(CHAR_KEYCODES['v'], ['command']));
-    await sleep(100);
+    if (back !== text) throw new Error('剪贴板写入/回读不一致，放弃粘贴');
+
+    // ③ 粘贴前确认有可编辑输入焦点（防假报成功）
+    const focused = await hasEditableFocus();
+    if (!focused) {
+      throw new Error('当前焦点不在可编辑输入框（地址栏/文本框）。请先用 click 聚焦目标输入控件，再调用 type。');
+    }
+
+    // ④ 粘贴：⌘V
+    try {
+      await runJxa(buildKeyScript(CHAR_KEYCODES['v'], ['command']));
+    } catch (e) {
+      logErr('CoreGraphics ⌘V 失败，回退 System Events：' + e.message);
+      await runAppleScript(pasteAppleScript());
+    }
+
+    // ⑤ 等粘贴真正落盘（按文本长度给足时间），避免 finally 还原剪贴板截断正在进行的粘贴
+    await sleep(Math.min(2000, 120 + text.length * 6));
+
+    // ⑥ 回读目标字段，确认内容确实进入窗口
+    const verdict = await verifyPasteLanded(text);
+    if (verdict === 'fail') {
+      throw new Error('粘贴后目标输入框未出现预期内容（焦点丢失或被拦截），输入未生效。');
+    }
   } finally {
     if (saved != null) {
       try { await runCmdCapture('pbcopy', [], saved); } catch (e) { /* 还原失败忽略 */ }
     }
   }
+}
+
+// 粘贴兜底命令：System Events `keystroke "v" using command down`（⌘V）。
+// 用于 CoreGraphics 路径在个别环境下被拒时的二次尝试，也便于单测断言。
+function pasteAppleScript() {
+  return 'tell application "System Events" to keystroke "v" using command down';
+}
+
+// 检查前台进程是否有「可编辑、聚焦」的文本控件（AX role 为文本类）。
+// 用于粘贴前确认目标能接收输入，避免把内容粘贴到无处 → 假报成功。
+// 读取失败（如无辅助功能/自动化授权）时保守返回 true：仍尝试粘贴，由后续回读验证兜底。
+async function hasEditableFocus() {
+  try {
+    const out = await runAppleScript(
+      'tell application "System Events"\n' +
+      '  set p to first process whose frontmost is true\n' +
+      '  set fe to focused UI element of p\n' +
+      '  return role of fe\n' +
+      'end tell'
+    );
+    const role = (out || '').trim();
+    // 只接受真正的可编辑文本角色，排除 AXStaticText 等只读文本
+    return /text field|text area|text view|combo box|search field|AXTextField|AXTextArea|AXTextView|AXComboBox|AXSearchField/i.test(role);
+  } catch (e) {
+    return true;
+  }
+}
+
+// 回读目标字段内容，确认粘贴生效（best-effort）：
+//   通过 ⌘A（全选）+ ⌘C（复制）读出字段内容，与待粘贴文本比较。
+//   返回 'ok'（字段含待粘贴文本）/ 'fail'（字段为空）/ 'unknown'（无法读取，不判定）。
+// 注：⌘A/⌘C 均在字段内，不改变已粘贴结果；字段内容随后由 finally 还原剪贴板覆盖。
+async function verifyPasteLanded(text) {
+  try {
+    await runJxa(buildKeyScript(CHAR_KEYCODES['a'], ['command'])); // ⌘A 全选
+    await sleep(40);
+    await runJxa(buildKeyScript(CHAR_KEYCODES['c'], ['command'])); // ⌘C 复制字段内容
+    await sleep(60);
+    const field = await runCmdCapture('pbpaste', []);
+    return pasteVerificationResult(field, text);
+  } catch (e) {
+    return 'unknown';
+  }
+}
+
+// 纯函数：根据回读到的字段内容对待粘贴文本做判定（可单测，无需 macOS）。
+// 规则（严格、不假报成功）：
+//   - fieldContent 为 null（确实读不到字段内容）→ 'unknown'，交由上层保守处理；
+//   - 字段含待粘贴文本 → 'ok'；
+//   - 只要能读到字段、但内容不含待粘贴文本（含空字段、只落了 'v' 等）→ 'fail'。
+function pasteVerificationResult(fieldContent, pasted) {
+  if (fieldContent == null) return 'unknown';            // 确实无法读取字段内容
+  if (fieldContent.includes(pasted)) return 'ok';        // 字段含待粘贴文本
+  return 'fail';                                          // 能读到字段但内容不对 → 明确失败（不假报成功）
 }
 
 // 在截图上绘制红色点击环（best-effort，失败不影响主流程）
@@ -624,14 +732,13 @@ const TOOLS = {
       await typeViaClipboard(text);
       return okText(`已粘贴输入文字：${text.length > 60 ? text.slice(0, 60) + '…' : text}（剪贴板方式，完整支持中文/长文本/换行）`);
     } catch (e) {
-      // 剪贴板方式失败（如辅助功能权限异常）时回退到 System Events keystroke，保留原能力
-      logErr('typeViaClipboard 失败，回退 keystroke：' + e.message);
-      const lines = text.split('\n');
-      const body = lines
-        .map((ln) => `  keystroke "${asStrLiteral(ln)}"${ln !== lines[lines.length - 1] ? '\n  keystroke linefeed' : ''}`)
-        .join('\n');
-      await runAppleScript(`tell application "System Events"\n${body}\nend tell`);
-      return okText(`已输入文字：${text.length > 60 ? text.slice(0, 60) + '…' : text}（keystroke 回退）`);
+      // 剪贴板（⌘V）已是 Chrome/Electron/普通输入框最可靠的输入路径，失败时不再用 keystroke
+      // 重输整段——那会丢中文/长文本/换行，并可能假报成功。如实上报错误并提示授权。
+      const msg = String(e.message || '');
+      if (/辅助功能|Automation|accessibility|-10004|not allowed|not authorized|权限/i.test(msg)) {
+        throw new Error('输入失败：请到「系统设置 › 隐私与安全性 › 辅助功能 / 自动化」中允许 AI Copilot 控制「系统事件」，并重试。');
+      }
+      throw new Error('输入失败：' + msg);
     }
   },
 
@@ -1036,7 +1143,11 @@ function start() {
   process.on('SIGTERM', () => process.exit(0));
 }
 
-module.exports = { start, SERVER_NAME, computeShotSize, mouseClickAppleScript, MAX_SHOT_W, MAX_SHOT_H };
+module.exports = {
+  start, SERVER_NAME, computeShotSize, mouseClickAppleScript, MAX_SHOT_W, MAX_SHOT_H,
+  buildKeyScript, pasteAppleScript, pasteVerificationResult, typeViaClipboard,
+  KEY_CODES, CHAR_KEYCODES,
+};
 
 // 直接以 `node computer-use.js` 运行时自启动（Electron 子进程由 main.js 早退分支调用 start()，不会触发此分支）
 if (require.main === module) start();

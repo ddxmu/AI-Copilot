@@ -1,3 +1,11 @@
+## v0.9.55 — 2026-08-17
+
+### ComputerUse 输入（type）修复：⌘V 只落字母 v、不粘贴
+- **根因**：`buildKeyScript` 生成的组合键事件缺少正确的 CoreGraphics 修饰键掩码。主键 `v` 事件自身未携带 `⌘` 标志，Chrome/Electron 把它当成裸 `v` 键击 → 只落一个字母、不粘贴；旧 `typeViaClipboard` 仅凭「剪贴板回读 == 文本」就报成功，未验证 ⌘V 真正进入窗口 → 假报成功。
+- **修复**：`MOD_MASK` 恢复为真实 macOS CoreGraphics `CGEventFlags`（`command=1048576`/`shift=131072`/`control=262144`/`option=524288`/`fn=8388608`），并为主键事件本身注入完整修饰掩码（`CGEventSetFlags`），⌘V/⌘C/⌘A/⌘L 在 Chrome、Electron、普通输入框均正确识别。
+- **防假报成功**：`typeViaClipboard` 粘贴前 `hasEditableFocus()` 检查聚焦控件；粘贴后 `verifyPasteLanded()` 用 ⌘A+⌘C 回读字段，`pasteVerificationResult()` 严格判定——不含量 → `fail`、确实读不到才 `unknown`、含待粘贴文本才 `ok`；失败时如实上报，不再用 keystroke 重输整段（会丢中文/长文本/换行）。
+- **保留**：中文/长文本/换行（剪贴板 ⌘V）、剪贴板 `finally` 还原、点击/坐标映射/72 DPI 截图、System Events 点击 + 5s 超时全部不变。SERVER_VERSION 1.4.1→1.4.2。
+
 ## v0.9.54 — 2026-08-17
 
 ### Computer Use 修复持久化进源码与构建管线

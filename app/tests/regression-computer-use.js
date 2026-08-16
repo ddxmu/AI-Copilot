@@ -102,8 +102,48 @@ section('截图 72 DPI 归一');
   try { fs.unlinkSync(tmp); } catch (e) { /* ignore */ }
 }
 
-/* ---------------- 4) 真实 Chrome 登录按钮点击（端到端，可选） ---------------- */
-if (process.argv.includes('--live')) {
+/* ---------------- 4) 输入（type）：⌘V 粘贴修复 + 防假报成功 ---------------- */
+section('输入（type）：⌘V 粘贴修复 + 防假报成功');
+{
+  // ⌘V 组合键必须为主键事件注入「正确的 command 修饰掩码」（真实 CoreGraphics CGEventFlags = 0x100000/1048576）。
+  // 误用 0x1000(4096) 等非掩码值会导致 Chrome 读不到 ⌘、只落字母 v——这正是 v0.9.54 复现的 Bug。
+  const pasteScript = cu.buildKeyScript(cu.CHAR_KEYCODES['v'], ['command']);
+  assert(/CGEventSetFlags/.test(pasteScript), '⌘V 为按键事件注入修饰标志（CGEventSetFlags）');
+  assert(/55,true/.test(pasteScript), '⌘V 含 command 修饰键 down（key 55）');
+  assert(/9,true/.test(pasteScript), '⌘V 含主键 v（key 9，CHAR_KEYCODES["v"]）');
+  // 锁定真实 command 掩码 1048576（0x100000 = kCGEventFlagMaskCommand），杜绝再次误用 0x1000(4096) 这类错误值导致「只落 v」
+  assert(/CGEventSetFlags\(md55,1048576\)/.test(pasteScript), 'command 修饰掩码为真实值 1048576（0x100000 = kCGEventFlagMaskCommand，非 0x1000）—— 修复「只落字母 v」');
+  assert(/CGEventSetFlags\(kd,1048576\)/.test(pasteScript), '主键 v 事件自身携带 command 掩码 1048576（Chrome 据此识别 ⌘V）');
+  // 回退命令（CoreGraphics 被拒时的二次尝试）
+  assert(/keystroke "v" using command down/.test(cu.pasteAppleScript()), 'pasteAppleScript 回退为 System Events keystroke "v" using command down');
+  // 回读判定纯逻辑（严格、不假报成功）：
+  //   含待粘贴文本 → ok；读不到字段 → unknown；能读到但内容不对（含空、只落 v）→ fail
+  assert(cu.pasteVerificationResult('https://example.com/', 'https://example.com/') === 'ok', '字段含待粘贴文本 → ok');
+  assert(cu.pasteVerificationResult('https://example.com/foo', 'https://example.com/') === 'ok', '字段含待粘贴文本（前缀） → ok');
+  assert(cu.pasteVerificationResult('', 'https://example.com/') === 'fail', '字段为空 → fail（失败不假报成功）');
+  assert(cu.pasteVerificationResult('v', 'https://example.com/') === 'fail', '字段只落字母 v → fail（正是 v0.9.54 复现 Bug 的判定）');
+  assert(cu.pasteVerificationResult('chrome://newtab/', 'https://example.com/') === 'fail', '字段为其它错误内容 → fail');
+  assert(cu.pasteVerificationResult('随便什么字', 'https://example.com/') === 'fail', '字段为任意其它内容 → fail');
+  assert(cu.pasteVerificationResult(null, 'x') === 'unknown', '确实读不到字段内容 → unknown（保守放行）');
+  // typeViaClipboard 已导出，与线上代码路径一致，可被端到端调用
+  assert(typeof cu.typeViaClipboard === 'function', 'typeViaClipboard 已导出，可被测试/调用');
+}
+
+/* ---------------- 5) 真实 Chrome 验证（端到端，可选） ---------------- */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function execAppleScript(script) {
+  const p = spawnSync('osascript', ['-e', script], { encoding: 'utf8', timeout: 10000 });
+  if (p.status !== 0) throw new Error((p.stderr || p.stdout || '').trim());
+  return (p.stdout || '').trim();
+}
+function execJxa(script) {
+  const p = spawnSync('osascript', ['-l', 'JavaScript', '-e', script], { encoding: 'utf8', timeout: 10000 });
+  if (p.status !== 0) throw new Error((p.stderr || p.stdout || '').trim());
+  return (p.stdout || '').trim();
+}
+
+async function runLive() {
+  // 5a) 登录按钮点击
   section('真实 Chrome 登录按钮点击（--live）');
   console.log('  · 打开 Chrome 到 github.com，定位「Sign in」按钮并点击，验证跳转到 /login');
   const applescript = `
@@ -136,9 +176,36 @@ if (process.argv.includes('--live')) {
     const url = (res.stdout || '').trim();
     assert(/github\.com\/login/.test(url), `点击后跳转至登录页（当前 URL: ${url}）`);
   }
-} else {
-  console.log('\n（跳过真实 Chrome 点击验证；如需执行请加 --live 参数，并确保已授予辅助功能权限）');
+
+  // 5b) 地址栏输入网址并回车（复现并验收 v0.9.54 的「只落字母 v」Bug 修复）
+  section('真实 Chrome 地址栏输入网址并回车（--live）');
+  console.log('  · 打开 Chrome 新标签 → 聚焦地址栏(⌘L) → type 输入 https://example.com/ → 回车，验证跳转');
+  execAppleScript(`
+    tell application "Google Chrome"
+      activate
+      if (count of windows) is 0 then make new window
+      tell front window to make new tab
+      set URL of active tab of front window to "chrome://newtab/"
+    end tell`);
+  await sleep(800);
+  execJxa(cu.buildKeyScript(cu.CHAR_KEYCODES['l'], ['command'])); // ⌘L 聚焦地址栏
+  await sleep(200);
+  await cu.typeViaClipboard('https://example.com/'); // 走线上一致路径：⌘V + 回读验证 + 剪贴板还原
+  await sleep(300);
+  execJxa(cu.buildKeyScript(cu.KEY_CODES['return'], [])); // 回车
+  await sleep(1500);
+  const url = execAppleScript('tell application "Google Chrome" to return URL of active tab of front window').trim();
+  assert(/example\.com/.test(url), `地址栏输入并回车后跳转到 example.com（当前 URL: ${url}）`);
 }
 
-console.log('\n' + (failures === 0 ? 'ALL PASS ✅' : failures + ' FAILED ❌'));
-process.exit(failures === 0 ? 0 : 1);
+function finish() {
+  console.log('\n' + (failures === 0 ? 'ALL PASS ✅' : failures + ' FAILED ❌'));
+  process.exit(failures === 0 ? 0 : 1);
+}
+
+if (process.argv.includes('--live')) {
+  runLive().then(finish).catch((e) => { console.log('  ✗ --live 执行异常：' + e.message); failures++; finish(); });
+} else {
+  console.log('\n（跳过真实 Chrome 验证；加 --live 执行，需授予辅助功能/自动化权限）');
+  finish();
+}
