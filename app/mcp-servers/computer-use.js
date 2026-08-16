@@ -23,7 +23,7 @@ const net = require('net');
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'ComputerUse';
-const SERVER_VERSION = '1.4.0';
+const SERVER_VERSION = '1.4.1';
 
 const TMP = path.join(os.tmpdir(), 'ai-copilot-computer-use');
 try { fs.mkdirSync(TMP, { recursive: true }); } catch (e) { /* ignore */ }
@@ -318,6 +318,8 @@ function mouseClickJxa(x, y, button, isDouble) {
     lines.push(`var d${i}=$.CGEventCreateMouseEvent(0,${down},$.CGPointMake(${x},${y}),${btn});`);
     if (n > 1) lines.push(`$.CGEventSetIntegerValueField(d${i},$.kCGMouseEventClickState,${n});`);
     lines.push(`$.CGEventPost($.kCGHIDEventTap,d${i});`);
+    // 目标应用需要一小段时间完成 hit-test 与状态切换；down/up 背靠背容易被忽略
+    lines.push('$.NSThread.sleepForTimeInterval(0.04);');
     lines.push(`var u${i}=$.CGEventCreateMouseEvent(0,${up},$.CGPointMake(${x},${y}),${btn});`);
     if (n > 1) lines.push(`$.CGEventSetIntegerValueField(u${i},$.kCGMouseEventClickState,${n});`);
     lines.push(`$.CGEventPost($.kCGHIDEventTap,u${i});`);
@@ -522,6 +524,10 @@ const TOOLS = {
     _lastCg = target.cg;
     const button = String(args.button || 'left').toLowerCase();
     sendCursor('move', target.cg.x, target.cg.y);
+    await sleep(30);
+    // 真正点击前隐藏覆盖层，避免透明窗口拦截命中测试
+    sendCursor('hide');
+    await sleep(40);
     await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
     setLastPos(x, y, target.display);
     sendCursor('click', target.cg.x, target.cg.y);
@@ -533,6 +539,9 @@ const TOOLS = {
     const target = await modelToTarget(x, y, args.display);
     _lastCg = target.cg;
     sendCursor('move', target.cg.x, target.cg.y);
+    await sleep(30);
+    sendCursor('hide');
+    await sleep(40);
     await runJxa(mouseClickJxa(target.cg.x, target.cg.y, 'left', true));
     setLastPos(x, y, target.display);
     sendCursor('click', target.cg.x, target.cg.y);
@@ -544,6 +553,9 @@ const TOOLS = {
     const target = await modelToTarget(x, y, args.display);
     _lastCg = target.cg;
     sendCursor('move', target.cg.x, target.cg.y);
+    await sleep(30);
+    sendCursor('hide');
+    await sleep(40);
     await runJxa(mouseClickJxa(target.cg.x, target.cg.y, 'right', false));
     setLastPos(x, y, target.display);
     sendCursor('click', target.cg.x, target.cg.y);

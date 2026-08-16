@@ -17,8 +17,8 @@
       position: absolute;
       left: 0;
       top: 0;
-      width: 40px;
-      height: 40px;
+      width: 28px;
+      height: 28px;
       pointer-events: none;
       will-change: transform, opacity;
       transform: translate3d(0, 0, 0);
@@ -64,8 +64,12 @@
     (function () {
       const cursor = document.getElementById('cursor');
       let visible = false;
+      // cursor.png (200x200) 的可见箭头尖端约在 (31, 3)；28x28 容器里缩放后约 (4, 0)。
+      // 把容器左上角往左/上偏移同样距离，让尖端与目标坐标重合。
+      const TIP_OFFSET_X = 4;
+      const TIP_OFFSET_Y = 0;
       function setPos(x, y) {
-        cursor.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+        cursor.style.transform = `translate3d(${x - TIP_OFFSET_X}px, ${y - TIP_OFFSET_Y}px, 0)`;
         if (!visible) {
           cursor.classList.add('visible');
           visible = true;

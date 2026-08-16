@@ -1,3 +1,15 @@
+## v0.9.53 — 2026-08-16
+
+### Computer Use 修复：点击实施了但无效果
+- **根因分析**：
+  1. `mouseClickJxa` 中 `LeftMouseDown` 与 `LeftMouseUp` 背靠背发出、中间没有停顿，部分目标应用 / AppKit 的 hit-test 来不及完成，导致事件被忽略。
+  2. 光标图标从 64×72 SVG 换成 200×200 PNG 后保持 40×40 显示，且未补偿箭头尖端偏移；实际可见尖端与点击坐标相差约 6 像素，命中小目标时容易点偏。
+  3. 透明覆盖层窗口在点击瞬间仍置顶显示，存在拦截命中测试的风险。
+- **修复**：
+  - 在 `LeftMouseDown` 后插入 40ms 延时再发 `LeftMouseUp`，给目标应用完成状态切换。
+  - 光标从 40×40 缩小到 28×28，并在 `cursor-overlay.html` 中按 PNG 实际尖端位置（约 (31,3) @200×200）补偿约 4px 偏移，让可见尖端与真实点击坐标重合。
+  - `click` / `double_click` / `right_click` 在真正下发 CGEvent 前临时 `sendCursor('hide')` 并等待覆盖层消失，点击后通过 `sendCursor('click')` 恢复并显示红圈，避免覆盖层拦截。
+
 ## v0.9.52 — 2026-08-16
 
 ### Computer Use 修复：鼠标工具全部报错回归
