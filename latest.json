@@ -1,17 +1,17 @@
 {
-  "version": "0.9.48",
+  "version": "0.9.49",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.48/AI.Copilot-0.9.48-arm64.dmg",
-  "dmgSha256": "839f9e4cb40b38995e571809907500611c59053959eb9c37f5bc013a1f0030f7",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.48/AI.Copilot-0.9.48.zip",
-  "patchSha256": "d5dd6afdb4334420abea2c6c84dd5538ef50c7d80e2872170694a800c57cc873",
-  "notes": "- **Computer Use 对标 Claude Code 内置实现，三项操控改进**：\n  - **输入文字（type）改用剪贴板粘贴**：移植 Claude Code 的 `typeViaClipboard`——`pbcopy` 写入后 `pbpaste` 回读校验（不一致即视为失败）、再 `Cmd+V` 粘贴、`sleep 100ms`、`finally` 还原用户剪贴板。完整支持中文/长文本/换行/emoji，不再出现 `System Events keystroke` 的丢字、乱序、emoji 截断；剪贴板方式异常时自动回退 keystroke。\n  - **点击加 settle**：`click`/`double_click`/`right_click` 在瞬移与按下之间加 50ms 等待（对标 `moveAndSettle`），给 input→HID→AppKit 一个 round-trip，落点更可靠、避免误触发 hover 状态。\n  - **拖拽改缓动动画 + 必定松键**：`drag` 改用 ease-out-cubic、60fps 缓动（时长 = min(距离/2000, 0.5s)，对标 `animatedMove`），让目标应用有时间处理中间 `.leftMouseDragged` 事件；按下后 settle 50ms，并用 `try/finally` 保证左键必定松开，杜绝卡键。\n  - ComputerUse MCP `SERVER_VERSION` 1.1.0 → 1.2.0。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.49/AI.Copilot-0.9.49-arm64.dmg",
+  "dmgSha256": "5a852eca4b224a679c15ef78a0f8a2d6edcce74abd122cb0fb9f32818b8c0fa0",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.49/AI.Copilot-0.9.49.zip",
+  "patchSha256": "e8bcb6ca4b2eb94b47a318de7c25bddd4b68072bf52bee9ef9a8cbf469bdf160",
+  "notes": "### Computer Use 光标可视化\n- 新增主进程透明置顶遮罩窗口 + Unix socket 通道，Computer Use 操作时显示一个粉色渐变箭头指针跟随 AI 鼠标移动。\n- 指针样式参考桌面 GIF（粉白描边箭头），点击/拖拽时带扩散波纹动效；空闲 5 秒自动淡出。\n- 截图前临时隐藏遮罩，避免把粉色指针拍进截图干扰模型判断；截图后自动恢复。\n- `move`/`click`/`double_click`/`right_click`/`drag`/`scroll` 均上报坐标，`type`/`key`/`hotkey` 保持当前鼠标位置可见。",
   "deltas": [
     {
-      "from": "0.9.47",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.48/AI.Copilot-0.9.48.zip",
-      "sha256": "d5dd6afdb4334420abea2c6c84dd5538ef50c7d80e2872170694a800c57cc873"
+      "from": "0.9.48",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.49/AI.Copilot-0.9.49.zip",
+      "sha256": "e8bcb6ca4b2eb94b47a318de7c25bddd4b68072bf52bee9ef9a8cbf469bdf160"
     }
   ]
 }
