@@ -73,7 +73,7 @@ body {
   font-size: 15px;
   font-weight: 600;
   color: var(--sidebar-text);
-  padding: 18px 18px 14px;
+  padding: 38px 18px 14px; /* 顶部加高，给左上角红绿灯按钮留空间 */
   letter-spacing: -0.01em;
   display: flex;
   align-items: center;

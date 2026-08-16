@@ -1,17 +1,17 @@
 {
-  "version": "0.9.42",
+  "version": "0.9.43",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.42/AI.Copilot-0.9.42-arm64.dmg",
-  "dmgSha256": "c4077ef55b90bf1e70dea596af43a324527036f9f79b0b33a2dc3f32b8c4dc8d",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.42/AI.Copilot-0.9.42.zip",
-  "patchSha256": "5165b28c0eb456a0244fd93edd7f835529f0e27e3b366f07b73f76a4894558f4",
-  "notes": "顶部标题栏改为 WorkBuddy 风格：隐藏 macOS 原生标题栏，红绿灯按钮放在左上角，顶部条由网页主题接管，浅/深色自动跟随。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.43/AI.Copilot-0.9.43-arm64.dmg",
+  "dmgSha256": "c45cad7a1c6d35ef3fcfdf976441fec38713b04b9d3ce7253bb769252047303b",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.43/AI.Copilot-0.9.43.zip",
+  "patchSha256": "03a71c992c51827831233c3e6bc8cb91cf2fcaa9665e594ef493b177c70dcab5",
+  "notes": "左侧栏 logo 与 App 名字下移避让左上角红绿灯按钮，不再被系统关闭/最小/最大化按钮遮挡。",
   "deltas": [
     {
-      "from": "0.9.41",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.42/AI.Copilot-0.9.42.zip",
-      "sha256": "5165b28c0eb456a0244fd93edd7f835529f0e27e3b366f07b73f76a4894558f4"
+      "from": "0.9.42",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.43/AI.Copilot-0.9.43.zip",
+      "sha256": "03a71c992c51827831233c3e6bc8cb91cf2fcaa9665e594ef493b177c70dcab5"
     }
   ]
 }

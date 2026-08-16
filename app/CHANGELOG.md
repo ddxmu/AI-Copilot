@@ -1,3 +1,6 @@
+## v0.9.43 — 2026-08-16
+- **左侧 logo 下移避让红绿灯（用户反馈）**：v0.9.42 隐藏原生标题栏后，左上角系统红绿灯按钮遮挡了左侧栏顶部的 logo 与「AI Copilot」应用名。`style.css` 将 `.app-title` 的 `padding-top` 从 18px 加大到 38px，让 logo/名字整体下移，不再与红绿灯重叠。
+
 ## v0.9.42 — 2026-08-16
 - **顶部标题栏改为自定义风格（用户反馈）**：macOS 窗口改为 `titleBarStyle: 'hiddenInset'` 隐藏原生标题栏，左上角保留系统红绿灯按钮并通过 `trafficLightPosition` 上移到 logo 上方；顶部 `.topbar` 统一使用网页主题背景，浅色/深色切换时顶部条自动跟随变深/变浅，不再出现深色模式下顶部仍为浅灰色的割裂感。`.topbar` 设置 `-webkit-app-region: drag` 支持拖动窗口，内部按钮/搜索框设置 `no-drag` 保证可点击。
 
