@@ -1,17 +1,17 @@
 {
-  "version": "0.9.37",
+  "version": "0.9.38",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.37/AI.Copilot-0.9.37-arm64.dmg",
-  "dmgSha256": "d815b94482bb097653801551320d0d3d30031b46746d664dfa484954cecc1fe8",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.37/AI.Copilot-0.9.37.zip",
-  "patchSha256": "059722e7dfa40fe98527222420fde2775509992447e9dee1548b582468b4e290",
-  "notes": "麦克风交互对齐 WorkBuddy：点麦克风录音，录音中点击发送/回车或再次点麦克风结束并识别，文字入框后自动发送（仅麦克风发出的消息激活 AI 语音回复）。设置文案：更新日志改名「更新和日志」，软件更新说明改为「自动检查新版本」。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.38/AI.Copilot-0.9.38-arm64.dmg",
+  "dmgSha256": "3888c8c27ba6f1a618ddf891a5fa29fff7a8dc2191b6555446f013841bb61b4d",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.38/AI.Copilot-0.9.38.zip",
+  "patchSha256": "690b399148d76a72b3c5563112150684b975594283559ed686d9e256279d1d53",
+  "notes": "历史记录右侧「+」按钮改为下拉选项框：触发器显示「+ 新建」并带下拉箭头，菜单内提供「+ 新建」选项，点击新建对话。",
   "deltas": [
     {
-      "from": "0.9.36",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.37/AI.Copilot-0.9.37.zip",
-      "sha256": "059722e7dfa40fe98527222420fde2775509992447e9dee1548b582468b4e290"
+      "from": "0.9.37",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.38/AI.Copilot-0.9.38.zip",
+      "sha256": "690b399148d76a72b3c5563112150684b975594283559ed686d9e256279d1d53"
     }
   ]
 }
