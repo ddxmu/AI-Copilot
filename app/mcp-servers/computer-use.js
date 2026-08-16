@@ -22,7 +22,7 @@ const path = require('path');
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'ComputerUse';
-const SERVER_VERSION = '1.0.0';
+const SERVER_VERSION = '1.1.0';
 
 const TMP = path.join(os.tmpdir(), 'ai-copilot-computer-use');
 try { fs.mkdirSync(TMP, { recursive: true }); } catch (e) { /* ignore */ }
@@ -123,7 +123,7 @@ async function ensureScreenSize() {
   return _screenSize;
 }
 
-/* ---------------- 按键映射 ---------------- */
+/* ---------------- 按键 / 鼠标映射与 CoreGraphics 实现 ---------------- */
 
 const KEY_CODES = {
   return: 36, enter: 36, tab: 48, space: 49, delete: 51, backspace: 51,
@@ -134,6 +134,13 @@ const KEY_CODES = {
   command: 55, cmd: 55, shift: 56, capslock: 57, option: 58, alt: 58, control: 59, ctrl: 59,
 };
 
+// 可打印字符 -> macOS 虚拟键码（ANSI 布局），用于热键里的字母/数字
+const CHAR_KEYCODES = {
+  a:0,b:11,c:8,d:2,e:14,f:3,g:5,h:4,i:34,j:38,k:40,l:37,m:46,n:45,o:31,p:35,q:12,r:15,s:1,t:17,u:32,v:9,w:13,x:7,y:16,z:6,
+  '0':29,'1':18,'2':19,'3':20,'4':21,'5':23,'6':22,'7':26,'8':28,'9':25,
+  '-':27,'=':24,'[':33,']':30,'\\':42,';':41,"'":39,',':43,'.':47,'/':44,'`':50,' ':49,
+};
+
 function toModDown(name) {
   const n = String(name || '').toLowerCase();
   if (n === 'command' || n === 'cmd') return 'command down';
@@ -141,6 +148,130 @@ function toModDown(name) {
   if (n === 'shift') return 'shift down';
   if (n === 'option' || n === 'alt') return 'option down';
   return null;
+}
+
+// CoreGraphics 修饰键位掩码（kCGEventFlagMask*）
+const MOD_MASKS = {
+  command: 1048576, cmd: 1048576,
+  shift: 131072,
+  option: 524288, alt: 524288,
+  control: 262144, ctrl: 262144,
+  fn: 8388608, function: 8388608,
+};
+const FN_KEY_MASK = 8388608;
+
+// F1-F12 默认被 macOS 当作媒体键，需额外按下 fn 才能发出真正的 F 键
+const FN_KEYCODES = new Set([122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111]);
+
+// 记录鼠标最后位置（逻辑点），用于截图时绘制点击标记
+let _lastPos = null;
+function setLastPos(x, y) { _lastPos = { x, y }; }
+
+/* ---------- CoreGraphics (JXA) 鼠标/键盘事件 ---------- */
+
+// 平滑移动：从 from 逐帧插值到 to，桌面光标可见且连续移动
+function mouseMoveJxa(tx, ty, fx, fy) {
+  const lines = ['ObjC.import("CoreGraphics");'];
+  if (!isFinite(fx) || !isFinite(fy)) { fx = tx; fy = ty; }
+  const steps = 24;
+  for (let i = 1; i <= steps; i++) {
+    const x = Math.round(fx + (tx - fx) * i / steps);
+    const y = Math.round(fy + (ty - fy) * i / steps);
+    lines.push(`var e${i}=$.CGEventCreateMouseEvent(0,$.kCGEventMouseMoved,$.CGPointMake(${x},${y}),0);$.CGEventPost($.kCGHIDEventTap,e${i});`);
+  }
+  return lines.join('\n');
+}
+
+function mouseClickJxa(x, y, button, isDouble) {
+  const btn = button === 'right' ? '$.kCGMouseButtonRight' : button === 'middle' ? '$.kCGMouseButtonCenter' : '$.kCGMouseButtonLeft';
+  const down = button === 'right' ? '$.kCGEventRightMouseDown' : button === 'middle' ? '$.kCGEventOtherMouseDown' : '$.kCGEventLeftMouseDown';
+  const up = button === 'right' ? '$.kCGEventRightMouseUp' : button === 'middle' ? '$.kCGEventOtherMouseUp' : '$.kCGEventLeftMouseUp';
+  const lines = ['ObjC.import("CoreGraphics");', 'ObjC.import("Foundation");'];
+  lines.push(`var mv=$.CGEventCreateMouseEvent(0,$.kCGEventMouseMoved,$.CGPointMake(${x},${y}),0);$.CGEventPost($.kCGHIDEventTap,mv);`);
+  const n = isDouble ? 2 : 1;
+  for (let i = 0; i < n; i++) {
+    lines.push(`var d${i}=$.CGEventCreateMouseEvent(0,${down},$.CGPointMake(${x},${y}),${btn});`);
+    if (n > 1) lines.push(`$.CGEventSetIntegerValueField(d${i},$.kCGMouseEventClickState,${n});`);
+    lines.push(`$.CGEventPost($.kCGHIDEventTap,d${i});`);
+    lines.push(`var u${i}=$.CGEventCreateMouseEvent(0,${up},$.CGPointMake(${x},${y}),${btn});`);
+    if (n > 1) lines.push(`$.CGEventSetIntegerValueField(u${i},$.kCGMouseEventClickState,${n});`);
+    lines.push(`$.CGEventPost($.kCGHIDEventTap,u${i});`);
+    if (n > 1 && i === 0) lines.push('$.NSThread.sleepForTimeInterval(0.06);');
+  }
+  return lines.join('\n');
+}
+
+function mouseDragJxa(fx, fy, tx, ty) {
+  const steps = 30;
+  const lines = ['ObjC.import("CoreGraphics");'];
+  lines.push(`var m0=$.CGEventCreateMouseEvent(0,$.kCGEventMouseMoved,$.CGPointMake(${fx},${fy}),0);$.CGEventPost($.kCGHIDEventTap,m0);`);
+  lines.push(`var dn=$.CGEventCreateMouseEvent(0,$.kCGEventLeftMouseDown,$.CGPointMake(${fx},${fy}),$.kCGMouseButtonLeft);$.CGEventPost($.kCGHIDEventTap,dn);`);
+  for (let i = 1; i <= steps; i++) {
+    const x = Math.round(fx + (tx - fx) * i / steps);
+    const y = Math.round(fy + (ty - fy) * i / steps);
+    lines.push(`var dr${i}=$.CGEventCreateMouseEvent(0,$.kCGEventLeftMouseDragged,$.CGPointMake(${x},${y}),$.kCGMouseButtonLeft);$.CGEventPost($.kCGHIDEventTap,dr${i});`);
+  }
+  lines.push(`var up=$.CGEventCreateMouseEvent(0,$.kCGEventLeftMouseUp,$.CGPointMake(${tx},${ty}),$.kCGMouseButtonLeft);$.CGEventPost($.kCGHIDEventTap,up);`);
+  return lines.join('\n');
+}
+
+// 组合键：依次 post 修饰键 down → 主键 down/up → 修饰键 up
+function buildKeyScript(mainCode, modNames) {
+  const MOD_KC = { command: 55, cmd: 55, shift: 56, option: 58, alt: 58, control: 59, ctrl: 59, fn: 63, function: 63 };
+  const lines = ['ObjC.import("CoreGraphics");'];
+  const modCodes = [];
+  for (const m of modNames) {
+    const mc = MOD_KC[String(m).toLowerCase()];
+    if (mc == null) continue;
+    modCodes.push(mc);
+    lines.push(`var md${mc}=$.CGEventCreateKeyboardEvent(0,${mc},true);$.CGEventPost($.kCGHIDEventTap,md${mc});`);
+  }
+  lines.push(`var kd=$.CGEventCreateKeyboardEvent(0,${mainCode},true);$.CGEventPost($.kCGHIDEventTap,kd);`);
+  lines.push(`var ku=$.CGEventCreateKeyboardEvent(0,${mainCode},false);$.CGEventPost($.kCGHIDEventTap,ku);`);
+  for (let i = modCodes.length - 1; i >= 0; i--) {
+    const mc = modCodes[i];
+    lines.push(`var mu${mc}=$.CGEventCreateKeyboardEvent(0,${mc},false);$.CGEventPost($.kCGHIDEventTap,mu${mc});`);
+  }
+  return lines.join('\n');
+}
+
+function resolveMainCode(main) {
+  if (KEY_CODES[main] != null) return KEY_CODES[main];
+  if (main.length === 1 && CHAR_KEYCODES[main.toLowerCase()] != null) return CHAR_KEYCODES[main.toLowerCase()];
+  const num = parseInt(main, 10);
+  if (isFinite(num)) return num;
+  return null;
+}
+
+// 在截图上绘制红色点击环（best-effort，失败不影响主流程）
+function annotateScreenshotJxa(png, x, y) {
+  const j = JSON.stringify(png);
+  return `ObjC.import('Cocoa');
+ObjC.import('CoreGraphics');
+var EMPTY = $({});
+var path = $( ${j} );
+var img = $.NSImage.alloc.initWithContentsOfFile(path);
+if (!img) { throw new Error('img load fail'); }
+var size = img.size;
+var tiff = img.TIFFRepresentation;
+if (!tiff) { throw new Error('tiff fail'); }
+var rep0 = $.NSBitmapImageRep.alloc.initWithData(tiff);
+var cg = rep0.CGImage;
+if (!cg) { throw new Error('cg fail'); }
+var w = Math.round(size.width), h = Math.round(size.height);
+var cs = $.CGColorSpaceCreateDeviceRGB();
+var ctx = $.CGBitmapContextCreate(0, w, h, 8, 4 * w, cs, 1);
+if (!ctx) { throw new Error('ctx fail'); }
+$.CGContextDrawImage(ctx, $.CGRectMake(0,0,w,h), cg);
+var r = Math.max(16, Math.min(w, h) * 0.035);
+$.CGContextSetStrokeColorWithColor(ctx, $.CGColorCreateGenericRGB(1,0,0,1));
+$.CGContextSetLineWidth(ctx, 5);
+$.CGContextStrokeEllipseInRect(ctx, $.CGRectMake(${x} - r, h - ${y} - r, 2 * r, 2 * r));
+var out = $.CGBitmapContextCreateImage(ctx);
+var rep = $.NSBitmapImageRep.alloc.initWithCGImage(out);
+var data = rep.representationUsingTypeProperties($.NSPNGFileType, EMPTY);
+data.writeToFileAtomically(path, true);
+`;
 }
 
 /* ---------------- 工具实现 ---------------- */
@@ -157,9 +288,9 @@ const TOOLS = {
     const size = await ensureScreenSize();
     const src = path.join(TMP, `shot_${Date.now()}.png`);
     const dst = path.join(TMP, `shot_${Date.now()}_s.png`);
-    // 全屏截图（静音、png），输出为设备分辨率
+    // 全屏截图（-C 捕获鼠标光标，-x 静音，png），输出为设备分辨率
     try {
-      await spawnAsync('screencapture', ['-x', '-t', 'png', src]);
+      await spawnAsync('screencapture', ['-x', '-C', '-t', 'png', src]);
     } catch (e) {
       const msg = String(e.message || '');
       if (/privacy|permission|screen recording|权限|录制/i.test(msg)) {
@@ -171,12 +302,21 @@ const TOOLS = {
     // 等比缩放到逻辑分辨率，使图像像素与逻辑点 1:1 对应
     await spawnAsync('sips', ['-z', String(size.height), String(size.width), src, '--out', dst]);
     const finalFile = fs.existsSync(dst) ? dst : src;
+    // 在最近一次鼠标操作点绘制红色点击环（best-effort，失败不影响返回）
+    if (_lastPos) {
+      try {
+        await runJxa(annotateScreenshotJxa(finalFile, _lastPos.x, _lastPos.y));
+      } catch (e) {
+        logErr('annotate screenshot failed: ' + e.message);
+      }
+    }
     const b64 = fileToBase64(finalFile);
     try { fs.unlinkSync(src); } catch (e) { /* ignore */ }
     try { fs.unlinkSync(dst); } catch (e) { /* ignore */ }
+    const mark = _lastPos ? `截图中已用红圈标出最近一次鼠标操作位置 (${_lastPos.x}, ${_lastPos.y})。` : '';
     return {
       content: [
-        { type: 'text', text: `已截取主屏幕，图像尺寸 ${size.width} × ${size.height}（逻辑点）。请基于该尺寸输出坐标（原点左上角）。` },
+        { type: 'text', text: `已截取主屏幕，图像尺寸 ${size.width} × ${size.height}（逻辑点），已包含鼠标光标。${mark}请基于该尺寸输出坐标（原点左上角）。` },
         { type: 'image', data: b64, mimeType: 'image/png' },
       ],
     };
@@ -184,29 +324,31 @@ const TOOLS = {
 
   async move(args) {
     const { x, y } = numPair(args, 'x', 'y');
-    await runAppleScript(`tell application "System Events" to set position of mouse to {${x}, ${y}}`);
-    return okText(`鼠标已移动到 (${x}, ${y})`);
+    const from = _lastPos ? _lastPos : { x: 0, y: 0 };
+    await runJxa(mouseMoveJxa(x, y, from.x, from.y));
+    setLastPos(x, y);
+    return okText(`鼠标已移动到 (${x}, ${y})（桌面光标已平滑移动）`);
   },
 
   async click(args) {
     const { x, y } = numPair(args, 'x', 'y');
     const button = String(args.button || 'left').toLowerCase();
-    const prefix = button === 'right' ? '(button 2) ' : button === 'middle' ? '(button 3) ' : '';
-    await runAppleScript(`tell application "System Events" to click ${prefix}at {${x}, ${y}}`);
-    return okText(`已在 (${x}, ${y}) 点击（${button}键）`);
+    await runJxa(mouseClickJxa(x, y, button, false));
+    setLastPos(x, y);
+    return okText(`已在 (${x}, ${y}) 点击（${button}键，已发出真实鼠标事件）`);
   },
 
   async double_click(args) {
     const { x, y } = numPair(args, 'x', 'y');
-    await runAppleScript(
-      `tell application "System Events"\n  click at {${x}, ${y}}\n  delay 0.05\n  click at {${x}, ${y}}\nend tell`
-    );
+    await runJxa(mouseClickJxa(x, y, 'left', true));
+    setLastPos(x, y);
     return okText(`已在 (${x}, ${y}) 双击`);
   },
 
   async right_click(args) {
     const { x, y } = numPair(args, 'x', 'y');
-    await runAppleScript(`tell application "System Events" to click (button 2) at {${x}, ${y}}`);
+    await runJxa(mouseClickJxa(x, y, 'right', false));
+    setLastPos(x, y);
     return okText(`已在 (${x}, ${y}) 右键点击`);
   },
 
@@ -216,9 +358,8 @@ const TOOLS = {
     const tx = Math.round(Number(args.to_x));
     const ty = Math.round(Number(args.to_y));
     if ([fx, fy, tx, ty].some((v) => !isFinite(v))) throw new Error('拖拽坐标必须是数字');
-    await runAppleScript(
-      `tell application "System Events"\n  set position of mouse to {${fx}, ${fy}}\n  delay 0.05\n  mouse down\n  set position of mouse to {${tx}, ${ty}}\n  delay 0.05\n  mouse up\nend tell`
-    );
+    await runJxa(mouseDragJxa(fx, fy, tx, ty));
+    setLastPos(tx, ty);
     return okText(`已从 (${fx}, ${fy}) 拖拽到 (${tx}, ${ty})`);
   },
 
@@ -237,9 +378,9 @@ const TOOLS = {
     const key = String(args.key || '').toLowerCase();
     const code = KEY_CODES[key];
     if (code == null) throw new Error(`不支持的按键名：${key}（支持 return/tab/space/escape/方向键/command/shift/option/control/f1-f16 等）`);
-    const mods = (Array.isArray(args.modifiers) ? args.modifiers : []).map(toModDown).filter(Boolean);
-    const using = mods.length ? ` using {${mods.join(', ')}}` : '';
-    await runAppleScript(`tell application "System Events"\n  key code ${code}${using}\nend tell`);
+    const mods = (Array.isArray(args.modifiers) ? args.modifiers : []).map(String);
+    if (FN_KEYCODES.has(code)) mods.push('fn'); // 功能键需附带 fn 才能发出真正的 F1-F12（而非媒体键）
+    await runJxa(buildKeyScript(code, mods));
     return okText(`已按下按键 ${key}${mods.length ? '（修饰键：' + mods.join('+') + '）' : ''}`);
   },
 
@@ -247,18 +388,12 @@ const TOOLS = {
     const keys = Array.isArray(args.keys) ? args.keys : [];
     if (!keys.length) throw new Error('keys 不能为空，例如 ["command","c"]');
     const main = String(keys[keys.length - 1]);
-    const mods = keys.slice(0, -1).map(toModDown).filter(Boolean);
-    const using = mods.length ? ` using {${mods.join(', ')}}` : '';
-    let script;
-    if (main.length === 1 && KEY_CODES[main] == null) {
-      // 单个可打印字符（如 c、a），用 keystroke
-      script = `tell application "System Events"\n  keystroke "${asStrLiteral(main)}"${using}\nend tell`;
-    } else {
-      const code = KEY_CODES[main] != null ? KEY_CODES[main] : parseInt(main, 10);
-      if (!isFinite(code)) throw new Error(`不支持的按键：${main}`);
-      script = `tell application "System Events"\n  key code ${code}${using}\nend tell`;
-    }
-    await runAppleScript(script);
+    const mods = keys.slice(0, -1).map(String);
+    const mainCode = resolveMainCode(main);
+    if (mainCode == null) throw new Error(`不支持的按键：${main}`);
+    if (FN_KEYCODES.has(mainCode)) mods.push('fn'); // 功能键自动补 fn
+    if (main.length === 1 && main >= 'A' && main <= 'Z') mods.push('shift'); // 大写字母自动补 shift
+    await runJxa(buildKeyScript(mainCode, mods));
     return okText(`已触发快捷键 ${keys.join('+')}`);
   },
 
@@ -330,7 +465,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'click',
-    description: '在指定逻辑坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。',
+    description: '在指定逻辑坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。使用 CoreGraphics 真实鼠标事件，点击可靠落点；下一次截图会用红圈标出点击位置。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -382,7 +517,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'key',
-    description: '按下单个特殊按键，可同时按住修饰键。key 支持：return/tab/space/escape/left/right/up/down/delete/home/end/pageup/pagedown/f1-f16/command/shift/option/control 等；modifiers 为修饰键数组，如 ["command"]。',
+    description: '按下单个特殊按键，可同时按住修饰键。key 支持：return/tab/space/escape/left/right/up/down/delete/home/end/pageup/pagedown/f1-f16/command/shift/option/control 等；modifiers 为修饰键数组，如 ["command"]。功能键 F1-F12 会自动附带 fn 修饰键，以发出真正的 F 键而非媒体键。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -394,7 +529,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'hotkey',
-    description: '触发组合快捷键，例如复制 ["command","c"]、保存 ["command","s"]、切换应用 ["command","tab"]。数组中最后一个元素为主键，前面为修饰键。',
+    description: '触发组合快捷键，例如复制 ["command","c"]、保存 ["command","s"]、切换应用 ["command","tab"]。数组中最后一个元素为主键，前面为修饰键。主键为功能键（f1-f12）时会自动附带 fn，大写字母自动补 shift。',
     inputSchema: {
       type: 'object',
       properties: { keys: { type: 'array', items: { type: 'string' }, description: '按键序列，如 ["command","c"]' } },
