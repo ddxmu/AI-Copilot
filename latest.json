@@ -1,17 +1,17 @@
 {
-  "version": "0.9.45",
+  "version": "0.9.46",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.45/AI.Copilot-0.9.45-arm64.dmg",
-  "dmgSha256": "debb1b0b56ec4e72c2301a0f141ec4408b0eaa246c7946dd05d68c2b6077de3f",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.45/AI.Copilot-0.9.45.zip",
-  "patchSha256": "2e520032bcff0436064de304f663d186ea4188717170aa07be2f5388790d7fd9",
-  "notes": "升级提示条改为仅显示一次：下移避开顶部拖动区域，关闭或自动隐藏后同版本不再重复出现。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.46/AI.Copilot-0.9.46-arm64.dmg",
+  "dmgSha256": "4bf15de9b27bf8ff873049836204e11f53c3922278e0a09085546c870f896026",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.46/AI.Copilot-0.9.46.zip",
+  "patchSha256": "769aad885d3bae1a4a303d9cae2048ddb5ea180b59637325c922b52d76b3afe0",
+  "notes": "新增内置 Computer Use 电脑操控能力：AI 设置里可开启/关闭，开启后自动接入内置 ComputerUse MCP，让 AI 像人一样操控鼠标/键盘、截图、滚动（11 个工具）。macOS 需授予辅助功能 + 屏幕录制权限，设置卡片内提供一键跳转系统设置。",
   "deltas": [
     {
-      "from": "0.9.44",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.45/AI.Copilot-0.9.45.zip",
-      "sha256": "2e520032bcff0436064de304f663d186ea4188717170aa07be2f5388790d7fd9"
+      "from": "0.9.45",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.46/AI.Copilot-0.9.46.zip",
+      "sha256": "769aad885d3bae1a4a303d9cae2048ddb5ea180b59637325c922b52d76b3afe0"
     }
   ]
 }
