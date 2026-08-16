@@ -146,11 +146,16 @@ body {
   flex-shrink: 0;
 }
 
-.nav-icon img {
+.nav-icon img,
+.nav-icon svg {
   width: 18px;
   height: 18px;
   display: block;
   object-fit: contain;
+}
+
+.nav-icon svg {
+  color: currentColor;
 }
 
 .nav-item.active .nav-icon {

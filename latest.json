@@ -1,17 +1,17 @@
 {
-  "version": "0.9.39",
+  "version": "0.9.40",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.39/AI.Copilot-0.9.39-arm64.dmg",
-  "dmgSha256": "781d0c115d80a50b6ad2dd3640417dac8fe24a770333539a4af2ee9daf3cce6e",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.39/AI.Copilot-0.9.39.zip",
-  "patchSha256": "9ddf425dbb3132e4e6e88e078a03a1804bca046df6768b7ab45787d8865f9ba7",
-  "notes": "历史记录「+ 新建」交互简化：去掉下拉箭头与选项菜单，点击「+ 新建」直接创建新对话；鼠标悬停显示「新建对话」提示框。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.40/AI.Copilot-0.9.40-arm64.dmg",
+  "dmgSha256": "f551d0b62c5537565976f2aadbadc12bec7853d77948634a459bb2627ddd1abe",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.40/AI.Copilot-0.9.40.zip",
+  "patchSha256": "41c938af6c6dc3ec5f7c72b74fe62d6fb28b1d797e1d9c929dd11710f2d67285",
+  "notes": "左侧功能图标风格统一：8 个 PNG 图标全部换成统一线型 SVG，使用 currentColor，浅色外观随文字显示黑灰色，深色外观随文字显示白色。",
   "deltas": [
     {
-      "from": "0.9.38",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.39/AI.Copilot-0.9.39.zip",
-      "sha256": "9ddf425dbb3132e4e6e88e078a03a1804bca046df6768b7ab45787d8865f9ba7"
+      "from": "0.9.39",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.40/AI.Copilot-0.9.40.zip",
+      "sha256": "41c938af6c6dc3ec5f7c72b74fe62d6fb28b1d797e1d9c929dd11710f2d67285"
     }
   ]
 }
