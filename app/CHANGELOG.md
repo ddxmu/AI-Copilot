@@ -1,3 +1,10 @@
+## v0.9.48 — 2026-08-16
+- **Computer Use 对标 Claude Code 内置实现，三项操控改进**：
+  - **输入文字（type）改用剪贴板粘贴**：移植 Claude Code 的 `typeViaClipboard`——`pbcopy` 写入后 `pbpaste` 回读校验（不一致即视为失败）、再 `Cmd+V` 粘贴、`sleep 100ms`、`finally` 还原用户剪贴板。完整支持中文/长文本/换行/emoji，不再出现 `System Events keystroke` 的丢字、乱序、emoji 截断；剪贴板方式异常时自动回退 keystroke。
+  - **点击加 settle**：`click`/`double_click`/`right_click` 在瞬移与按下之间加 50ms 等待（对标 `moveAndSettle`），给 input→HID→AppKit 一个 round-trip，落点更可靠、避免误触发 hover 状态。
+  - **拖拽改缓动动画 + 必定松键**：`drag` 改用 ease-out-cubic、60fps 缓动（时长 = min(距离/2000, 0.5s)，对标 `animatedMove`），让目标应用有时间处理中间 `.leftMouseDragged` 事件；按下后 settle 50ms，并用 `try/finally` 保证左键必定松开，杜绝卡键。
+  - ComputerUse MCP `SERVER_VERSION` 1.1.0 → 1.2.0。
+
 ## v0.9.47 — 2026-08-16
 - **优化 Computer Use 鼠标/点击/功能键（用户反馈）**：把鼠标移动、点击、双击、右键、拖拽从 `System Events` AppleScript 改为 **CoreGraphics CGEvent 真实事件**，桌面光标会真实可见地平滑移动，点击/拖拽对 Electron/WebView 等 App 也能可靠落点。截图增加 `-C` 捕获鼠标光标，并自动在最后一次操作坐标绘制红色圆环，方便在返回图里直观看到鼠标和点击位置。功能键 F1–F12 自动附带 `fn` 修饰键，避免被系统当亮度/音量等媒体键吞掉。
 

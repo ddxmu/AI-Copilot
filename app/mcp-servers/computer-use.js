@@ -22,7 +22,7 @@ const path = require('path');
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'ComputerUse';
-const SERVER_VERSION = '1.1.0';
+const SERVER_VERSION = '1.2.0';
 
 const TMP = path.join(os.tmpdir(), 'ai-copilot-computer-use');
 try { fs.mkdirSync(TMP, { recursive: true }); } catch (e) { /* ignore */ }
@@ -188,6 +188,9 @@ function mouseClickJxa(x, y, button, isDouble) {
   const up = button === 'right' ? '$.kCGEventRightMouseUp' : button === 'middle' ? '$.kCGEventOtherMouseUp' : '$.kCGEventLeftMouseUp';
   const lines = ['ObjC.import("CoreGraphics");', 'ObjC.import("Foundation");'];
   lines.push(`var mv=$.CGEventCreateMouseEvent(0,$.kCGEventMouseMoved,$.CGPointMake(${x},${y}),0);$.CGEventPost($.kCGHIDEventTap,mv);`);
+  // 对标 Claude Code moveAndSettle：瞬移后等 50ms，给 input→HID→AppKit 一个 round-trip，
+  // 让目标应用 hover 状态稳定、clickCount 计时正确，落点更可靠。
+  lines.push('$.NSThread.sleepForTimeInterval(0.05);');
   const n = isDouble ? 2 : 1;
   for (let i = 0; i < n; i++) {
     lines.push(`var d${i}=$.CGEventCreateMouseEvent(0,${down},$.CGPointMake(${x},${y}),${btn});`);
@@ -201,17 +204,32 @@ function mouseClickJxa(x, y, button, isDouble) {
   return lines.join('\n');
 }
 
-function mouseDragJxa(fx, fy, tx, ty) {
-  const steps = 30;
+function mouseMoveInstantJxa(x, y) {
+  return `ObjC.import("CoreGraphics");\nvar mv=$.CGEventCreateMouseEvent(0,$.kCGEventMouseMoved,$.CGPointMake(${x},${y}),0);$.CGEventPost($.kCGHIDEventTap,mv);`;
+}
+
+function mouseDownJxa(x, y) {
+  return `ObjC.import("CoreGraphics");\nvar dn=$.CGEventCreateMouseEvent(0,$.kCGEventLeftMouseDown,$.CGPointMake(${x},${y}),$.kCGMouseButtonLeft);$.CGEventPost($.kCGHIDEventTap,dn);`;
+}
+
+function mouseUpJxa(x, y) {
+  return `ObjC.import("CoreGraphics");\nvar up=$.CGEventCreateMouseEvent(0,$.kCGEventLeftMouseUp,$.CGPointMake(${x},${y}),$.kCGMouseButtonLeft);$.CGEventPost($.kCGHIDEventTap,up);`;
+}
+
+// 对标 Claude Code animatedMove：ease-out-cubic 缓动，60fps，时长 = min(距离/2000, 0.5s)。
+// 慢速中间帧让目标应用有时间处理 .leftMouseDragged 事件（滚动条拖动、窗口缩放等）。
+function mouseDragMoveJxa(fx, fy, tx, ty) {
+  const dist = Math.hypot(tx - fx, ty - fy);
+  const durationSec = Math.min(dist / 2000, 0.5);
+  const totalFrames = Math.max(1, Math.floor(durationSec * 60));
   const lines = ['ObjC.import("CoreGraphics");'];
-  lines.push(`var m0=$.CGEventCreateMouseEvent(0,$.kCGEventMouseMoved,$.CGPointMake(${fx},${fy}),0);$.CGEventPost($.kCGHIDEventTap,m0);`);
-  lines.push(`var dn=$.CGEventCreateMouseEvent(0,$.kCGEventLeftMouseDown,$.CGPointMake(${fx},${fy}),$.kCGMouseButtonLeft);$.CGEventPost($.kCGHIDEventTap,dn);`);
-  for (let i = 1; i <= steps; i++) {
-    const x = Math.round(fx + (tx - fx) * i / steps);
-    const y = Math.round(fy + (ty - fy) * i / steps);
-    lines.push(`var dr${i}=$.CGEventCreateMouseEvent(0,$.kCGEventLeftMouseDragged,$.CGPointMake(${x},${y}),$.kCGMouseButtonLeft);$.CGEventPost($.kCGHIDEventTap,dr${i});`);
+  for (let f = 1; f <= totalFrames; f++) {
+    const t = f / totalFrames;
+    const eased = 1 - Math.pow(1 - t, 3);
+    const x = Math.round(fx + (tx - fx) * eased);
+    const y = Math.round(fy + (ty - fy) * eased);
+    lines.push(`var dr${f}=$.CGEventCreateMouseEvent(0,$.kCGEventLeftMouseDragged,$.CGPointMake(${x},${y}),$.kCGMouseButtonLeft);$.CGEventPost($.kCGHIDEventTap,dr${f});`);
   }
-  lines.push(`var up=$.CGEventCreateMouseEvent(0,$.kCGEventLeftMouseUp,$.CGPointMake(${tx},${ty}),$.kCGMouseButtonLeft);$.CGEventPost($.kCGHIDEventTap,up);`);
   return lines.join('\n');
 }
 
@@ -241,6 +259,29 @@ function resolveMainCode(main) {
   const num = parseInt(main, 10);
   if (isFinite(num)) return num;
   return null;
+}
+
+// 对标 Claude Code computer-use 的 typeViaClipboard：用剪贴板写入文本再 Cmd+V 粘贴，
+// 规避 System Events `keystroke` 对中文/长文本丢字、乱序、emoji 截断的问题。
+// 流程：①保存用户剪贴板 ②pbcopy 写入 ③pbpaste 回读校验（不一致视为写入失败）
+//       ④Cmd+V ⑤sleep 100ms（粘贴生效 vs 还原剪贴板的竞态阈值）⑥finally 还原剪贴板。
+// 任何一步失败都抛出，由调用方回退到 keystroke，绝不污染用户剪贴板。
+async function typeViaClipboard(text) {
+  let saved = null;
+  try { saved = await runCmdCapture('pbpaste', []); } catch (e) { /* 读不到就算了 */ }
+
+  try {
+    await runCmdCapture('pbcopy', [], text);
+    const back = await runCmdCapture('pbpaste', []);
+    if (back !== text) throw new Error('剪贴板回读不一致');
+    // Cmd+V：主键 'v' 键码 = CHAR_KEYCODES['v']，修饰键 command
+    await runJxa(buildKeyScript(CHAR_KEYCODES['v'], ['command']));
+    await sleep(100);
+  } finally {
+    if (saved != null) {
+      try { await runCmdCapture('pbcopy', [], saved); } catch (e) { /* 还原失败忽略 */ }
+    }
+  }
 }
 
 // 在截图上绘制红色点击环（best-effort，失败不影响主流程）
@@ -358,20 +399,37 @@ const TOOLS = {
     const tx = Math.round(Number(args.to_x));
     const ty = Math.round(Number(args.to_y));
     if ([fx, fy, tx, ty].some((v) => !isFinite(v))) throw new Error('拖拽坐标必须是数字');
-    await runJxa(mouseDragJxa(fx, fy, tx, ty));
+    // 瞬移到起点（避免中途 hover 触发意外状态），settle 后再按下左键
+    await runJxa(mouseMoveInstantJxa(fx, fy));
+    await sleep(50);
+    await runJxa(mouseDownJxa(fx, fy));
+    await sleep(50);
+    try {
+      // 缓动动画拖到终点；finally 保证左键必定松开，杜绝卡键
+      await runJxa(mouseDragMoveJxa(fx, fy, tx, ty));
+    } finally {
+      await runJxa(mouseUpJxa(tx, ty));
+    }
     setLastPos(tx, ty);
-    return okText(`已从 (${fx}, ${fy}) 拖拽到 (${tx}, ${ty})`);
+    return okText(`已从 (${fx}, ${fy}) 拖拽到 (${tx}, ${ty})（缓动动画，左键已安全松开）`);
   },
 
   async type(args) {
     const text = String(args.text != null ? args.text : '');
     if (!text) return okText('（未输入任何文字）');
-    const lines = text.split('\n');
-    const body = lines
-      .map((ln) => `  keystroke "${asStrLiteral(ln)}"${ln !== lines[lines.length - 1] ? '\n  keystroke linefeed' : ''}`)
-      .join('\n');
-    await runAppleScript(`tell application "System Events"\n${body}\nend tell`);
-    return okText(`已输入文字：${text.length > 60 ? text.slice(0, 60) + '…' : text}`);
+    try {
+      await typeViaClipboard(text);
+      return okText(`已粘贴输入文字：${text.length > 60 ? text.slice(0, 60) + '…' : text}（剪贴板方式，完整支持中文/长文本/换行）`);
+    } catch (e) {
+      // 剪贴板方式失败（如辅助功能权限异常）时回退到 System Events keystroke，保留原能力
+      logErr('typeViaClipboard 失败，回退 keystroke：' + e.message);
+      const lines = text.split('\n');
+      const body = lines
+        .map((ln) => `  keystroke "${asStrLiteral(ln)}"${ln !== lines[lines.length - 1] ? '\n  keystroke linefeed' : ''}`)
+        .join('\n');
+      await runAppleScript(`tell application "System Events"\n${body}\nend tell`);
+      return okText(`已输入文字：${text.length > 60 ? text.slice(0, 60) + '…' : text}（keystroke 回退）`);
+    }
   },
 
   async key(args) {
@@ -439,6 +497,30 @@ function spawnAsync(cmd, cmdArgs) {
       resolve();
     });
   });
+}
+
+// 运行命令并捕获 stdout（用于 pbpaste 读剪贴板）；可选 inputText 写入 stdin（用于 pbcopy）
+function runCmdCapture(cmd, cmdArgs, inputText) {
+  return new Promise((resolve, reject) => {
+    const p = spawn(cmd, cmdArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = '';
+    let err = '';
+    p.stdout.on('data', (c) => (out += c));
+    p.stderr.on('data', (c) => (err += c));
+    p.on('error', reject);
+    if (inputText != null) {
+      p.stdin.write(inputText);
+      p.stdin.end();
+    }
+    p.on('close', (code) => {
+      if (code !== 0) return reject(new Error(`命令 ${cmd} 失败（code=${code}）：${(err || '').trim()}`));
+      resolve(out);
+    });
+  });
+}
+
+function sleep(ms) {
+  return new Promise((res) => setTimeout(res, ms));
 }
 
 /* ---------------- 工具定义（inputSchema） ---------------- */
