@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Notification, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const net = require('net');
 const { execFile } = require('child_process');
 const { ALL_EXTS, PLAIN_TEXT_SAFE, ZIP_BASED_OFFICE } = require('./filetypes');
 const { processOfficeFile, readZipEntries, LEGACY_OFFICE, replaceInLegacyFile } = require('./office-replace');
@@ -24,6 +25,119 @@ if (process.argv.includes('--run-computer-use')) {
 
 let mainWindow = null;
 let currentChatId = null; // 当前激活的对话 ID（用于对话级记忆）
+
+/* ---------------- Computer Use 光标遮罩（让用户看得见 AI 鼠标） ---------------- */
+let cursorOverlay = null;          // 透明置顶遮罩窗口
+let cursorServer = null;           // Unix socket 服务器
+let cursorSockPath = '';           // socket 文件路径
+let cursorIdleTimer = null;        // 空闲自动隐藏定时器
+const CURSOR_IDLE_MS = 5000;       // 无操作 5 秒后隐藏
+
+function getCursorSockPath() {
+  return path.join(os.tmpdir(), `ai-copilot-cursor-${process.pid}.sock`);
+}
+
+function createCursorOverlay() {
+  if (cursorOverlay && !cursorOverlay.isDestroyed()) return cursorOverlay;
+  const display = screen.getPrimaryDisplay();
+  const { width, height } = display.bounds;
+  cursorOverlay = new BrowserWindow({
+    x: 0,
+    y: 0,
+    width,
+    height,
+    transparent: true,
+    frame: false,
+    hasShadow: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    resizable: false,
+    movable: false,
+    acceptFirstMouse: false,
+    type: 'panel',
+    visibleOnAllWorkspaces: true,
+    roundedCorners: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  });
+  try { cursorOverlay.setIgnoreMouseEvents(true); } catch (e) { /* ignore */ }
+  cursorOverlay.loadFile(path.join(__dirname, 'renderer', 'cursor-overlay.html'));
+  cursorOverlay.on('closed', () => { cursorOverlay = null; });
+  return cursorOverlay;
+}
+
+function sendCursorToOverlay(channel, data) {
+  if (!cursorOverlay || cursorOverlay.isDestroyed()) return;
+  try {
+    if (cursorOverlay.webContents && !cursorOverlay.webContents.isDestroyed()) {
+      cursorOverlay.webContents.send(channel, data);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function showCursorOverlay() {
+  try {
+    if (cursorIdleTimer) clearTimeout(cursorIdleTimer);
+    const w = createCursorOverlay();
+    if (!w.isVisible()) { try { w.showInactive(); } catch (e) {} }
+    sendCursorToOverlay('cursor-show');
+    cursorIdleTimer = setTimeout(() => {
+      sendCursorToOverlay('cursor-hide');
+      try { if (cursorOverlay && cursorOverlay.isVisible()) cursorOverlay.hide(); } catch (e) {}
+    }, CURSOR_IDLE_MS);
+  } catch (e) { /* ignore */ }
+}
+
+function handleCursorMessage(msg) {
+  if (!msg || !msg.t) return;
+  switch (msg.t) {
+    case 'move': showCursorOverlay(); sendCursorToOverlay('cursor-move', { x: msg.x, y: msg.y }); break;
+    case 'down': showCursorOverlay(); sendCursorToOverlay('cursor-action', { a: 'down', x: msg.x, y: msg.y }); break;
+    case 'up': showCursorOverlay(); sendCursorToOverlay('cursor-action', { a: 'up', x: msg.x, y: msg.y }); break;
+    case 'click': showCursorOverlay(); sendCursorToOverlay('cursor-action', { a: 'click', x: msg.x, y: msg.y }); break;
+    case 'hide': try { if (cursorOverlay && cursorOverlay.isVisible()) cursorOverlay.hide(); } catch (e) {} break;
+    case 'show': showCursorOverlay(); break;
+  }
+}
+
+function startCursorServer() {
+  if (cursorServer) return;
+  cursorSockPath = getCursorSockPath();
+  try { fs.unlinkSync(cursorSockPath); } catch (e) { /* ignore */ }
+  cursorServer = net.createServer((sock) => {
+    let buf = '';
+    sock.on('data', (chunk) => {
+      buf += chunk;
+      let idx;
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 1);
+        if (!line) continue;
+        try { handleCursorMessage(JSON.parse(line)); } catch (e) { /* ignore */ }
+      }
+    });
+    sock.on('error', () => {});
+  });
+  cursorServer.listen(cursorSockPath, () => {
+    try { fs.chmodSync(cursorSockPath, 0o600); } catch (e) { /* ignore */ }
+  });
+  cursorServer.on('error', () => {});
+  process.env.AI_COPILOT_CURSOR_SOCK = cursorSockPath;
+}
+
+function stopCursorServer() {
+  try { if (cursorIdleTimer) clearTimeout(cursorIdleTimer); } catch (e) {}
+  try { if (cursorOverlay && !cursorOverlay.isDestroyed()) cursorOverlay.close(); } catch (e) {}
+  try { if (cursorServer) cursorServer.close(); } catch (e) {}
+  try { if (cursorSockPath) fs.unlinkSync(cursorSockPath); } catch (e) {}
+  cursorOverlay = null; cursorServer = null; cursorSockPath = '';
+}
 
 // 应用改名（AI文件自动替换 → AI Copilot）后，userData 目录随之改变。
 // 启动时做一次迁移：新目录无配置而旧目录有，则把旧配置复制过来，避免丢失已保存的模型/Key。
@@ -109,11 +223,23 @@ app.whenReady().then(() => {
   checkUpdatesInBackground(true);
   // 空闲定时检查更新（每 10 分钟自动查询一次 GitHub）
   setInterval(() => checkUpdatesInBackground(true), 10 * 60 * 1000);
+  // 先启 Computer Use 光标 socket（MCP 子进程需要连接它）
+  startCursorServer();
   // 按配置连接 MCP 服务器（后台异步）
   initMcpServers();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+  // 显示器参数变化时，重新适配遮罩窗口大小
+  try {
+    screen.on('display-metrics-changed', () => {
+      if (!cursorOverlay || cursorOverlay.isDestroyed()) return;
+      try {
+        const b = screen.getPrimaryDisplay().bounds;
+        cursorOverlay.setBounds({ x: 0, y: 0, width: b.width, height: b.height });
+      } catch (e) { /* ignore */ }
+    });
+  } catch (e) { /* ignore */ }
 });
 
 app.on('window-all-closed', () => {
@@ -1573,6 +1699,7 @@ ipcMain.handle('open-computer-use-perms', async () => {
 
 app.on('before-quit', () => {
   try { mcp.disconnectAll(); } catch (e) { /* ignore */ }
+  stopCursorServer();
 });
 
 /* ---------------- AI 助手（智能体） ---------------- */

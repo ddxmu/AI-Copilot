@@ -108,4 +108,9 @@ contextBridge.exposeInMainWorld('api', {
   onUpdateStage: (cb) => ipcRenderer.on('update-stage', (_e, s) => cb(s)),
   onUpdateError: (cb) => ipcRenderer.on('update-error', (_e, m) => cb(m)),
   clearUpdateCache: () => ipcRenderer.invoke('clear-update-cache'),
+  // Computer Use 光标遮罩事件
+  cursorMove: (cb) => ipcRenderer.on('cursor-move', (_e, d) => cb(d)),
+  cursorAction: (cb) => ipcRenderer.on('cursor-action', (_e, d) => cb(d)),
+  cursorShow: (cb) => ipcRenderer.on('cursor-show', () => cb()),
+  cursorHide: (cb) => ipcRenderer.on('cursor-hide', () => cb()),
 });

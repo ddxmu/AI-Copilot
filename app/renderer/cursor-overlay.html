@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Cursor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      -webkit-app-region: no-drag;
+    }
+    #cursor {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 64px;
+      height: 72px;
+      pointer-events: none;
+      will-change: transform, opacity;
+      transform: translate3d(0, 0, 0);
+      transition: transform 0.06s linear, opacity 0.25s ease;
+      opacity: 0;
+      z-index: 999999;
+    }
+    #cursor svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      filter: drop-shadow(2px 3px 3px rgba(0, 0, 0, 0.22));
+    }
+    #cursor.visible { opacity: 1; }
+    .ripple {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 75, 120, 0.9);
+      background: rgba(255, 75, 120, 0.14);
+      box-shadow: 0 0 14px rgba(255, 75, 120, 0.55);
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      animation: ripple 0.48s ease-out forwards;
+      z-index: 999998;
+    }
+    @keyframes ripple {
+      0% { width: 16px; height: 16px; opacity: 1; }
+      100% { width: 84px; height: 84px; opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="cursor" role="presentation" aria-hidden="true">
+    <svg viewBox="0 0 64 72" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="ptrGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#ffaed3"/>
+          <stop offset="40%" stop-color="#ff7eb8"/>
+          <stop offset="100%" stop-color="#ff5a9e"/>
+        </linearGradient>
+        <filter id="ptrShadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="2" dy="3" stdDeviation="2.5" flood-color="#000" flood-opacity="0.18"/>
+        </filter>
+      </defs>
+      <!-- 外白描边 + 粉渐变箭头，尖端大致在 (0,0) -->
+      <path d="M4,3 L55,45 L31,49 L25,67 L4,48 Z"
+            fill="url(#ptrGrad)"
+            stroke="#ffffff"
+            stroke-width="3.5"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+            style="filter:url(#ptrShadow);"/>
+      <!-- 细黑轮廓，增加边缘清晰度 -->
+      <path d="M4,3 L55,45 L31,49 L25,67 L4,48 Z"
+            fill="none"
+            stroke="rgba(0,0,0,0.2)"
+            stroke-width="1.2"
+            stroke-linejoin="round"
+            stroke-linecap="round"/>
+    </svg>
+  </div>
+  <script>
+    (function () {
+      const cursor = document.getElementById('cursor');
+      let visible = false;
+      function setPos(x, y) {
+        cursor.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+        if (!visible) {
+          cursor.classList.add('visible');
+          visible = true;
+        }
+      }
+      function addRipple(x, y) {
+        const r = document.createElement('div');
+        r.className = 'ripple';
+        r.style.left = x + 'px';
+        r.style.top = y + 'px';
+        document.body.appendChild(r);
+        setTimeout(() => {
+          try { r.remove(); } catch (e) {}
+        }, 520);
+      }
+      if (window.api) {
+        window.api.cursorMove((d) => setPos(d.x, d.y));
+        window.api.cursorAction((d) => {
+          if (d.x != null && d.y != null) setPos(d.x, d.y);
+          if (d.a === 'click' || d.a === 'down') addRipple(d.x, d.y);
+        });
+        window.api.cursorShow(() => {
+          cursor.classList.add('visible');
+          visible = true;
+        });
+        window.api.cursorHide(() => {
+          cursor.classList.remove('visible');
+          visible = false;
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

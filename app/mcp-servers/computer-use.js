@@ -19,10 +19,11 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const net = require('net');
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'ComputerUse';
-const SERVER_VERSION = '1.2.0';
+const SERVER_VERSION = '1.3.0';
 
 const TMP = path.join(os.tmpdir(), 'ai-copilot-computer-use');
 try { fs.mkdirSync(TMP, { recursive: true }); } catch (e) { /* ignore */ }
@@ -35,6 +36,34 @@ function send(obj) {
 
 function logErr(msg) {
   process.stderr.write('[computer-use] ' + msg + '\n');
+}
+
+/* ---------------- 光标事件上报（让主进程遮罩显示 AI 鼠标） ---------------- */
+let cursorSocket = null;
+let cursorSocketReady = false;
+
+function connectCursorSocket() {
+  if (cursorSocket || cursorSocketReady) return;
+  const sockPath = process.env.AI_COPILOT_CURSOR_SOCK;
+  if (!sockPath) return;
+  try {
+    const s = net.createConnection(sockPath);
+    s.on('connect', () => { cursorSocketReady = true; });
+    s.on('error', () => { cursorSocketReady = false; cursorSocket = null; });
+    s.on('close', () => { cursorSocketReady = false; cursorSocket = null; });
+    cursorSocket = s;
+  } catch (e) { cursorSocket = null; }
+}
+
+function sendCursor(t, x, y) {
+  connectCursorSocket();
+  if (!cursorSocketReady || !cursorSocket) return;
+  const obj = { t };
+  if (x != null) obj.x = Math.round(x);
+  if (y != null) obj.y = Math.round(y);
+  try { cursorSocket.write(JSON.stringify(obj) + '\n'); } catch (e) {
+    cursorSocketReady = false; cursorSocket = null;
+  }
 }
 
 // 运行一段 AppleScript（NSAppleScript 文本），返回 stdout 文本
@@ -329,17 +358,23 @@ const TOOLS = {
     const size = await ensureScreenSize();
     const src = path.join(TMP, `shot_${Date.now()}.png`);
     const dst = path.join(TMP, `shot_${Date.now()}_s.png`);
+    // 截图前临时隐藏 AI 光标遮罩，避免把粉色指针拍进截图干扰模型判断
+    sendCursor('hide');
     // 全屏截图（-C 捕获鼠标光标，-x 静音，png），输出为设备分辨率
     try {
       await spawnAsync('screencapture', ['-x', '-C', '-t', 'png', src]);
     } catch (e) {
+      sendCursor('show');
       const msg = String(e.message || '');
       if (/privacy|permission|screen recording|权限|录制/i.test(msg)) {
         throw new Error('截图失败：请到「系统设置 › 隐私与安全性 › 屏幕录制」中允许 AI Copilot，并重试。');
       }
       throw new Error('截图失败：' + msg);
     }
-    if (!fs.existsSync(src)) throw new Error('截图失败：未能生成图片（请确认已在「屏幕录制」中允许 AI Copilot）。');
+    if (!fs.existsSync(src)) {
+      sendCursor('show');
+      throw new Error('截图失败：未能生成图片（请确认已在「屏幕录制」中允许 AI Copilot）。');
+    }
     // 等比缩放到逻辑分辨率，使图像像素与逻辑点 1:1 对应
     await spawnAsync('sips', ['-z', String(size.height), String(size.width), src, '--out', dst]);
     const finalFile = fs.existsSync(dst) ? dst : src;
@@ -355,6 +390,7 @@ const TOOLS = {
     try { fs.unlinkSync(src); } catch (e) { /* ignore */ }
     try { fs.unlinkSync(dst); } catch (e) { /* ignore */ }
     const mark = _lastPos ? `截图中已用红圈标出最近一次鼠标操作位置 (${_lastPos.x}, ${_lastPos.y})。` : '';
+    sendCursor('show');
     return {
       content: [
         { type: 'text', text: `已截取主屏幕，图像尺寸 ${size.width} × ${size.height}（逻辑点），已包含鼠标光标。${mark}请基于该尺寸输出坐标（原点左上角）。` },
@@ -366,6 +402,7 @@ const TOOLS = {
   async move(args) {
     const { x, y } = numPair(args, 'x', 'y');
     const from = _lastPos ? _lastPos : { x: 0, y: 0 };
+    sendCursor('move', x, y);
     await runJxa(mouseMoveJxa(x, y, from.x, from.y));
     setLastPos(x, y);
     return okText(`鼠标已移动到 (${x}, ${y})（桌面光标已平滑移动）`);
@@ -374,22 +411,28 @@ const TOOLS = {
   async click(args) {
     const { x, y } = numPair(args, 'x', 'y');
     const button = String(args.button || 'left').toLowerCase();
+    sendCursor('move', x, y);
     await runJxa(mouseClickJxa(x, y, button, false));
     setLastPos(x, y);
+    sendCursor('click', x, y);
     return okText(`已在 (${x}, ${y}) 点击（${button}键，已发出真实鼠标事件）`);
   },
 
   async double_click(args) {
     const { x, y } = numPair(args, 'x', 'y');
+    sendCursor('move', x, y);
     await runJxa(mouseClickJxa(x, y, 'left', true));
     setLastPos(x, y);
+    sendCursor('click', x, y);
     return okText(`已在 (${x}, ${y}) 双击`);
   },
 
   async right_click(args) {
     const { x, y } = numPair(args, 'x', 'y');
+    sendCursor('move', x, y);
     await runJxa(mouseClickJxa(x, y, 'right', false));
     setLastPos(x, y);
+    sendCursor('click', x, y);
     return okText(`已在 (${x}, ${y}) 右键点击`);
   },
 
@@ -400,15 +443,19 @@ const TOOLS = {
     const ty = Math.round(Number(args.to_y));
     if ([fx, fy, tx, ty].some((v) => !isFinite(v))) throw new Error('拖拽坐标必须是数字');
     // 瞬移到起点（避免中途 hover 触发意外状态），settle 后再按下左键
+    sendCursor('move', fx, fy);
     await runJxa(mouseMoveInstantJxa(fx, fy));
     await sleep(50);
+    sendCursor('down', fx, fy);
     await runJxa(mouseDownJxa(fx, fy));
     await sleep(50);
     try {
       // 缓动动画拖到终点；finally 保证左键必定松开，杜绝卡键
       await runJxa(mouseDragMoveJxa(fx, fy, tx, ty));
+      sendCursor('move', tx, ty);
     } finally {
       await runJxa(mouseUpJxa(tx, ty));
+      sendCursor('up', tx, ty);
     }
     setLastPos(tx, ty);
     return okText(`已从 (${fx}, ${fy}) 拖拽到 (${tx}, ${ty})（缓动动画，左键已安全松开）`);
@@ -417,6 +464,7 @@ const TOOLS = {
   async type(args) {
     const text = String(args.text != null ? args.text : '');
     if (!text) return okText('（未输入任何文字）');
+    if (_lastPos) sendCursor('move', _lastPos.x, _lastPos.y);
     try {
       await typeViaClipboard(text);
       return okText(`已粘贴输入文字：${text.length > 60 ? text.slice(0, 60) + '…' : text}（剪贴板方式，完整支持中文/长文本/换行）`);
@@ -436,6 +484,7 @@ const TOOLS = {
     const key = String(args.key || '').toLowerCase();
     const code = KEY_CODES[key];
     if (code == null) throw new Error(`不支持的按键名：${key}（支持 return/tab/space/escape/方向键/command/shift/option/control/f1-f16 等）`);
+    if (_lastPos) sendCursor('move', _lastPos.x, _lastPos.y);
     const mods = (Array.isArray(args.modifiers) ? args.modifiers : []).map(String);
     if (FN_KEYCODES.has(code)) mods.push('fn'); // 功能键需附带 fn 才能发出真正的 F1-F12（而非媒体键）
     await runJxa(buildKeyScript(code, mods));
@@ -445,6 +494,7 @@ const TOOLS = {
   async hotkey(args) {
     const keys = Array.isArray(args.keys) ? args.keys : [];
     if (!keys.length) throw new Error('keys 不能为空，例如 ["command","c"]');
+    if (_lastPos) sendCursor('move', _lastPos.x, _lastPos.y);
     const main = String(keys[keys.length - 1]);
     const mods = keys.slice(0, -1).map(String);
     const mainCode = resolveMainCode(main);
@@ -457,6 +507,7 @@ const TOOLS = {
 
   async scroll(args) {
     const { x, y } = numPair(args, 'x', 'y');
+    sendCursor('move', x, y);
     const direction = String(args.direction || 'down').toLowerCase();
     const amount = Math.max(1, Math.min(20, parseInt(args.amount, 10) || 3));
     const dx = direction === 'left' ? -amount : direction === 'right' ? amount : 0;

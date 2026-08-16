@@ -550,7 +550,10 @@ function getBuiltinComputerUseConfig() {
     transport: 'stdio',
     command: process.execPath,
     args: ['--run-computer-use', path.join(__dirname, 'mcp-servers', 'computer-use.js')],
-    env: {},
+    env: {
+      // 主进程已在启动 MCP 前启动本地 Unix socket；子进程连接它并上报光标坐标/点击事件
+      AI_COPILOT_CURSOR_SOCK: process.env.AI_COPILOT_CURSOR_SOCK || '',
+    },
     cwd: '',
     builtin: true,
   };

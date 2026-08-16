@@ -1,3 +1,11 @@
+## v0.9.49 — 2026-08-16
+
+### Computer Use 光标可视化
+- 新增主进程透明置顶遮罩窗口 + Unix socket 通道，Computer Use 操作时显示一个粉色渐变箭头指针跟随 AI 鼠标移动。
+- 指针样式参考桌面 GIF（粉白描边箭头），点击/拖拽时带扩散波纹动效；空闲 5 秒自动淡出。
+- 截图前临时隐藏遮罩，避免把粉色指针拍进截图干扰模型判断；截图后自动恢复。
+- `move`/`click`/`double_click`/`right_click`/`drag`/`scroll` 均上报坐标，`type`/`key`/`hotkey` 保持当前鼠标位置可见。
+
 ## v0.9.48 — 2026-08-16
 - **Computer Use 对标 Claude Code 内置实现，三项操控改进**：
   - **输入文字（type）改用剪贴板粘贴**：移植 Claude Code 的 `typeViaClipboard`——`pbcopy` 写入后 `pbpaste` 回读校验（不一致即视为失败）、再 `Cmd+V` 粘贴、`sleep 100ms`、`finally` 还原用户剪贴板。完整支持中文/长文本/换行/emoji，不再出现 `System Events keystroke` 的丢字、乱序、emoji 截断；剪贴板方式异常时自动回退 keystroke。
