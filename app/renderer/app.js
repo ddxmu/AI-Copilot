@@ -1960,6 +1960,8 @@ function applyTheme(theme) {
   });
   // 同步到 localStorage（同时尊重系统主题）
   try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+  // 主题切换后，按当前主题重算强调色（深色下需提亮保证按钮可读）
+  applyAccent(currentAccent);
 }
 function initTheme() {
   // 1. 启动时立即应用（避免颜色闪烁）
@@ -1984,6 +1986,98 @@ function initTheme() {
     };
     if (mq.addEventListener) mq.addEventListener('change', onSysChange);
   }
+}
+
+/* ================= 风格颜色（强调色） ================= */
+const ACCENT_KEY = 'aicopilot-accent'; // 自定义强调色 hex，或 null = 默认蓝
+const DEFAULT_ACCENT = '#2f6fed';
+let currentAccent = null;
+
+function hexToRgb(hex) {
+  hex = String(hex).replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
+  const n = parseInt(hex, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function clampByte(v) { return Math.max(0, Math.min(255, Math.round(v))); }
+function toHex(r, g, b) {
+  return '#' + [r, g, b].map((v) => clampByte(v).toString(16).padStart(2, '0')).join('');
+}
+function mix(hex, target, t) {
+  const a = hexToRgb(hex), b = hexToRgb(target);
+  return toHex(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t);
+}
+function lighten(hex, t) { return mix(hex, '#ffffff', t); }
+function darken(hex, t) { return mix(hex, '#000000', t); }
+function rgba(hex, a) { const c = hexToRgb(hex); return `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`; }
+
+function applyAccent(hex) {
+  currentAccent = hex || null;
+  const root = document.documentElement;
+  const OVERRIDES = ['--primary', '--primary-hover', '--primary-bg', '--sidebar-active-text', '--sidebar-active-bg'];
+  if (!hex) {
+    OVERRIDES.forEach((v) => root.style.removeProperty(v));
+  } else {
+    const dark = root.classList.contains('dark');
+    if (dark) {
+      root.style.setProperty('--primary', lighten(hex, 0.18));
+      root.style.setProperty('--primary-hover', lighten(hex, 0.08));
+      root.style.setProperty('--primary-bg', rgba(hex, 0.20));
+      root.style.setProperty('--sidebar-active-text', lighten(hex, 0.18));
+      root.style.setProperty('--sidebar-active-bg', rgba(hex, 0.22));
+    } else {
+      root.style.setProperty('--primary', hex);
+      root.style.setProperty('--primary-hover', darken(hex, 0.12));
+      root.style.setProperty('--primary-bg', rgba(hex, 0.10));
+      root.style.setProperty('--sidebar-active-text', hex);
+      root.style.setProperty('--sidebar-active-bg', rgba(hex, 0.10));
+    }
+  }
+  // 同步预览高亮
+  document.querySelectorAll('.accent-swatch').forEach((s) => {
+    s.classList.toggle('active', !!currentAccent && s.dataset.color && s.dataset.color.toLowerCase() === currentAccent.toLowerCase());
+  });
+  const customInput = document.getElementById('accent-custom');
+  if (customInput && hex) customInput.value = hex;
+  try {
+    if (hex) localStorage.setItem(ACCENT_KEY, hex);
+    else localStorage.removeItem(ACCENT_KEY);
+  } catch (e) {}
+}
+
+const ACCENT_PRESETS = [
+  '#2f6fed', '#2563eb', '#1d4ed8', '#0891b2', '#0d9488', '#16a34a',
+  '#ca8a04', '#ea580c', '#dc2626', '#db2777', '#9333ea', '#7c3aed'
+];
+
+function buildAccentSwatches() {
+  const wrap = document.getElementById('accent-swatches');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  ACCENT_PRESETS.forEach((hex) => {
+    const b = document.createElement('button');
+    b.className = 'accent-swatch';
+    b.dataset.color = hex;
+    b.style.background = hex;
+    b.title = hex;
+    b.setAttribute('aria-label', '风格颜色 ' + hex);
+    b.addEventListener('click', () => applyAccent(hex));
+    wrap.appendChild(b);
+  });
+}
+
+function initAccent() {
+  buildAccentSwatches();
+  const custom = document.getElementById('accent-custom');
+  if (custom) custom.addEventListener('input', (e) => applyAccent(e.target.value));
+  const reset = document.getElementById('accent-reset');
+  if (reset) reset.addEventListener('click', () => {
+    applyAccent(null);
+    if (custom) custom.value = DEFAULT_ACCENT;
+  });
+  let saved = null;
+  try { saved = localStorage.getItem(ACCENT_KEY); } catch (e) {}
+  applyAccent(saved);
 }
 
 /* ================= AI 助手（智能体对话） ================= */
@@ -5289,6 +5383,7 @@ document.getElementById('skill-scan-local').addEventListener('click', async () =
 initExts();
 initAiSettings();
 initTheme(); // 外观主题（浅色/深色）—— 必须在面板渲染前，避免颜色闪烁
+initAccent(); // 风格颜色（强调色）
 initAppVersion(); // 左下角版本号动态同步
 initUpdater(); // 自动更新（检查/下载/安装）
 renderSkills();

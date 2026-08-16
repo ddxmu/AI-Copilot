@@ -1,17 +1,17 @@
 {
-  "version": "0.9.40",
+  "version": "0.9.41",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.40/AI.Copilot-0.9.40-arm64.dmg",
-  "dmgSha256": "f551d0b62c5537565976f2aadbadc12bec7853d77948634a459bb2627ddd1abe",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.40/AI.Copilot-0.9.40.zip",
-  "patchSha256": "41c938af6c6dc3ec5f7c72b74fe62d6fb28b1d797e1d9c929dd11710f2d67285",
-  "notes": "左侧功能图标风格统一：8 个 PNG 图标全部换成统一线型 SVG，使用 currentColor，浅色外观随文字显示黑灰色，深色外观随文字显示白色。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.41/AI.Copilot-0.9.41-arm64.dmg",
+  "dmgSha256": "4d7ed7579a03f36d99d40380bcbe0c933ef8e54a5b5334b64c752f445f326cd8",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.41/AI.Copilot-0.9.41.zip",
+  "patchSha256": "620c1bedecb076166555c090ad8e55c27718ad9e1b5cf6e625bfd518bc06c205",
+  "notes": "外观新增「风格颜色」选项：12 种预设强调色 + 自定义取色器，可恢复默认，立即改变按钮与导航高亮色并自动保存。",
   "deltas": [
     {
-      "from": "0.9.39",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.40/AI.Copilot-0.9.40.zip",
-      "sha256": "41c938af6c6dc3ec5f7c72b74fe62d6fb28b1d797e1d9c929dd11710f2d67285"
+      "from": "0.9.40",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.41/AI.Copilot-0.9.41.zip",
+      "sha256": "620c1bedecb076166555c090ad8e55c27718ad9e1b5cf6e625bfd518bc06c205"
     }
   ]
 }
