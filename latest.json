@@ -1,17 +1,17 @@
 {
-  "version": "0.9.38",
+  "version": "0.9.39",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.38/AI.Copilot-0.9.38-arm64.dmg",
-  "dmgSha256": "3888c8c27ba6f1a618ddf891a5fa29fff7a8dc2191b6555446f013841bb61b4d",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.38/AI.Copilot-0.9.38.zip",
-  "patchSha256": "690b399148d76a72b3c5563112150684b975594283559ed686d9e256279d1d53",
-  "notes": "历史记录右侧「+」按钮改为下拉选项框：触发器显示「+ 新建」并带下拉箭头，菜单内提供「+ 新建」选项，点击新建对话。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.39/AI.Copilot-0.9.39-arm64.dmg",
+  "dmgSha256": "781d0c115d80a50b6ad2dd3640417dac8fe24a770333539a4af2ee9daf3cce6e",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.39/AI.Copilot-0.9.39.zip",
+  "patchSha256": "9ddf425dbb3132e4e6e88e078a03a1804bca046df6768b7ab45787d8865f9ba7",
+  "notes": "历史记录「+ 新建」交互简化：去掉下拉箭头与选项菜单，点击「+ 新建」直接创建新对话；鼠标悬停显示「新建对话」提示框。",
   "deltas": [
     {
-      "from": "0.9.37",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.38/AI.Copilot-0.9.38.zip",
-      "sha256": "690b399148d76a72b3c5563112150684b975594283559ed686d9e256279d1d53"
+      "from": "0.9.38",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.39/AI.Copilot-0.9.39.zip",
+      "sha256": "9ddf425dbb3132e4e6e88e078a03a1804bca046df6768b7ab45787d8865f9ba7"
     }
   ]
 }

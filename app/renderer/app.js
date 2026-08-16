@@ -5409,25 +5409,12 @@ if (rightSidebarTabs) {
   });
 }
 
-const newChatDropdown = document.getElementById('new-chat-dropdown');
-const btnNewChatOption = document.getElementById('btn-new-chat-option');
-if (btnNewChat && newChatDropdown) {
-  btnNewChat.addEventListener('click', (e) => {
-    e.stopPropagation();
-    newChatDropdown.classList.toggle('open');
-  });
-}
-if (btnNewChatOption && newChatDropdown) {
-  btnNewChatOption.addEventListener('click', (e) => {
-    e.stopPropagation();
-    newChatDropdown.classList.remove('open');
+// 点击「+ 新建」直接新建对话
+if (btnNewChat) {
+  btnNewChat.addEventListener('click', () => {
     createNewChat();
   });
 }
-// 点击其它区域关闭新建下拉框
-document.addEventListener('click', () => {
-  if (newChatDropdown) newChatDropdown.classList.remove('open');
-});
 loadChats();
 // 规则状态同步给主进程（供智能体使用）
 window.api.syncRules(state.rules);
