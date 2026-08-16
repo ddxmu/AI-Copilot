@@ -1,3 +1,13 @@
+## v0.9.54 — 2026-08-17
+
+### Computer Use 修复持久化进源码与构建管线
+- 把此前已验证的点击修复从「已安装包热修」正式移植进源码 `app/mcp-servers/computer-use.js`，纳入版本控制与构建流程，后续发版默认可用，不再依赖手工热修。
+- **Retina 截图 72 DPI 归一**：`screenshot()` 缩放后追加 `sips -s dpiWidth 72 -s dpiHeight 72`，消除 Retina 下 144 DPI 元数据导致视觉模型把图像坐标缩小一半、点击落点偏移的问题，使「图像像素 ⇔ 逻辑点」严格 1:1。
+- **左键点击改走 macOS System Events**：左键 `click` 优先用 `tell application "System Events" to click at {x,y}`（对 Chrome/Electron 等 HTML 控件命中最可靠），被系统拒绝时自动回退 CoreGraphics 真实事件；`click` 前仍临时 `sendCursor('hide')` 避免覆盖层拦截命中测试。
+- **5 秒 AppleScript 超时 + 抑制返回对象**：点击 AppleScript 用 `with timeout of 5 seconds` 包裹，并把 `click` 返回的 accessibility UI 对象捕获到局部变量、脚本显式 `return ""`，不向外透出、不参与后续逻辑。
+- **坐标映射保持不变**：`computeShotSize` / `coordScale` / `modelToTarget` 未改动，等比换算与红圈标注依旧正确。
+- 新增聚焦回归检查 `app/tests/regression-computer-use.js`（坐标映射、System Events 点击/超时/suppress、72 DPI 三项断言），接入 `npm test`，可纳入构建/CI。
+
 ## v0.9.53 — 2026-08-16
 
 ### Computer Use 修复：点击实施了但无效果

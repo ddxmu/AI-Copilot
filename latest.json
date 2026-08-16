@@ -1,17 +1,17 @@
 {
-  "version": "0.9.53",
+  "version": "0.9.54",
   "minimumVersion": "0.8.25",
-  "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.53/AI.Copilot-0.9.53-arm64.dmg",
-  "dmgSha256": "efda1fd9f921d279cae55fcbd12a1d9468f3c5b2c2583c177c56b117ce309f65",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.53/AI.Copilot-0.9.53.zip",
-  "patchSha256": "d634f4f13ff4928f2e7e71d01c80175709c936af26bbdba114477cb395886307",
-  "notes": "### Computer Use 点击修复（v0.9.53）\n- mouseClickJxa 在 LeftMouseDown 与 LeftMouseUp 之间增加 40ms 延时，避免目标应用忽略点击事件。\n- 光标从 40×40 缩小到 28×28，并按 PNG 实际箭头尖端补偿约 4px 偏移，让可见尖端与真实点击坐标对齐。\n- click / double_click / right_click 在真正下发 CGEvent 前临时隐藏覆盖层，点击后恢复并显示红圈，避免透明窗口拦截命中测试。",
+  "releaseDate": "2026-08-17",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.54/AI.Copilot-0.9.54-arm64.dmg",
+  "dmgSha256": "01c5bd656e9e7966b82240446ef4db06aadc76e8e02da99035c5c780f926502a",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.54/AI.Copilot-0.9.54.zip",
+  "patchSha256": "db39ae93c9ad56fcbad52efa7eaf18f18a599904df5e627ff82f19b6bd912400",
+  "notes": "### Computer Use 修复持久化（v0.9.54）\n- Retina 截图统一归一为 72 DPI，使「图像像素 ⇔ 逻辑点」严格 1:1，修正在 Retina 屏上视觉模型把坐标缩小一半、点击落点偏移一半的问题。\n- 左键点击改走 macOS System Events `click at`（对 Chrome/Electron 等 HTML 控件命中最可靠），被系统拒绝时自动回退 CoreGraphics 真实事件；点击前仍临时隐藏覆盖层避免拦截命中测试。\n- 点击 AppleScript 加 5 秒超时保护，并把 `click` 返回的 accessibility UI 对象捕获到局部变量、脚本显式 `return \"\"`，不向外透出。\n- 现有坐标映射（coordScale）保持不变；新增聚焦回归检查接入 `npm test`。",
   "deltas": [
     {
-      "from": "0.9.52",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.53/AI.Copilot-0.9.53.zip",
-      "sha256": "d634f4f13ff4928f2e7e71d01c80175709c936af26bbdba114477cb395886307"
+      "from": "0.9.53",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.54/AI.Copilot-0.9.54.zip",
+      "sha256": "db39ae93c9ad56fcbad52efa7eaf18f18a599904df5e627ff82f19b6bd912400"
     }
   ]
 }

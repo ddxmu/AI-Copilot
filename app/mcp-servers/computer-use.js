@@ -328,6 +328,23 @@ function mouseClickJxa(x, y, button, isDouble) {
   return lines.join('\n');
 }
 
+// 左键点击优先走 macOS System Events 的辅助功能点击（click at 坐标入口），
+// 对 Chrome / Electron 的 HTML 控件命中最可靠。
+//   with timeout of 5 seconds —— 限制本次点击最多 5 秒，超时由 AppleScript 自身抛错；
+//   set ignoredClick to click at {x, y} —— 把 click 返回的 accessibility UI 对象捕获到
+//     局部变量，确保它不被透出 / 不参与后续逻辑（suppress）；
+//   return "" —— 脚本显式返回空，避免返回 UI 对象引用。
+function mouseClickAppleScript(x, y) {
+  return (
+    `with timeout of 5 seconds\n` +
+    `  tell application "System Events"\n` +
+    `    set ignoredClick to click at {${Math.round(x)}, ${Math.round(y)}}\n` +
+    `  end tell\n` +
+    `end timeout\n` +
+    `return ""`
+  );
+}
+
 function mouseMoveInstantJxa(x, y) {
   return `ObjC.import("CoreGraphics");\nvar mv=$.CGEventCreateMouseEvent(0,$.kCGEventMouseMoved,$.CGPointMake(${x},${y}),0);$.CGEventPost($.kCGHIDEventTap,mv);`;
 }
@@ -486,6 +503,10 @@ const TOOLS = {
     // 等比缩放到上限尺寸，使图像像素落在「图像坐标系」内，与坐标换算比例 coordScale 对应
     await spawnAsync('sips', ['-z', String(shot.imgH), String(shot.imgW), src, '--out', dst]);
     const finalFile = fs.existsSync(dst) ? dst : src;
+    // Retina 屏上 screencapture 默认保留 144 DPI；视觉模型按该元数据读取时会把
+    // 1366×887 图像当成约 683×443 points，导致点击落点缩小一半。
+    // 统一归一为 72 DPI，保证「图像像素」与「工具坐标空间（逻辑点）」严格 1:1。
+    await spawnAsync('sips', ['-s', 'dpiWidth', '72', '-s', 'dpiHeight', '72', finalFile]);
     // 在最近一次同显示器鼠标操作点绘制红色点击环（图像坐标系，best-effort）
     if (_lastPos && _lastDisplay === display) {
       try {
@@ -528,7 +549,17 @@ const TOOLS = {
     // 真正点击前隐藏覆盖层，避免透明窗口拦截命中测试
     sendCursor('hide');
     await sleep(40);
-    await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
+    if (button === 'left') {
+      // 左键优先 System Events 辅助功能点击；若被系统拒绝（权限/特殊 UI）回退 CoreGraphics
+      try {
+        await runAppleScript(mouseClickAppleScript(target.cg.x, target.cg.y));
+      } catch (e) {
+        logErr('System Events 辅助功能点击失败，回退 CoreGraphics：' + e.message);
+        await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
+      }
+    } else {
+      await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
+    }
     setLastPos(x, y, target.display);
     sendCursor('click', target.cg.x, target.cg.y);
     return okText(`已在图像坐标 (${x}, ${y}) 点击（${button}键，显示器 ${target.display}）`);
@@ -804,7 +835,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'click',
-    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。使用 CoreGraphics 真实鼠标事件，点击可靠落点；下一次同显示器截图会用红圈标出点击位置。多显示器时传 display（1=主屏）。',
+    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。左键优先走 macOS System Events 辅助功能点击（对 Chrome/Electron 等 HTML 控件命中可靠，5 秒超时保护），被系统拒绝时自动回退 CoreGraphics 真实事件；下一次同显示器截图会用红圈标出点击位置。多显示器时传 display（1=主屏）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1005,7 +1036,7 @@ function start() {
   process.on('SIGTERM', () => process.exit(0));
 }
 
-module.exports = { start, SERVER_NAME };
+module.exports = { start, SERVER_NAME, computeShotSize, mouseClickAppleScript, MAX_SHOT_W, MAX_SHOT_H };
 
 // 直接以 `node computer-use.js` 运行时自启动（Electron 子进程由 main.js 早退分支调用 start()，不会触发此分支）
 if (require.main === module) start();
