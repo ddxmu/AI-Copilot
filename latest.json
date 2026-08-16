@@ -1,17 +1,17 @@
 {
-  "version": "0.9.46",
+  "version": "0.9.47",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-16",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.46/AI.Copilot-0.9.46-arm64.dmg",
-  "dmgSha256": "4bf15de9b27bf8ff873049836204e11f53c3922278e0a09085546c870f896026",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.46/AI.Copilot-0.9.46.zip",
-  "patchSha256": "769aad885d3bae1a4a303d9cae2048ddb5ea180b59637325c922b52d76b3afe0",
-  "notes": "新增内置 Computer Use 电脑操控能力：AI 设置里可开启/关闭，开启后自动接入内置 ComputerUse MCP，让 AI 像人一样操控鼠标/键盘、截图、滚动（11 个工具）。macOS 需授予辅助功能 + 屏幕录制权限，设置卡片内提供一键跳转系统设置。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.47/AI.Copilot-0.9.47-arm64.dmg",
+  "dmgSha256": "346615a5b23973d11abe7098a363c66bd46d3ab3a28e9a67dfd4edc950838d56",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.47/AI.Copilot-0.9.47.zip",
+  "patchSha256": "03fbac518284d0a9c58eb8443da7337532db8121ada1786452402f818741cc1b",
+  "notes": "优化 Computer Use 电脑操控：鼠标/点击/拖拽改为 CoreGraphics 真实事件，桌面光标真实平滑移动且点击可靠落点；截图带鼠标光标并用红圈标出最近点击位置；功能键 F1-F12 自动附带 fn 修饰键。",
   "deltas": [
     {
-      "from": "0.9.45",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.46/AI.Copilot-0.9.46.zip",
-      "sha256": "769aad885d3bae1a4a303d9cae2048ddb5ea180b59637325c922b52d76b3afe0"
+      "from": "0.9.46",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.47/AI.Copilot-0.9.47.zip",
+      "sha256": "03fbac518284d0a9c58eb8443da7337532db8121ada1786452402f818741cc1b"
     }
   ]
 }
