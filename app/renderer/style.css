@@ -2599,6 +2599,28 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   color: var(--text-light);
 }
 
+/* 「智能体工作中…」蓝色渐变流光特效 */
+#chat-status .agent-working {
+  display: inline-block;
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  background: linear-gradient(100deg, #2f6fed 0%, #4f86f0 35%, #7aa9ff 55%, #4f86f0 75%, #2f6fed 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: agentWorkingShimmer 2.6s linear infinite;
+}
+@keyframes agentWorkingShimmer {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 220% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #chat-status .agent-working { animation: none; }
+}
+
 /* ========== Todo 任务清单 ========== */
 .todo-panel {
   border-bottom: 1px solid var(--border);

@@ -2,6 +2,7 @@
 // 升级机制还原自 v0.7.0（经用户验证「在线升级正常」的版本）：
 //   · 拉取 GitHub raw 上的 latest.json → 比对版本
 //   · 有通用增量包(patchUrl)则下载该 zip，解压覆盖 Resources/app（任何老版本都适用）
+//     覆盖后必须重新 ad-hoc 签名，否则 macOS 会因资源封套失效反复弹出屏幕录制授权。
 //   · 否则下载完整 DMG → 挂载 → 拷贝新 .app 到 staging
 //   · 写独立 bash 脚本在后台完成「整包替换」；重启改由主进程 app.relaunch() 托管
 //     （退出后替换，规避 macOS 禁止 app 运行时覆盖自身 bundle 的限制；
@@ -315,6 +316,9 @@ sleep 1
 rm -rf "${target}"
 cp -R "${staging}" "${target}"
 xattr -dr com.apple.quarantine "${target}" 2>/dev/null
+# 只重签顶层 App：嵌套 Electron Framework 已由打包器签好，--deep 会在其
+# 版本化 framework 结构上报 bundle format ambiguous，反而留下未更新的资源封套。
+/usr/bin/codesign --force --sign - --timestamp=none "${target}" 2>/dev/null
 rm -rf "${updateRoot}"
 touch "${doneMarker}"
 `;
@@ -386,6 +390,7 @@ cp -Rf "${stagingDir}/." "${appResDir}/"
 # 删除已移除文件
 ${deleteCmds}
 xattr -dr com.apple.quarantine "${target}" 2>/dev/null
+/usr/bin/codesign --force --sign - --timestamp=none "${target}" 2>/dev/null
 rm -rf "${updateRoot}"
 touch "${doneMarker}"
 `;

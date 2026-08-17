@@ -1,3 +1,23 @@
+## v0.10.8 — 2026-08-17
+
+### 1. 「智能体工作中…」状态文字渐变流光特效
+
+- 聊天框下方状态栏在智能体运行期间显示「智能体工作中…」时，文字改为蓝色渐变流光效果（线性渐变 `#2f6fed → #4f86f0 → #7aa9ff`，`background-clip: text` + 流动动画），视觉上更醒目、贴合产品蓝调。
+- 特效通过内层 `<span class="agent-working">` 作用域隔离：仅在该状态文字出现时显示，文字被清空或切换为其它状态时自动移除，不会污染其它状态提示。
+- 已适配「减弱动态效果」系统偏好（`prefers-reduced-motion`）——开启时停用动画，仅保留静态渐变。
+
+### 2. ComputerUse 左键点击改回 System Events 主路径（调整 v0.10.7 决定）
+
+- 左键主点击恢复为 **System Events 坐标式辅助功能点击**（对 Chrome / Electron 的 HTML 控件命中更稳）；CGEvent 降为一次性备用，仅当 System Events 抛错时回退一次，不重复点击同一坐标。
+- 即 v0.10.7 的「左键改回 CGEvent 主路径」决定在本版被反转。
+
+### 3. 升级后自动重签，修复屏幕录制授权反复弹窗
+
+- `updater.js` 的 OTA 增量覆盖 / 整包替换完成后，新增对目标 App 的 ad-hoc 重签（`codesign --force --sign - --timestamp=none`）；只签顶层 App，避免对 Electron Framework 用 `--deep` 触发 bundle format ambiguous 而留下未更新的资源封套。
+- 解决此前升级后 macOS 因资源封套失效、反复弹出屏幕录制授权的现象。
+
+- 注：此前 v0.10.8 草稿中尝试的 Dock 重新显示修复已回退，不在本次发布范围内。
+
 ## v0.10.7 — 2026-08-17
 
 ### ComputerUse 左键点击改回 CGEvent 主路径

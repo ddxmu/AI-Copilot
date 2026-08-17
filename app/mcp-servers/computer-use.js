@@ -1164,13 +1164,13 @@ const TOOLS = {
     await sleep(40);
     try {
       if (button === 'left') {
-        // 左键主点击改回 CGEvent（CoreGraphics）：move → 100ms → mouseDown → 50ms → mouseUp。
-        // System Events 仅作一次性备用方案，不连续重复点击同一坐标。
+        // 左键优先使用 System Events 的坐标式辅助功能点击，对 Chrome/Electron HTML 控件更稳定。
+        // CGEvent 仅作一次性备用方案，不连续重复点击同一坐标。
         try {
-          await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
-        } catch (e) {
-          logErr('CGEvent 点击失败，回退 System Events 辅助功能点击（一次性，不重复）：' + e.message);
           await runAppleScript(mouseClickAppleScript(target.cg.x, target.cg.y));
+        } catch (e) {
+          logErr('System Events 辅助功能点击失败，回退 CGEvent（一次性，不重复）：' + e.message);
+          await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
         }
       } else {
         await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));

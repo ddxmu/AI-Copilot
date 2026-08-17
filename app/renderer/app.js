@@ -3626,7 +3626,7 @@ async function sendChat() {
   // 存完整消息（含 tool_calls/tool）以便下次续接；初版是简版文本
   chatHistory.push({ role: 'user', content: text, attachments: attachmentsMeta });
   currentAssistantBubble = null;
-  chatStatusEl.textContent = '智能体工作中…';
+  chatStatusEl.innerHTML = '<span class="agent-working">智能体工作中…</span>';
 
   // 「继续」智能注入：如有未完成的任务，把当前 todo 列表拼成上下文
   let augmentedText = text;

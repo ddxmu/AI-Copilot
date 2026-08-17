@@ -1,12 +1,12 @@
 {
-  "version": "0.10.7",
+  "version": "0.10.8",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-17",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.7/AI.Copilot-0.10.7-arm64.dmg",
-  "dmgSha256": "8ac2dedd7f10fb593b1e5f87aa6981b8bb4ba5e93ebc570bc1b72a6d99ed18b5",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.7/AI.Copilot-0.10.7.zip",
-  "patchSha256": "8869d024dd34250ffbc06d5cb495db7f710aff7aa4c0675690698a09372efc35",
-  "notes": "### ComputerUse 左键点击改回 CGEvent 主路径\n- 左键主点击改回 CoreGraphics（CGEvent）真事件，落点、移动与界面逻辑（光标覆盖层、坐标换算）保持不变。\n- System Events 仅作一次性备用：仅当 CGEvent 抛错时在 catch 中回退一次，不循环、不重复点击。\n- 点击时序对齐为「移动到目标 → 等待 100ms → mouseDown → 50ms → mouseUp」，与双击/右键共用，落点更可靠。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.8/AI.Copilot-0.10.8-arm64.dmg",
+  "dmgSha256": "9ea44a9618df5d00936b07d9c5563acacf9ed62fc5bb78fdb2b52858372659a0",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.8/AI.Copilot-0.10.8.zip",
+  "patchSha256": "1f78739f2c9d4b2212f7d43aa4d590c1f2b39c542e33f4668d9bc893d581248b",
+  "notes": "### 1. 「智能体工作中…」状态文字渐变流光特效\n- 聊天框下方智能体运行期间显示「智能体工作中…」时，文字改为蓝色渐变流光效果（#2f6fed → #4f86f0 → #7aa9ff，background-clip:text + 流动动画），更醒目、贴合产品蓝调。\n- 通过内层 <span class=\"agent-working\"> 作用域隔离，仅该状态文字显示特效，切换/清空为其它状态时自动移除，不污染其它状态提示；并适配系统「减弱动态效果」偏好。\n### 2. ComputerUse 左键点击改回 System Events 主路径（调整 v0.10.7 决定）\n- 左键主点击恢复为 System Events 坐标式辅助功能点击（对 Chrome/Electron 的 HTML 控件命中更稳）；CGEvent 降为一次性备用。\n### 3. 升级后自动重签，修复屏幕录制授权反复弹窗\n- updater.js 在 OTA 增量覆盖/整包替换完成后新增对目标 App 的 ad-hoc 重签，解决升级后 macOS 反复弹出屏幕录制授权的问题。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -32,6 +32,11 @@
       "from": "0.10.6",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.7/AI.Copilot-0.10.7.zip",
       "sha256": "8869d024dd34250ffbc06d5cb495db7f710aff7aa4c0675690698a09372efc35"
+    },
+    {
+      "from": "0.10.7",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.8/AI.Copilot-0.10.8.zip",
+      "sha256": "1f78739f2c9d4b2212f7d43aa4d590c1f2b39c542e33f4668d9bc893d581248b"
     }
   ]
 }
