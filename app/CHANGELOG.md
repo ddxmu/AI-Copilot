@@ -1,3 +1,11 @@
+## v0.10.7 — 2026-08-17
+
+### ComputerUse 左键点击改回 CGEvent 主路径
+
+- **左键主点击改回 CoreGraphics（CGEvent）**：`click()` 左键优先用 `mouseClickJxa`（CGEvent 真事件），落点、移动与界面逻辑（光标覆盖层、坐标换算）保持不变。
+- **System Events 仅作一次性备用**：仅当 CGEvent 抛错时，在 `catch` 中回退一次 System Events 辅助功能点击；不循环、不重复点击同一坐标。
+- **点击时序对齐**：`mouseClickJxa` 改为「移动到目标 → 等待 100ms → mouseDown → 50ms → mouseUp」，与双击/右键共用，落点更可靠。
+
 ## v0.10.6 — 2026-08-17
 
 ### ComputerUse 点击逻辑修复（SERVER_VERSION 1.5.0 → 1.6.0）

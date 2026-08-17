@@ -1,12 +1,12 @@
 {
-  "version": "0.10.6",
+  "version": "0.10.7",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-17",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.6/AI.Copilot-0.10.6-arm64.dmg",
-  "dmgSha256": "50aa8dee1a69f34294435ced906a7598792180590f716d6f9af54eca7b16bcf1",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.6/AI.Copilot-0.10.6.zip",
-  "patchSha256": "2b94aca2a6e861fdbf16b81b1a03247e4099cfa591be31531c1d684bdcd9015e",
-  "notes": "### ComputerUse 点击逻辑修复（SERVER_VERSION 1.5.0 → 1.6.0）\n- 点击后随机等待 800–1500ms 再重新截图并读取真实浏览器 URL / 标题，不再立即判定成败。\n- 页面加载中持续轮询最多 3 秒，把「暂时无变化」与「点击失败」区分开。\n- query_ui 读取辅助功能元素时若只拿到窗口控件，等待后重试最多 2 次；反复提示优先用读到的按钮中心坐标点击，不要盲点截图坐标。\n- 识别 Chrome 个人资料选择页「打开用户资料 / 继续使用 / 登录」等按钮，显式建议优先点击其控制中心坐标。\n- 连续失败计数只在「完整重试（含 3 秒加载轮询）后仍无任何真实变化」时才增加，不因页面加载慢触发自动停止。\n- 最终必须凭真实 Chrome URL / 标题变化、焦点转移或像素变化判定生效，不再只凭「按键已发出」就报告完成。\n- 鼠标光标大小 / 红圈尺寸仅作视觉提示，点击落点始终用真实控件坐标，绝不用显示尺寸修正或偏移落点。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.7/AI.Copilot-0.10.7-arm64.dmg",
+  "dmgSha256": "8ac2dedd7f10fb593b1e5f87aa6981b8bb4ba5e93ebc570bc1b72a6d99ed18b5",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.7/AI.Copilot-0.10.7.zip",
+  "patchSha256": "8869d024dd34250ffbc06d5cb495db7f710aff7aa4c0675690698a09372efc35",
+  "notes": "### ComputerUse 左键点击改回 CGEvent 主路径\n- 左键主点击改回 CoreGraphics（CGEvent）真事件，落点、移动与界面逻辑（光标覆盖层、坐标换算）保持不变。\n- System Events 仅作一次性备用：仅当 CGEvent 抛错时在 catch 中回退一次，不循环、不重复点击。\n- 点击时序对齐为「移动到目标 → 等待 100ms → mouseDown → 50ms → mouseUp」，与双击/右键共用，落点更可靠。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -27,6 +27,11 @@
       "from": "0.10.5",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.6/AI.Copilot-0.10.6.zip",
       "sha256": "2b94aca2a6e861fdbf16b81b1a03247e4099cfa591be31531c1d684bdcd9015e"
+    },
+    {
+      "from": "0.10.6",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.7/AI.Copilot-0.10.7.zip",
+      "sha256": "8869d024dd34250ffbc06d5cb495db7f710aff7aa4c0675690698a09372efc35"
     }
   ]
 }

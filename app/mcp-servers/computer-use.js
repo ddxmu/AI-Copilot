@@ -704,16 +704,16 @@ function mouseClickJxa(x, y, button, isDouble) {
   const up = button === 'right' ? '$.kCGEventRightMouseUp' : button === 'middle' ? '$.kCGEventOtherMouseUp' : '$.kCGEventLeftMouseUp';
   const lines = ['ObjC.import("CoreGraphics");', 'ObjC.import("Foundation");'];
   lines.push(`var mv=$.CGEventCreateMouseEvent(0,$.kCGEventMouseMoved,$.CGPointMake(${x},${y}),0);$.CGEventPost($.kCGHIDEventTap,mv);`);
-  // 对标 Claude Code moveAndSettle：瞬移后等 50ms，给 input→HID→AppKit 一个 round-trip，
+  // 移动到目标后等 100ms：给 input→HID→AppKit 一个 round-trip，
   // 让目标应用 hover 状态稳定、clickCount 计时正确，落点更可靠。
-  lines.push('$.NSThread.sleepForTimeInterval(0.05);');
+  lines.push('$.NSThread.sleepForTimeInterval(0.1);');
   const n = isDouble ? 2 : 1;
   for (let i = 0; i < n; i++) {
     lines.push(`var d${i}=$.CGEventCreateMouseEvent(0,${down},$.CGPointMake(${x},${y}),${btn});`);
     if (n > 1) lines.push(`$.CGEventSetIntegerValueField(d${i},$.kCGMouseEventClickState,${n});`);
     lines.push(`$.CGEventPost($.kCGHIDEventTap,d${i});`);
-    // 目标应用需要一小段时间完成 hit-test 与状态切换；down/up 背靠背容易被忽略
-    lines.push('$.NSThread.sleepForTimeInterval(0.04);');
+    // 目标应用需要一小段时间完成 hit-test 与状态切换；down 后等 50ms 再 up，避免被忽略
+    lines.push('$.NSThread.sleepForTimeInterval(0.05);');
     lines.push(`var u${i}=$.CGEventCreateMouseEvent(0,${up},$.CGPointMake(${x},${y}),${btn});`);
     if (n > 1) lines.push(`$.CGEventSetIntegerValueField(u${i},$.kCGMouseEventClickState,${n});`);
     lines.push(`$.CGEventPost($.kCGHIDEventTap,u${i});`);
@@ -1164,12 +1164,13 @@ const TOOLS = {
     await sleep(40);
     try {
       if (button === 'left') {
-        // 左键优先 System Events 辅助功能点击；若被系统拒绝（权限/特殊 UI）回退 CoreGraphics
+        // 左键主点击改回 CGEvent（CoreGraphics）：move → 100ms → mouseDown → 50ms → mouseUp。
+        // System Events 仅作一次性备用方案，不连续重复点击同一坐标。
         try {
-          await runAppleScript(mouseClickAppleScript(target.cg.x, target.cg.y));
-        } catch (e) {
-          logErr('System Events 辅助功能点击失败，回退 CoreGraphics：' + e.message);
           await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
+        } catch (e) {
+          logErr('CGEvent 点击失败，回退 System Events 辅助功能点击（一次性，不重复）：' + e.message);
+          await runAppleScript(mouseClickAppleScript(target.cg.x, target.cg.y));
         }
       } else {
         await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
