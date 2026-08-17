@@ -1251,13 +1251,13 @@ const TOOLS = {
     await sleep(35);
     try {
       if (button === 'left') {
-        // 左键优先使用 System Events 的坐标式辅助功能点击，对 Chrome/Electron HTML 控件更稳定。
-        // CGEvent 仅作一次性备用方案，不连续重复点击同一坐标。
+        // 左键主点击走 CGEvent（mouseClickJxa）：移动到目标 → 等 100ms → mouseDown → 50ms → mouseUp。
+        // System Events 的坐标式辅助功能点击仅作一次性备用方案，不能连续重复点击同一坐标。
         try {
-          await runAppleScript(mouseClickAppleScript(target.cg.x, target.cg.y));
-        } catch (e) {
-          logErr('System Events 辅助功能点击失败，回退 CGEvent（一次性，不重复）：' + e.message);
           await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
+        } catch (e) {
+          logErr('CGEvent 点击失败，回退 System Events 辅助功能点击（一次性，不重复）：' + e.message);
+          await runAppleScript(mouseClickAppleScript(target.cg.x, target.cg.y));
         }
       } else {
         await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
@@ -1753,7 +1753,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'click',
-    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。坐标必须是控件的几何中心，不能是边缘（可先用 query_ui 拿到精确中心）。点击前会先让真实鼠标平滑移动到目标并校验目标应用仍在前台（焦点漂移则自动重新聚焦），点击后会快速验证：先等待约 220ms 再重新截图比对像素，并读取真实浏览器 URL/标题与焦点状态；若页面仍在加载（暂时无变化）会继续轮询最多 3 秒，不会把「暂时无变化」误判为点击失败；只有「完整重试后仍无任何真实变化」才判定本次点击「未生效」并计入连续失败——此时禁止用同一坐标重试，应改用键盘快捷键或重新定位；连续 2 次失败会自动停止并要求你向用户报告原因。成功一律以真实证据（像素/焦点/URL/标题变化）为准，不会只因「按键已发出」就报完成。左键优先走 System Events 辅助功能点击（对 Chrome/Electron HTML 控件命中可靠，5 秒超时保护），被拒时回退 CoreGraphics 真实事件。多显示器时传 display（1=主屏）。',
+    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。坐标必须是控件的几何中心，不能是边缘（可先用 query_ui 拿到精确中心）。点击前会先让真实鼠标平滑移动到目标并校验目标应用仍在前台（焦点漂移则自动重新聚焦），点击后会快速验证：先等待约 220ms 再重新截图比对像素，并读取真实浏览器 URL/标题与焦点状态；若页面仍在加载（暂时无变化）会继续轮询最多 3 秒，不会把「暂时无变化」误判为点击失败；只有「完整重试后仍无任何真实变化」才判定本次点击「未生效」并计入连续失败——此时禁止用同一坐标重试，应改用键盘快捷键或重新定位；连续 2 次失败会自动停止并要求你向用户报告原因。成功一律以真实证据（像素/焦点/URL/标题变化）为准，不会只因「按键已发出」就报完成。左键主点击走 CoreGraphics 真实事件（CGEvent：移动到目标→等100ms→mouseDown→50ms→mouseUp），失败时回退 System Events 辅助功能点击（一次性，不连续重复同一坐标）。多显示器时传 display（1=主屏）。',
     inputSchema: {
       type: 'object',
       properties: {

@@ -1,3 +1,14 @@
+## v0.10.10 — 2026-08-18
+
+### 1. ComputerUse 左键点击改回 CGEvent 主路径（反转 v0.10.9 决定）
+
+- 左键主点击由 **System Events 坐标式辅助功能点击** 改回 **CoreGraphics 真实事件（`mouseClickJxa`）**。
+- 点击流程：移动到目标 → 等 100ms → `mouseDown` → 50ms → `mouseUp`（与 v0.10.7 一致，`mouseClickJxa` 内已实现）。
+- System Events 降为**一次性备用方案**：仅当 CGEvent 抛错时回退一次，**不能连续重复点击同一坐标**。
+- 保留现有坐标换算（`modelToTarget` / `target.cg`）、鼠标平滑移动（`movePointerTo`）、光标遮罩与界面逻辑、verifyClick 校验逻辑，**未改动鼠标大小与坐标算法**。
+- `double_click` / `right_click` 本就是 CGEvent 主路径，无需调整。
+- 同步更新 click 工具的 description（注入给 AI 的 schema），使其与主/备交换后的行为一致。
+
 ## v0.10.9 — 2026-08-17
 
 ### 1. ComputerUse 重写（用户提供的改版）

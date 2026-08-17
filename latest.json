@@ -1,12 +1,12 @@
 {
-  "version": "0.10.9",
+  "version": "0.10.10",
   "minimumVersion": "0.8.25",
-  "releaseDate": "2026-08-17",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.9/AI.Copilot-0.10.9-arm64.dmg",
-  "dmgSha256": "07e4c5bafe0f09ece79b5ff1ea5514642e1f1847cdcca00afd9a845755235df0",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.9/AI.Copilot-0.10.9.zip",
-  "patchSha256": "13ee2f5b4420f66e657ec24020a63f6e0da00be681368373bdff7ea2330ca9ae",
-  "notes": "### 1. ComputerUse 重写（用户提供的改版）\n- 采用用户修改后的 computer-use.js：相比 v0.10.8 有较大量调整（约 146 行新增 / 53 行删除），具体以用户改版为准；左键点击仍为 System Events 主路径。\n### 2. AI 光标遮罩无操作隐藏延长至 10 秒\n- main.js 中 CURSOR_IDLE_MS 由 5000 调整为 10000：ComputerUse 的 AI 光标遮罩在连续无操作 10 秒后才自动隐藏（有操作即重置）。\n### 3. 「智能体工作中…」状态文字改为黑色流光\n- 聊天框下方智能体运行期间显示「智能体工作中…」时，文字由 v0.10.8 的蓝色渐变改为黑色渐变流光（黑色底 + 极淡深灰流动高光，background-clip:text + 流动动画），更克制、与浅色界面更协调；仍通过内层 <span class=\"agent-working\"> 作用域隔离，并适配系统「减弱动态效果」偏好。",
+  "releaseDate": "2026-08-18",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.10/AI.Copilot-0.10.10-arm64.dmg",
+  "dmgSha256": "ce5e3caf93a05f467864b7b8930b8c313585dba1904547bb2cf04491abc39dc6",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.10/AI.Copilot-0.10.10.zip",
+  "patchSha256": "3c880c7a64c00cf525bfaecea397a71508094c509288aece4aa6f2e27204600e",
+  "notes": "### 1. ComputerUse 左键点击改回 CGEvent 主路径（反转 v0.10.9 决定）\n- 左键主点击由 System Events 改回 CoreGraphics 真实事件（mouseClickJxa）：移动到目标 → 等 100ms → mouseDown → 50ms → mouseUp。\n- System Events 降为一次性备用方案，仅 CGEvent 抛错时回退一次，不连续重复点击同一坐标。\n- 保留现有坐标换算、鼠标平滑移动、光标遮罩与界面逻辑，未改动鼠标大小与坐标算法。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -42,6 +42,11 @@
       "from": "0.10.8",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.9/AI.Copilot-0.10.9.zip",
       "sha256": "13ee2f5b4420f66e657ec24020a63f6e0da00be681368373bdff7ea2330ca9ae"
+    },
+    {
+      "from": "0.10.9",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.10/AI.Copilot-0.10.10.zip",
+      "sha256": "3c880c7a64c00cf525bfaecea397a71508094c509288aece4aa6f2e27204600e"
     }
   ]
 }
