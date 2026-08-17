@@ -1,3 +1,12 @@
+## v0.10.4 — 2026-08-17
+
+### 修复 v0.10.3 语音设置「保存 / 测试语音」失效，STT 拆为独立区块
+- **根因**：v0.10.3 编辑 `initVoiceSettings` 时误删了 `const saveBtn = document.getElementById('btn-voice-save')` 声明，`if (saveBtn)` 引用未定义变量触发 `ReferenceError`，导致整个函数在绑定「保存」与「测试语音」按钮之前就中断，两个按钮均无反应。
+- **修复**：
+  - 恢复 `saveBtn` 声明，「保存」与「测试语音」功能回归（与 v0.10.2 行为一致）。
+  - **语音识别（STT）拆为独立卡片**：UI 分「AI 语音合成（TTS）」与「语音识别（STT）」两块，互不嵌套，STT 有自己的状态提示 `voice-stt-status`，不再与 TTS 的 `voice-fetch-status` 混用。
+  - TTS（本地 / MiniMax / 自定义）配置逻辑与「测试语音」**未改动**。
+
 ## v0.10.3 — 2026-08-17
 
 ### 语音识别（STT）重构：独立 OpenAI 兼容配置，不再误调 MiniMax ASR

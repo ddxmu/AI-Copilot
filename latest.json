@@ -1,17 +1,22 @@
 {
-  "version": "0.10.3",
+  "version": "0.10.4",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-17",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.3/AI.Copilot-0.10.3-arm64.dmg",
-  "dmgSha256": "5f4adfa0b86bc272b301361a6924c93929adb147699c877e237abb6951d1d646",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.3/AI.Copilot-0.10.3.zip",
-  "patchSha256": "3ccf2711a1fd29ad63ad3aee48fb095e9c3035936d8af3ff49c1e27adf3dcd2b",
-  "notes": "### 语音识别（STT）重构：独立 OpenAI 兼容配置，不再误调 MiniMax ASR\n- 根因：旧逻辑按 TTS provider 选 STT 端点，MiniMax Token Plan Key 无 ASR 权限返回 404，麦克风点了识别不到文字。\n- 修复：\n  - 语音识别改为独立配置（与 TTS 完全解耦）：sttEnabled / sttProvider / sttBaseUrl / sttKey / sttModel，默认 openai，走 OpenAI 兼容 /v1/audio/transcriptions。\n  - 不再盲目调用 MiniMax /v1/audio/asr：仅当用户明确选 minimax 才走原生 ASR（复用 MiniMax TTS Key）。\n  - MiniMax TTS 配置保持不变。\n  - 录音显示实时音量波形；支持「按住说话」与「点击开始 / 再点结束」。\n  - 识别文字只填入输入框、不自动发送。\n  - 错误分两类：麦克风权限错误（引导系统设置）与接口/网络错误（返回真实原因，401/403 与 404 分别提示）。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.4/AI.Copilot-0.10.4-arm64.dmg",
+  "dmgSha256": "a1439877ed2fb35a89048b80fe1a9d9563570a4361cb75df08f77d3531acd7a2",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.4/AI.Copilot-0.10.4.zip",
+  "patchSha256": "8bede339fb69dfdf5c0a0e954d2594e18c16dd524b5f5d0b1a743b684e6e5db7",
+  "notes": "### 修复 v0.10.3 语音设置「测试语音 / 保存」点不动 + 语音识别（STT）独立区块\n- 根因：v0.10.3 编辑 initVoiceSettings 时误删了 `const saveBtn = document.getElementById('btn-voice-save')` 声明，导致 `if (saveBtn)` 抛 ReferenceError，整个初始化函数在绑定测试语音点击处理器之前就中断 → 测试语音与保存两个按钮全部失效。\n- 修复：\n  - 恢复 `saveBtn` 声明，「测试语音」与「保存」按钮恢复正常可用（功能与 v0.10.2 一致，未改算法）。\n  - 语音识别（麦克风转文字 / STT）从 TTS 区块拆出，独立成单独卡片单独显示；STT 拉取模型状态改用独立元素 voice-stt-status，不再污染 TTS 状态。\n  - TTS 三个供应商（本地 / MiniMax / 自定义）与 STT 独立配置（sttEnabled / sttProvider / sttBaseUrl / sttKey / sttModel）保持解耦，保存时一并写入 aiVoiceConfigSet。",
   "deltas": [
     {
       "from": "0.10.2",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.3/AI.Copilot-0.10.3.zip",
       "sha256": "3ccf2711a1fd29ad63ad3aee48fb095e9c3035936d8af3ff49c1e27adf3dcd2b"
+    },
+    {
+      "from": "0.10.3",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.4/AI.Copilot-0.10.4.zip",
+      "sha256": "8bede339fb69dfdf5c0a0e954d2594e18c16dd524b5f5d0b1a743b684e6e5db7"
     }
   ]
 }

@@ -1032,6 +1032,7 @@ async function initVoiceSettings() {
   const panels = document.querySelectorAll('.voice-panel');
   const fetchStatus = document.getElementById('voice-fetch-status');
   const testStatus = document.getElementById('voice-test-status');
+  const saveBtn = document.getElementById('btn-voice-save');
 
   // 本地元素
   const localVoiceSelect = document.getElementById('voice-local-voice');
@@ -1179,27 +1180,29 @@ async function initVoiceSettings() {
   setupApiKeyToggle('voice-stt-apikey', 'voice-stt-apikey-toggle');
   fillSelectOptions(sttModelSelect, [], voiceConfig.sttModel, '请选择模型');
 
+  const sttStatus = document.getElementById('voice-stt-status');
+
   if (sttFetchModelsBtn) {
     sttFetchModelsBtn.addEventListener('click', async () => {
-      fetchStatus.textContent = '';
-      if (activeSttProvider !== 'openai') { fetchStatus.textContent = 'MiniMax 原生识别无需拉取模型'; return; }
+      sttStatus.textContent = '';
+      if (activeSttProvider !== 'openai') { sttStatus.textContent = 'MiniMax 原生识别无需拉取模型'; return; }
       const key = sttApiKey ? sttApiKey.value.trim() : '';
       const base = sttBaseUrl ? sttBaseUrl.value.trim() : '';
-      if (!key) { fetchStatus.textContent = '请先填写 API Key'; return; }
-      if (!base) { fetchStatus.textContent = '请先填写接口地址'; return; }
+      if (!key) { sttStatus.textContent = '请先填写 API Key'; return; }
+      if (!base) { sttStatus.textContent = '请先填写接口地址'; return; }
       sttFetchModelsBtn.disabled = true; sttFetchModelsBtn.textContent = '拉取中…';
       try {
         const r = await window.api.aiVoiceFetchModels(key, base);
         sttFetchModelsBtn.disabled = false; sttFetchModelsBtn.textContent = '拉取模型';
         if (r.ok && Array.isArray(r.models) && r.models.length) {
           fillSelectOptions(sttModelSelect, r.models, voiceConfig.sttModel, '请选择模型');
-          fetchStatus.textContent = `已拉取 ${r.models.length} 个模型（来自接口）`;
+          sttStatus.textContent = `已拉取 ${r.models.length} 个模型（来自接口）`;
         } else {
-          fetchStatus.textContent = `拉取失败：${r.error || '未知错误'}`;
+          sttStatus.textContent = `拉取失败：${r.error || '未知错误'}`;
         }
       } catch (e) {
         sttFetchModelsBtn.disabled = false; sttFetchModelsBtn.textContent = '拉取模型';
-        fetchStatus.textContent = '拉取失败：' + (e && e.message ? e.message : String(e));
+        sttStatus.textContent = '拉取失败：' + (e && e.message ? e.message : String(e));
       }
     });
   }
