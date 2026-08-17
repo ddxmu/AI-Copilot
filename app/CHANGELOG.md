@@ -1,3 +1,10 @@
+## v0.10.2 — 2026-08-17
+
+### 推荐技能新增 computeruse-file-authoring
+- 在「AI 设置 → 智能体技能 → 推荐技能」加入 `computeruse-file-authoring`，用户可一键安装。
+- 安装源为 GitHub 仓库 `ddxmu/computeruse-file-authoring-skill`（分支 `main`），从仓库拉取 SKILL.md 到本地技能目录。
+- 该技能用于文件自动化：在 macOS 文件夹中理解需求、规划内容、创建或修改文件、专业排版、生成流程图、保存并验证结果，默认使用内置 ComputerUse 操作屏幕。
+
 ## v0.10.1 — 2026-08-17
 
 ### 修复关闭外部 MCP 后内置 ComputerUse 不可用

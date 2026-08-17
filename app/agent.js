@@ -493,6 +493,12 @@ const RECOMMENDED_SKILLS = {
       },
     ],
   },
+  'computeruse-file-authoring': {
+    description: '文件自动化：在 macOS 文件夹中理解需求、规划内容、创建或修改文件、专业排版、生成流程图、保存并验证结果；默认使用内置 ComputerUse 操作屏幕',
+    category: '文件处理',
+    repo: 'ddxmu/computeruse-file-authoring-skill',
+    branch: 'main',
+  },
 };
 
 // 运行时技能表 = 内置 + 外部安装（userData/skills/<name>/SKILL.md）
