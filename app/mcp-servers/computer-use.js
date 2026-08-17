@@ -42,6 +42,44 @@ function logErr(msg) {
 /* ---------------- 光标事件上报（让主进程遮罩显示 AI 鼠标） ---------------- */
 let cursorSocket = null;
 let cursorSocketReady = false;
+let cursorQueue = [];
+const CURSOR_QUEUE_LIMIT = 128;
+
+function queueCursorEvent(obj) {
+  // 连接尚未完成时只保留最后一个连续移动点，避免首次操作时事件丢失或积压。
+  const last = cursorQueue[cursorQueue.length - 1];
+  if (last && last.t === 'move' && obj.t === 'move') {
+    cursorQueue[cursorQueue.length - 1] = obj;
+  } else {
+    cursorQueue.push(obj);
+  }
+  if (cursorQueue.length > CURSOR_QUEUE_LIMIT) {
+    cursorQueue.splice(0, cursorQueue.length - CURSOR_QUEUE_LIMIT);
+  }
+}
+
+function writeCursorEvent(obj) {
+  if (!cursorSocketReady || !cursorSocket) return false;
+  try {
+    cursorSocket.write(JSON.stringify(obj) + '\n');
+    return true;
+  } catch (e) {
+    cursorSocketReady = false;
+    try { cursorSocket.destroy(); } catch (ignored) { /* ignore */ }
+    cursorSocket = null;
+    return false;
+  }
+}
+
+function flushCursorQueue() {
+  while (cursorSocketReady && cursorSocket && cursorQueue.length) {
+    const obj = cursorQueue.shift();
+    if (!writeCursorEvent(obj)) {
+      cursorQueue.unshift(obj);
+      break;
+    }
+  }
+}
 
 function connectCursorSocket() {
   if (cursorSocket || cursorSocketReady) return;
@@ -49,21 +87,33 @@ function connectCursorSocket() {
   if (!sockPath) return;
   try {
     const s = net.createConnection(sockPath);
-    s.on('connect', () => { cursorSocketReady = true; });
-    s.on('error', () => { cursorSocketReady = false; cursorSocket = null; });
-    s.on('close', () => { cursorSocketReady = false; cursorSocket = null; });
     cursorSocket = s;
+    s.on('connect', () => {
+      cursorSocketReady = true;
+      flushCursorQueue();
+    });
+    s.on('error', () => {
+      if (cursorSocket !== s) return;
+      cursorSocketReady = false;
+      cursorSocket = null;
+    });
+    s.on('close', () => {
+      if (cursorSocket !== s) return;
+      cursorSocketReady = false;
+      cursorSocket = null;
+    });
   } catch (e) { cursorSocket = null; }
 }
 
 function sendCursor(t, x, y) {
-  connectCursorSocket();
-  if (!cursorSocketReady || !cursorSocket) return;
+  const sockPath = process.env.AI_COPILOT_CURSOR_SOCK;
+  if (!sockPath) return;
   const obj = { t };
   if (x != null) obj.x = Math.round(x);
   if (y != null) obj.y = Math.round(y);
-  try { cursorSocket.write(JSON.stringify(obj) + '\n'); } catch (e) {
-    cursorSocketReady = false; cursorSocket = null;
+  connectCursorSocket();
+  if (!cursorSocketReady || !cursorSocket || !writeCursorEvent(obj)) {
+    queueCursorEvent(obj);
   }
 }
 
@@ -229,6 +279,13 @@ let _aborted = false;
 let _abortKill = false;
 let _currentChild = null;
 let _lastCg = { x: 0, y: 0 }; // 最近一次真实鼠标事件的 CG 坐标（用于中断时安全松键）
+let _hasLastCg = false;
+
+function rememberCg(point) {
+  _lastCg = { x: Number(point.x), y: Number(point.y) };
+  _hasLastCg = true;
+  return _lastCg;
+}
 
 function setCurrentChild(p) { _currentChild = p; }
 function clearCurrentChild(p) { if (_currentChild === p) _currentChild = null; }
@@ -240,7 +297,7 @@ function abortCurrent() {
   _aborted = true;
   _abortKill = true;
   _sessionStopped = true;
-  if (_lastCg) runJxa(mouseUpJxa(_lastCg.x, _lastCg.y)).catch(() => {});
+  if (_hasLastCg) runJxa(mouseUpJxa(_lastCg.x, _lastCg.y)).catch(() => {});
   if (_currentChild) {
     try { _currentChild.kill('SIGTERM'); } catch (e) { /* ignore */ }
   }
@@ -388,15 +445,22 @@ async function captureShotFile(display) {
   const src = path.join(TMP, `verify_${stamp}.png`);
   const capArgs = ['-x', '-t', 'png'];
   if (idx > 1) capArgs.unshift('-D', String(idx));
-  await spawnAsync('screencapture', capArgs.concat([src]));
-  if (!fs.existsSync(src)) throw new Error('验证截图未生成');
-  trackShotFile(src);
-  const dst = path.join(TMP, `verify_${stamp}_s.png`);
-  // -z 强制重采样到固定 32×32（不保持长宽比），保证两次采样网格严格可比
-  await spawnAsync('sips', ['-z', String(SIG_GRID), String(SIG_GRID), src, '--out', dst]);
-  if (!fs.existsSync(dst)) throw new Error('验证截图重采样失败');
-  trackShotFile(dst);
-  return dst;
+  // 内部验证不应把 AI 光标或点击涟漪当成页面变化；截图完成后马上恢复显示。
+  sendCursor('hide');
+  await sleep(18);
+  try {
+    await spawnAsync('screencapture', capArgs.concat([src]));
+    if (!fs.existsSync(src)) throw new Error('验证截图未生成');
+    trackShotFile(src);
+    const dst = path.join(TMP, `verify_${stamp}_s.png`);
+    // -z 强制重采样到固定 32×32（不保持长宽比），保证两次采样网格严格可比
+    await spawnAsync('sips', ['-z', String(SIG_GRID), String(SIG_GRID), src, '--out', dst]);
+    if (!fs.existsSync(dst)) throw new Error('验证截图重采样失败');
+    trackShotFile(dst);
+    return dst;
+  } finally {
+    sendCursor('show');
+  }
 }
 
 // 极简 PNG 解码（8bit、非隔行，灰度/灰度+A/RGB/RGBA）→ 逐像素灰度数组。
@@ -586,7 +650,7 @@ async function captureState(display) {
 }
 
 // 点击后验证（需求 #1/#2/#5/#6 强化）：
-//   ① 点击后不立即判定：随机等待 800~1500ms，给页面反应时间；
+//   ① 点击后不立即判定：先等待约 220ms，给页面反应时间；
 //   ② 重新截图比对像素 + 读焦点描述 + 读真实浏览器 URL/标题；
 //   ③ 若页面仍在加载（暂时无变化），继续轮询最多 3 秒，不把「暂时无变化」当失败；
 //   ④ 只有「完整重试（含 3 秒轮询）后」仍无任何真实证据变化，才返回 nochange；
@@ -595,8 +659,8 @@ async function captureState(display) {
 // 返回 { result: 'ok'|'nochange'|'unknown', reason, browser? }
 async function verifyClick(display, before) {
   if (!before) return { result: 'unknown', reason: 'nobaseline' };
-  // ① 初始等待 800~1500ms（随机，避免每次固定节奏被页面动画误判）
-  await sleep(800 + Math.floor(Math.random() * 700));
+  // ① 先给控件一个短暂反应时间，再以较短间隔轮询，减少点击后的无谓停顿。
+  await sleep(220);
   const deadline = Date.now() + 3000; // ② 最多再轮询 3 秒
   let lastD = null;
   let lastBrowser = null;
@@ -621,7 +685,7 @@ async function verifyClick(display, before) {
     if (browserStateChanged(before.browser, afterBrowser)) return { result: 'ok', reason: 'browser', browser: afterBrowser };
     // ③ 仍在加载/暂时无变化：若还有时间则继续轮询，不把「暂时无变化」当失败
     if (Date.now() >= deadline) break;
-    await sleep(400);
+    await sleep(220);
   }
   // ④ 完整重试（含 3 秒轮询）后仍无变化
   if (!lastD) return { result: 'unknown', reason: 'noread' };
@@ -687,15 +751,41 @@ function setLastPos(x, y, display) { _lastPos = { x, y }; _lastDisplay = display
 
 // 平滑移动：从 from 逐帧插值到 to，桌面光标可见且连续移动
 function mouseMoveJxa(tx, ty, fx, fy) {
-  const lines = ['ObjC.import("CoreGraphics");'];
+  const lines = ['ObjC.import("CoreGraphics");', 'ObjC.import("Foundation");'];
   if (!isFinite(fx) || !isFinite(fy)) { fx = tx; fy = ty; }
-  const steps = 24;
+  const distance = Math.hypot(tx - fx, ty - fy);
+  const steps = distance < 2 ? 1 : Math.max(4, Math.min(32, Math.ceil(distance / 36)));
   for (let i = 1; i <= steps; i++) {
     const x = Math.round(fx + (tx - fx) * i / steps);
     const y = Math.round(fy + (ty - fy) * i / steps);
     lines.push(`var e${i}=$.CGEventCreateMouseEvent(0,$.kCGEventMouseMoved,$.CGPointMake(${x},${y}),0);$.CGEventPost($.kCGHIDEventTap,e${i});`);
+    if (i < steps) lines.push('$.NSThread.sleepForTimeInterval(0.008);');
   }
   return lines.join('\n');
+}
+
+function cursorMoveSteps(fx, fy, tx, ty) {
+  const distance = Math.hypot(tx - fx, ty - fy);
+  return distance < 2 ? 1 : Math.max(4, Math.min(32, Math.ceil(distance / 36)));
+}
+
+async function animateCursorVisual(fx, fy, tx, ty) {
+  if (!isFinite(fx) || !isFinite(fy)) { fx = tx; fy = ty; }
+  const steps = cursorMoveSteps(fx, fy, tx, ty);
+  for (let i = 1; i <= steps; i++) {
+    const x = Math.round(fx + (tx - fx) * i / steps);
+    const y = Math.round(fy + (ty - fy) * i / steps);
+    sendCursor('move', x, y);
+    if (i < steps) await sleep(8);
+  }
+}
+
+async function movePointerTo(fx, fy, tx, ty) {
+  if (!isFinite(fx) || !isFinite(fy)) { fx = tx; fy = ty; }
+  await Promise.all([
+    runJxa(mouseMoveJxa(tx, ty, fx, fy)),
+    animateCursorVisual(fx, fy, tx, ty),
+  ]);
 }
 
 function mouseClickJxa(x, y, button, isDouble) {
@@ -737,10 +827,6 @@ function mouseClickAppleScript(x, y) {
     `end timeout\n` +
     `return ""`
   );
-}
-
-function mouseMoveInstantJxa(x, y) {
-  return `ObjC.import("CoreGraphics");\nvar mv=$.CGEventCreateMouseEvent(0,$.kCGEventMouseMoved,$.CGPointMake(${x},${y}),0);$.CGEventPost($.kCGHIDEventTap,mv);`;
 }
 
 function mouseDownJxa(x, y) {
@@ -1133,10 +1219,9 @@ const TOOLS = {
     await guard();
     const { x, y } = numPair(args, 'x', 'y');
     const target = await modelToTarget(x, y, args.display);
-    const from = _lastCg && isFinite(_lastCg.x) ? _lastCg : { x: target.cg.x, y: target.cg.y };
-    _lastCg = target.cg;
-    sendCursor('move', target.cg.x, target.cg.y);
-    await runJxa(mouseMoveJxa(target.cg.x, target.cg.y, from.x, from.y));
+    const from = _hasLastCg && isFinite(_lastCg.x) ? _lastCg : target.cg;
+    rememberCg(target.cg);
+    await movePointerTo(from.x, from.y, target.cg.x, target.cg.y);
     setLastPos(x, y, target.display);
     return okText(`鼠标已移动到图像坐标 (${x}, ${y})（显示器 ${target.display}，逻辑点 ${Math.round(target.logical.x)}, ${Math.round(target.logical.y)}）`);
   },
@@ -1144,7 +1229,7 @@ const TOOLS = {
   // 点击流程（v1.6.0 强化，对接需求 #1/#2/#5/#6/#7）：
   //   guard() 校验停止标记 / 连续失败 / 目标应用是否仍在前台（漂移则自动重新聚焦）
   //   → 抓操作前基线（像素指纹 + 焦点 + 真实浏览器 URL/标题）
-  //   → 点击 → verifyClick：先随机等 800~1500ms 再重截 + 读 URL/标题，页面加载则轮询最多 3 秒，
+  //   → 平滑移到目标并建立基线 → 点击 → verifyClick：先等约 220ms 再重截 + 读 URL/标题，页面加载则轮询最多 3 秒，
   //     不把「暂时无变化」当失败；只有完整重试后仍无真实证据变化才计入连续失败（需求 #5）。
   //   成功必须由真实证据支撑（像素/焦点/URL/标题），绝不只凭「按键已发出」（需求 #6）。
   //   注（需求 #7）：AI 光标遮罩大小只影响显示，点击坐标一律用真实 CG 坐标 target.cg，
@@ -1153,15 +1238,17 @@ const TOOLS = {
     await guard();
     const { x, y } = numPair(args, 'x', 'y');
     const target = await modelToTarget(x, y, args.display);
-    _lastCg = target.cg;
+    const from = _hasLastCg && isFinite(_lastCg.x) ? _lastCg : target.cg;
+    rememberCg(target.cg);
     const button = String(args.button || 'left').toLowerCase();
     const display = target.display;
+    // 先让真实鼠标到达目标，再建立基线，避免 hover 变化被误判成点击成功。
+    await movePointerTo(from.x, from.y, target.cg.x, target.cg.y);
+    await sleep(45);
     const before = await captureState(display);
-    sendCursor('move', target.cg.x, target.cg.y);
-    await sleep(30);
     // 真正点击前隐藏覆盖层，避免透明窗口拦截命中测试
     sendCursor('hide');
-    await sleep(40);
+    await sleep(35);
     try {
       if (button === 'left') {
         // 左键优先使用 System Events 的坐标式辅助功能点击，对 Chrome/Electron HTML 控件更稳定。
@@ -1182,6 +1269,7 @@ const TOOLS = {
     }
     setLastPos(x, y, display);
     sendCursor('click', target.cg.x, target.cg.y);
+    sendCursor('show');
     const v = await verifyClick(display, before);
     let verify;
     if (v.result === 'ok') {
@@ -1209,13 +1297,14 @@ const TOOLS = {
     await guard();
     const { x, y } = numPair(args, 'x', 'y');
     const target = await modelToTarget(x, y, args.display);
-    _lastCg = target.cg;
+    const from = _hasLastCg && isFinite(_lastCg.x) ? _lastCg : target.cg;
+    rememberCg(target.cg);
     const display = target.display;
+    await movePointerTo(from.x, from.y, target.cg.x, target.cg.y);
+    await sleep(45);
     const before = await captureState(display);
-    sendCursor('move', target.cg.x, target.cg.y);
-    await sleep(30);
     sendCursor('hide');
-    await sleep(40);
+    await sleep(35);
     try {
       await runJxa(mouseClickJxa(target.cg.x, target.cg.y, 'left', true));
     } catch (e) {
@@ -1225,6 +1314,7 @@ const TOOLS = {
     }
     setLastPos(x, y, display);
     sendCursor('click', target.cg.x, target.cg.y);
+    sendCursor('show');
     const v = await verifyClick(display, before);
     let verify;
     if (v.result === 'ok') { verify = '界面已变化，双击生效'; markSuccess(); }
@@ -1239,13 +1329,14 @@ const TOOLS = {
     await guard();
     const { x, y } = numPair(args, 'x', 'y');
     const target = await modelToTarget(x, y, args.display);
-    _lastCg = target.cg;
+    const from = _hasLastCg && isFinite(_lastCg.x) ? _lastCg : target.cg;
+    rememberCg(target.cg);
     const display = target.display;
+    await movePointerTo(from.x, from.y, target.cg.x, target.cg.y);
+    await sleep(45);
     const before = await captureState(display);
-    sendCursor('move', target.cg.x, target.cg.y);
-    await sleep(30);
     sendCursor('hide');
-    await sleep(40);
+    await sleep(35);
     try {
       await runJxa(mouseClickJxa(target.cg.x, target.cg.y, 'right', false));
     } catch (e) {
@@ -1255,6 +1346,7 @@ const TOOLS = {
     }
     setLastPos(x, y, display);
     sendCursor('click', target.cg.x, target.cg.y);
+    sendCursor('show');
     const v = await verifyClick(display, before);
     let verify;
     if (v.result === 'ok') { verify = '右键菜单已出现'; markSuccess(); }
@@ -1269,10 +1361,10 @@ const TOOLS = {
     await guard();
     const f = await modelToTarget(args.from_x, args.from_y, args.display);
     const t = await modelToTarget(args.to_x, args.to_y, args.display);
-    _lastCg = t.cg;
-    // 瞬移到起点（避免中途 hover 触发意外状态），settle 后再按下左键
-    sendCursor('move', f.cg.x, f.cg.y);
-    await runJxa(mouseMoveInstantJxa(f.cg.x, f.cg.y));
+    const from = _hasLastCg && isFinite(_lastCg.x) ? _lastCg : f.cg;
+    rememberCg(t.cg);
+    // 平滑到起点，settle 后再按下左键。
+    await movePointerTo(from.x, from.y, f.cg.x, f.cg.y);
     await sleep(50);
     sendCursor('down', f.cg.x, f.cg.y);
     await runJxa(mouseDownJxa(f.cg.x, f.cg.y));
@@ -1349,7 +1441,7 @@ const TOOLS = {
     if (danger && !args.confirm) {
       throw new Error(`危险操作已拦截：${danger}。若你确认要执行，请在同一调用中加上 confirm: true 再次发起。`);
     }
-    if (_lastCg && isFinite(_lastCg.x)) sendCursor('move', _lastCg.x, _lastCg.y);
+    if (_hasLastCg && isFinite(_lastCg.x)) sendCursor('move', _lastCg.x, _lastCg.y);
     try {
       await runJxa(buildKeyScript(code, mods));
     } catch (e) {
@@ -1376,7 +1468,7 @@ const TOOLS = {
     }
     if (FN_KEYCODES.has(mainCode)) mods.push('fn'); // 功能键自动补 fn
     if (main.length === 1 && main >= 'A' && main <= 'Z') mods.push('shift'); // 大写字母自动补 shift
-    if (_lastCg && isFinite(_lastCg.x)) sendCursor('move', _lastCg.x, _lastCg.y);
+    if (_hasLastCg && isFinite(_lastCg.x)) sendCursor('move', _lastCg.x, _lastCg.y);
     try {
       await runJxa(buildKeyScript(mainCode, mods));
     } catch (e) {
@@ -1392,8 +1484,9 @@ const TOOLS = {
     await guard();
     const { x, y } = numPair(args, 'x', 'y');
     const target = await modelToTarget(x, y, args.display);
-    _lastCg = target.cg;
-    sendCursor('move', target.cg.x, target.cg.y);
+    const from = _hasLastCg && isFinite(_lastCg.x) ? _lastCg : target.cg;
+    rememberCg(target.cg);
+    await movePointerTo(from.x, from.y, target.cg.x, target.cg.y);
     const direction = String(args.direction || 'down').toLowerCase();
     const amount = Math.max(1, Math.min(20, parseInt(args.amount, 10) || 3));
     const dx = direction === 'left' ? -amount : direction === 'right' ? amount : 0;
@@ -1660,7 +1753,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'click',
-    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。坐标必须是控件的几何中心，不能是边缘（可先用 query_ui 拿到精确中心）。点击前会自动校验目标应用仍在前台（焦点漂移则自动重新聚焦），点击后会自动验证：先随机等待 800~1500ms 再重新截图比对像素，并读取真实浏览器 URL/标题与焦点状态；若页面仍在加载（暂时无变化）会继续轮询最多 3 秒，不会把「暂时无变化」误判为点击失败；只有「完整重试后仍无任何真实变化」才判定本次点击「未生效」并计入连续失败——此时禁止用同一坐标重试，应改用键盘快捷键或重新定位；连续 2 次失败会自动停止并要求你向用户报告原因。成功一律以真实证据（像素/焦点/URL/标题变化）为准，不会只因「按键已发出」就报完成。左键优先走 System Events 辅助功能点击（对 Chrome/Electron HTML 控件命中可靠，5 秒超时保护），被拒时回退 CoreGraphics 真实事件。多显示器时传 display（1=主屏）。',
+    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。坐标必须是控件的几何中心，不能是边缘（可先用 query_ui 拿到精确中心）。点击前会先让真实鼠标平滑移动到目标并校验目标应用仍在前台（焦点漂移则自动重新聚焦），点击后会快速验证：先等待约 220ms 再重新截图比对像素，并读取真实浏览器 URL/标题与焦点状态；若页面仍在加载（暂时无变化）会继续轮询最多 3 秒，不会把「暂时无变化」误判为点击失败；只有「完整重试后仍无任何真实变化」才判定本次点击「未生效」并计入连续失败——此时禁止用同一坐标重试，应改用键盘快捷键或重新定位；连续 2 次失败会自动停止并要求你向用户报告原因。成功一律以真实证据（像素/焦点/URL/标题变化）为准，不会只因「按键已发出」就报完成。左键优先走 System Events 辅助功能点击（对 Chrome/Electron HTML 控件命中可靠，5 秒超时保护），被拒时回退 CoreGraphics 真实事件。多显示器时传 display（1=主屏）。',
     inputSchema: {
       type: 'object',
       properties: {

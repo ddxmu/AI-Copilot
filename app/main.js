@@ -31,7 +31,7 @@ let cursorOverlay = null;          // 透明置顶遮罩窗口
 let cursorServer = null;           // Unix socket 服务器
 let cursorSockPath = '';           // socket 文件路径
 let cursorIdleTimer = null;        // 空闲自动隐藏定时器
-const CURSOR_IDLE_MS = 5000;       // 无操作 5 秒后隐藏
+const CURSOR_IDLE_MS = 10000;      // 无操作 10 秒后隐藏
 
 function getCursorSockPath() {
   return path.join(os.tmpdir(), `ai-copilot-cursor-${process.pid}.sock`);
