@@ -840,8 +840,12 @@
             <div class="composer-box">
               <button id="btn-attach" class="composer-icon has-tip" data-tip="选择文件发给 AI（可多选 / 选文件夹）" title="选择文件发给 AI（可多选 / 选文件夹）">＋</button>
               <textarea id="chat-input" rows="1" placeholder="今天帮你做些什么？可把图片/文档拖到此处，或直接粘贴、点 ＋ 选文件后发送"></textarea>
-              <button id="btn-voice" class="composer-icon has-tip" data-tip="语音输入（点一下开始说话）" title="语音输入"><img class="icon-img" src="assets/icon-mic.png" alt="语音输入" /></button>
+              <button id="btn-voice" class="composer-icon has-tip" data-tip="语音输入（按住说话，或点一下开始 / 再点结束）" title="语音输入"><img class="icon-img" src="assets/icon-mic.png" alt="语音输入" /></button>
               <button id="btn-send" class="composer-send has-tip" data-tip="发送（Enter）" title="发送"><img id="send-icon" class="icon-img" src="assets/icon-send.png" alt="发送" /></button>
+            </div>
+            <div class="voice-wave-wrap hidden" id="voice-wave-wrap">
+              <canvas id="voice-wave" class="voice-wave" width="600" height="40"></canvas>
+              <span id="voice-wave-hint" class="voice-wave-hint">正在聆听…松开鼠标或再次点击麦克风结束</span>
             </div>
             <div class="composer-bar">
               <div class="composer-left">
@@ -1335,6 +1339,49 @@
                         <div class="form-cell" style="display:flex;align-items:flex-end">
                           <button id="btn-voice-custom-fetch-models" class="btn" style="height:34px;width:100%">拉取模型</button>
                         </div>
+                      </div>
+                    </div>
+
+                    <!-- 语音识别（STT）独立配置 -->
+                    <div class="voice-stt-block" style="margin-top:22px;border-top:1px solid var(--border,#e5e7eb);padding-top:18px">
+                      <div class="card-title-row">
+                        <h2>语音识别（麦克风转文字 / STT）</h2>
+                      </div>
+                      <p class="hint" style="margin:4px 0 14px">与上面的「语音合成」完全独立，使用 OpenAI 兼容的 <code>/v1/audio/transcriptions</code>。开启后点麦克风说话，松开或再点即停止，识别文字会自动填入输入框（不自动发送）。</p>
+                      <div class="form-cell" style="margin-bottom:14px">
+                        <label>启用语音识别</label>
+                        <label class="switch"><input type="checkbox" id="voice-stt-enabled" /><span class="slider"></span></label>
+                      </div>
+                      <div class="voice-stt-tabs" style="margin:6px 0 14px">
+                        <button type="button" class="voice-stt-tab active" data-stt-provider="openai">OpenAI 兼容（推荐）</button>
+                        <button type="button" class="voice-stt-tab" data-stt-provider="minimax">MiniMax 原生</button>
+                      </div>
+                      <div class="voice-stt-panel" id="voice-stt-panel-openai">
+                        <div class="form-cell">
+                          <label>接口地址</label>
+                          <input id="voice-stt-baseurl" type="text" value="" placeholder="https://api.openai.com/v1" />
+                        </div>
+                        <div class="form-cell" style="margin-top:14px">
+                          <label>API Key</label>
+                          <div class="apikey-row">
+                            <input id="voice-stt-apikey" type="password" placeholder="填写 API Key" autocomplete="off" />
+                            <button type="button" id="voice-stt-apikey-toggle" class="btn-icon" title="显示 / 隐藏 Key">👁</button>
+                          </div>
+                        </div>
+                        <div class="form-grid" style="margin-top:14px">
+                          <div class="form-cell">
+                            <label>识别模型</label>
+                            <select id="voice-stt-model">
+                              <option value="">请选择模型</option>
+                            </select>
+                          </div>
+                          <div class="form-cell" style="display:flex;align-items:flex-end">
+                            <button id="btn-voice-stt-fetch-models" class="btn" style="height:34px;width:100%">拉取模型</button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="voice-stt-panel hidden" id="voice-stt-panel-minimax">
+                        <p class="hint">MiniMax 原生识别使用 <code>/v1/audio/asr</code>，复用上方 MiniMax 语音合成同一个 API Key（无需额外填写）。注意：MiniMax Token Plan 多数不含 ASR 权限，可能返回 401/403 或 404。</p>
                       </div>
                     </div>
 

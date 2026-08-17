@@ -1,3 +1,15 @@
+## v0.10.3 — 2026-08-17
+
+### 语音识别（STT）重构：独立 OpenAI 兼容配置，不再误调 MiniMax ASR
+- **根因**：旧逻辑按 TTS 的 `provider` 选 STT 端点，MiniMax 走 `/v1/audio/asr`；MiniMax Token Plan Key 无 ASR 权限返回 404，导致麦克风点了识别不到文字。
+- **修复**：
+  - 语音识别改为**独立配置**（与 TTS 完全解耦）：`sttEnabled` / `sttProvider` / `sttBaseUrl` / `sttKey` / `sttModel`，默认 `sttProvider='openai'`，走 OpenAI 兼容 `/v1/audio/transcriptions`（multipart）。
+  - **不再盲目调用 MiniMax `/v1/audio/asr`**：仅当用户在 STT 设置里明确选 `minimax` 才走原生 `/v1/audio/asr`（且复用 MiniMax TTS 的 Key）。
+  - MiniMax 的 TTS 配置（endpoint / Key / 音色 / 模型 / 语速）**保持不变**。
+  - 录音时显示实时音量波形（AnalyserNode）；支持「按住说话」与「点击开始 / 再点结束」两种停止方式。
+  - 识别文字**只填入输入框、不自动发送**。
+  - 错误分两类提示：麦克风权限错误（系统设置引导）与接口/网络错误（返回真实原因，401/403 与 404 分别给提示）。
+
 ## v0.10.2 — 2026-08-17
 
 ### 推荐技能新增 computeruse-file-authoring

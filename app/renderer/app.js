@@ -1154,8 +1154,57 @@ async function initVoiceSettings() {
     });
   }
 
+  // —— 语音识别（STT）独立配置 ——
+  const sttEnabledToggle = document.getElementById('voice-stt-enabled');
+  const sttTabs = document.querySelectorAll('.voice-stt-tab');
+  const sttPanels = document.querySelectorAll('.voice-stt-panel');
+  const sttBaseUrl = document.getElementById('voice-stt-baseurl');
+  const sttApiKey = document.getElementById('voice-stt-apikey');
+  const sttModelSelect = document.getElementById('voice-stt-model');
+  const sttFetchModelsBtn = document.getElementById('btn-voice-stt-fetch-models');
+
+  if (sttEnabledToggle) sttEnabledToggle.checked = !!voiceConfig.sttEnabled;
+  let activeSttProvider = voiceConfig.sttProvider || 'openai';
+  function switchSttProvider(p) {
+    activeSttProvider = p;
+    sttTabs.forEach((t) => t.classList.toggle('active', t.dataset.sttProvider === p));
+    sttPanels.forEach((panel) => panel.classList.toggle('active', panel.id === `voice-stt-panel-${p}`));
+  }
+  if (sttTabs.length) {
+    sttTabs.forEach((tab) => tab.addEventListener('click', () => switchSttProvider(tab.dataset.sttProvider)));
+    switchSttProvider(activeSttProvider);
+  }
+  if (sttBaseUrl) sttBaseUrl.value = voiceConfig.sttBaseUrl || '';
+  if (sttApiKey) sttApiKey.value = voiceConfig.sttKey || '';
+  setupApiKeyToggle('voice-stt-apikey', 'voice-stt-apikey-toggle');
+  fillSelectOptions(sttModelSelect, [], voiceConfig.sttModel, '请选择模型');
+
+  if (sttFetchModelsBtn) {
+    sttFetchModelsBtn.addEventListener('click', async () => {
+      fetchStatus.textContent = '';
+      if (activeSttProvider !== 'openai') { fetchStatus.textContent = 'MiniMax 原生识别无需拉取模型'; return; }
+      const key = sttApiKey ? sttApiKey.value.trim() : '';
+      const base = sttBaseUrl ? sttBaseUrl.value.trim() : '';
+      if (!key) { fetchStatus.textContent = '请先填写 API Key'; return; }
+      if (!base) { fetchStatus.textContent = '请先填写接口地址'; return; }
+      sttFetchModelsBtn.disabled = true; sttFetchModelsBtn.textContent = '拉取中…';
+      try {
+        const r = await window.api.aiVoiceFetchModels(key, base);
+        sttFetchModelsBtn.disabled = false; sttFetchModelsBtn.textContent = '拉取模型';
+        if (r.ok && Array.isArray(r.models) && r.models.length) {
+          fillSelectOptions(sttModelSelect, r.models, voiceConfig.sttModel, '请选择模型');
+          fetchStatus.textContent = `已拉取 ${r.models.length} 个模型（来自接口）`;
+        } else {
+          fetchStatus.textContent = `拉取失败：${r.error || '未知错误'}`;
+        }
+      } catch (e) {
+        sttFetchModelsBtn.disabled = false; sttFetchModelsBtn.textContent = '拉取模型';
+        fetchStatus.textContent = '拉取失败：' + (e && e.message ? e.message : String(e));
+      }
+    });
+  }
+
   // 保存
-  const saveBtn = document.getElementById('btn-voice-save');
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
       const localSel = localVoiceSelect ? localVoiceSelect.selectedOptions[0] : null;
@@ -1172,6 +1221,12 @@ async function initVoiceSettings() {
         customModel: customModelSelect ? customModelSelect.value : (voiceConfig.customModel || ''),
         model: minimaxModelSelect ? minimaxModelSelect.value : (voiceConfig.model || 'speech-2.8-turbo'),
         speed: minimaxSpeed ? Number(minimaxSpeed.value) : (voiceConfig.speed || 1.0),
+        // —— STT 独立字段（与 TTS 解耦）——
+        sttEnabled: sttEnabledToggle ? sttEnabledToggle.checked : false,
+        sttProvider: activeSttProvider,
+        sttBaseUrl: sttBaseUrl ? sttBaseUrl.value.trim() : (voiceConfig.sttBaseUrl || ''),
+        sttKey: sttApiKey ? sttApiKey.value.trim() : (voiceConfig.sttKey || ''),
+        sttModel: sttModelSelect ? sttModelSelect.value : (voiceConfig.sttModel || ''),
         voiceId: activeProvider === 'local'
           ? (localVoiceSelect ? localVoiceSelect.value : (voiceConfig.voiceId || ''))
           : (activeProvider === 'minimax'
@@ -2504,14 +2559,56 @@ function autoGrow() {
 chatInput.addEventListener('input', autoGrow);
 
 // 语音输入（MediaRecorder + STT）
-// 流程：点击麦克风 → 未授权则弹授权提示 → 授权后开始录音 → 检测到静音或再次点击结束
-//       → 把录音发给 STT 服务（MiniMax ASR）→ 自动填入当前对话并发送（不新建对话）
+// 流程：麦克风（按住说话 / 点击开始·再点结束）→ 未授权则弹授权提示 → 授权后开始录音并显示波形
+//       → 检测到静音、松开鼠标或再次点击结束 → 录音发给独立 STT 配置（OpenAI 兼容 /audio/transcriptions）
+//       → 识别文字填入输入框（不自动发送）
 let micGranted = false, isRecording = false, mediaRecorder = null, micStream = null, audioChunks = [];
 let recordContext = null, recordAnalyser = null, silenceTimer = null, silenceFrames = 0;
 const micModal = document.getElementById('mic-modal');
 const micGrantBtn = document.getElementById('btn-mic-grant');
 const micCancelBtn = document.getElementById('btn-mic-cancel');
 const micErrEl = document.getElementById('mic-modal-error');
+const voiceWaveCanvas = document.getElementById('voice-wave');
+const voiceWaveWrap = document.getElementById('voice-wave-wrap');
+let waveRAF = null;
+
+// 实时音量波形（录音时通过 AnalyserNode 绘制频率条）
+function drawWaveform() {
+  if (!isRecording || !recordAnalyser || !voiceWaveCanvas) return;
+  const canvas = voiceWaveCanvas;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const bins = recordAnalyser.frequencyBinCount;
+  const data = new Uint8Array(bins);
+  recordAnalyser.getByteFrequencyData(data);
+  ctx.clearRect(0, 0, W, H);
+  const barCount = 48;
+  const step = Math.max(1, Math.floor(bins / barCount));
+  const gap = 2;
+  const barW = (W - (barCount - 1) * gap) / barCount;
+  for (let i = 0; i < barCount; i++) {
+    let sum = 0;
+    for (let j = 0; j < step; j++) sum += data[i * step + j] || 0;
+    const v = (sum / step) / 255; // 0..1
+    const barH = Math.max(2, v * H * 0.9);
+    const x = i * (barW + gap);
+    const y = (H - barH) / 2;
+    ctx.fillStyle = 'rgba(47, 111, 237, 0.85)';
+    ctx.fillRect(x, y, barW, barH);
+  }
+  waveRAF = requestAnimationFrame(drawWaveform);
+}
+function startWaveformLoop() {
+  if (waveRAF) cancelAnimationFrame(waveRAF);
+  drawWaveform();
+}
+function stopWaveformLoop() {
+  if (waveRAF) { cancelAnimationFrame(waveRAF); waveRAF = null; }
+  if (voiceWaveCanvas) {
+    const ctx = voiceWaveCanvas.getContext('2d');
+    ctx.clearRect(0, 0, voiceWaveCanvas.width, voiceWaveCanvas.height);
+  }
+}
 
 // 请求麦克风授权：getUserMedia 会触发系统权限弹窗
 async function requestMicPermission() {
@@ -2560,6 +2657,8 @@ micGrantBtn.addEventListener('click', async () => {
 function resetRecordingUI() {
   isRecording = false;
   btnVoice.classList.remove('listening');
+  stopWaveformLoop();
+  if (voiceWaveWrap) voiceWaveWrap.classList.add('hidden');
   if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
   silenceFrames = 0;
   if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
@@ -2602,12 +2701,23 @@ function startRecording() {
     mediaRecorder.start(200);
     isRecording = true;
     btnVoice.classList.add('listening');
-    chatStatusEl.textContent = '正在聆听…请说话（点击「发送」或再次点击麦克风结束）';
+    chatStatusEl.textContent = '正在聆听…松开鼠标或再次点击麦克风结束';
 
     // 静默检测：连续 1.5s 音量过低则自动停止
     setupSilenceDetection(stream);
+    // 实时音量波形
+    if (voiceWaveWrap) voiceWaveWrap.classList.remove('hidden');
+    startWaveformLoop();
   }).catch((e) => {
-    chatStatusEl.textContent = '无法启动录音：' + (e && e.message ? e.message : e);
+    // 权限错误与设备/接口错误分开提示（req #7）
+    const name = e && e.name ? e.name : '';
+    if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError') {
+      chatStatusEl.textContent = '麦克风权限被拒绝：请在系统「设置 › 隐私与安全性 › 麦克风」中允许「AI Copilot」，然后重试。';
+    } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || name === 'OverconstrainedError') {
+      chatStatusEl.textContent = '未找到麦克风设备，请检查麦克风是否连接。';
+    } else {
+      chatStatusEl.textContent = '无法启动录音：' + (e && e.message ? e.message : e);
+    }
   });
 }
 
@@ -2651,22 +2761,22 @@ async function handleVoiceBlob(blob) {
       chatStatusEl.textContent = '未识别到语音，请重试';
       return;
     }
+    // 填入输入框，不自动发送（req #6）
     chatInput.value = text.trim();
     autoGrow();
-    chatStatusEl.textContent = '';
-    if (!sending) {
-      voiceSendPending = true;
-      // 先把识别到的文字显示在输入框，稍作停留让用户看到，随后自动发送
-      setTimeout(() => { if (!sending) sendChat(); }, 400);
-    }
+    chatInput.focus();
+    chatStatusEl.textContent = '已填入输入框（未自动发送）';
   } catch (e) {
-    chatStatusEl.textContent = '语音识别失败：' + (e && e.message ? e.message : String(e));
+    // 接口 / 网络错误：显示真实原因（与麦克风权限错误分开，req #7）
+    chatStatusEl.textContent = '语音识别失败（接口错误）：' + (e && e.message ? e.message : String(e));
   }
 }
 
 async function transcribeWithMinimax(blob) {
-  const key = voiceConfig.provider === 'custom' ? voiceConfig.customKey : voiceConfig.minimaxKey;
-  if (!key) throw new Error('请先填写对应来源的 API Key 并保存');
+  // STT 走独立配置（req #2）：main 进程按 sttProvider / sttKey / sttBaseUrl / sttModel 路由
+  if (!voiceConfig.sttEnabled) {
+    throw new Error('请先在「AI 语音 → 语音识别(STT)」中开启并填写配置后保存');
+  }
   // 语音识别需要 wav/16kHz base64
   const base64 = await blobToWavBase16(blob, 16000);
   const resp = await window.api.aiVoiceSTT({
@@ -2735,12 +2845,43 @@ function audioBufferToBase64Wav(buffer) {
   return btoa(binary);
 }
 
-btnVoice.addEventListener('click', () => {
-  // 语音输入：独立工作，不依赖「AI 设置 › AI 语音」的启用开关，也不新建对话
+// 语音输入：支持「按住说话」与「点击开始 / 再点结束」两种模式（req #5）
+let voicePressStart = 0;
+let voiceMouseHeld = false;
+const VOICE_HOLD_THRESHOLD = 180; // ms：超过即视为按住说话，松开即停
+
+function voiceStartOrToggle() {
   if (isRecording) { finalizeRecording(); return; }
   try { window.speechSynthesis.cancel(); } catch (e) {}
   if (micGranted) { startRecording(); }
   else { openMicModal(); }
+}
+
+btnVoice.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return; // 仅左键
+  voiceMouseHeld = true;
+  voicePressStart = Date.now();
+  voiceStartOrToggle();
+});
+btnVoice.addEventListener('mouseup', (e) => {
+  if (e.button !== 0 || !voiceMouseHeld) return;
+  voiceMouseHeld = false;
+  if (!isRecording) return;
+  const held = Date.now() - voicePressStart;
+  // 按住超过阈值 → 松开即停；否则当作快速点击 → 保持录音，等待再次点击结束
+  if (held >= VOICE_HOLD_THRESHOLD) finalizeRecording();
+});
+btnVoice.addEventListener('mouseleave', () => {
+  if (voiceMouseHeld && isRecording) {
+    const held = Date.now() - voicePressStart;
+    voiceMouseHeld = false;
+    if (held >= VOICE_HOLD_THRESHOLD) finalizeRecording();
+  }
+});
+// 键盘（Enter / 空格）触发：detail === 0 表示非鼠标点击，由本处理器处理
+btnVoice.addEventListener('click', (e) => {
+  if (e.detail !== 0) return; // 鼠标点击已由 mousedown/mouseup 处理
+  voiceStartOrToggle();
 });
 
 // 权限模式下拉

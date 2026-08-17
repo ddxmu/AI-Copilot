@@ -23,6 +23,12 @@ const DEFAULT_VOICE = {
   model: 'speech-2.8-turbo', // MiniMax 音质模型
   speed: 1.0,             // MiniMax 语速
   customModel: '',        // 自定义 TTS 模型
+  // —— 语音识别（STT）独立配置：OpenAI 兼容 /v1/audio/transcriptions，与 TTS 完全解耦 ——
+  sttEnabled: false,      // 是否启用语音识别（麦克风转文字）
+  sttProvider: 'openai',  // 'openai' | 'minimax'（openai=兼容 /audio/transcriptions；minimax=原生 /v1/audio/asr）
+  sttBaseUrl: '',         // STT OpenAI 兼容 base URL，例如 https://api.openai.com/v1
+  sttKey: '',             // STT API Key（独立保存，不与 TTS 的 minimaxKey/customKey 混用）
+  sttModel: '',           // STT 模型名，例如 whisper-1 / gpt-4o-transcribe
 };
 
 const DEFAULT_STATE = {
@@ -179,6 +185,12 @@ function setVoiceConfig(cfg) {
     model: String((cfg && cfg.model != null ? cfg.model : prev.model) || '').trim() || 'speech-2.8-turbo',
     speed: Math.max(0.5, Math.min(2.0, parseFloat((cfg && cfg.speed != null ? cfg.speed : prev.speed)) || 1.0)),
     customModel: String((cfg && cfg.customModel != null ? cfg.customModel : prev.customModel) || '').trim(),
+    // —— STT 独立字段（与 TTS 解耦，互不覆盖）——
+    sttEnabled: !!(cfg && cfg.sttEnabled),
+    sttProvider: (cfg && (cfg.sttProvider === 'minimax' || cfg.sttProvider === 'openai')) ? cfg.sttProvider : (prev.sttProvider || 'openai'),
+    sttBaseUrl: String((cfg && cfg.sttBaseUrl != null ? cfg.sttBaseUrl : prev.sttBaseUrl) || '').trim(),
+    sttKey: String((cfg && cfg.sttKey != null ? cfg.sttKey : prev.sttKey) || '').trim(),
+    sttModel: String((cfg && cfg.sttModel != null ? cfg.sttModel : prev.sttModel) || '').trim(),
   };
   state.voice = next;
   saveState(state);

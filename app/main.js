@@ -2163,45 +2163,59 @@ ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
   }
 });
 
+// 语音识别（STT）走「独立的 OpenAI 兼容配置」，与 TTS 完全解耦：
+//  - 默认 sttProvider='openai' → POST {sttBaseUrl}/audio/transcriptions（multipart，兼容 OpenAI / 硅基流动 / 通义等）
+//  - 仅当用户明确选择 sttProvider='minimax' 时，才调用 MiniMax 原生 /v1/audio/asr
+//    （MiniMax 的 OpenAI 兼容 /audio/transcriptions 不存在，会 404，故绝不作为默认）
 ipcMain.handle('ai-voice-stt', async (_e, { audioBase64, mime, config }) => {
   try {
-    const provider = config && config.provider;
-    const key = String(
-      (provider === 'minimax' ? config.minimaxKey : config.customKey) || config.apiKey || ''
-    ).trim();
-    if (!key) throw new Error('请先在「AI 语音」设置中填写 API Key 并保存');
-    if (provider === 'local') throw new Error('本地离线模式不支持语音识别，请切换到 MiniMax 或 自定义');
+    const sttProvider = (config && config.sttProvider === 'minimax') ? 'minimax' : 'openai';
+    // OpenAI 兼容路径使用独立的 sttKey；MiniMax 原生路径复用 MiniMax TTS 的 minimaxKey
+    const sttKey = (sttProvider === 'minimax')
+      ? String((config && config.minimaxKey) || '').trim()
+      : String((config && config.sttKey) || '').trim();
 
-    // 自定义：OpenAI 兼容 /audio/transcriptions（multipart form），例如 OpenAI / 硅基流动 / 通义
-    if (provider === 'custom') {
-      const baseUrl = String((config && config.baseUrl) || '').replace(/\/$/, '');
-      if (!baseUrl) throw new Error('请先填写 API 地址并保存');
-      const url = `${baseUrl}/audio/transcriptions`;
-      const buf = Buffer.from(String(audioBase64 || ''), 'base64');
-      const form = new FormData();
-      form.append('file', new Blob([buf], { type: mime || 'audio/wav' }), 'voice.wav');
-      form.append('language', 'zh');
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${key}` },
-        body: form,
-      });
-      const { status, data } = await readJsonResponse(resp);
-      if (status < 200 || status >= 300) {
-        const msg = (data && data.error && data.error.message) || `HTTP ${status}`;
-        const tip = status === 404
-          ? '：接口不存在，请确认「接口地址」末尾为 /v1（例如 https://api.openai.com/v1）'
-          : ((status === 401 || status === 403)
-            ? '：API Key 无效或无语音识别(ASR)权限'
-            : '');
-        throw new Error(`语音识别失败（${msg}）${tip}`);
-      }
-      return { ok: true, text: (data && data.text) || '' };
+    if (!sttKey) {
+      throw new Error('请先在「AI 语音 → 语音识别(STT)」中填写 API Key 并保存');
     }
 
-    // MiniMax：走原生 ASR（/v1/audio/asr），不要用 OpenAI 兼容的 /audio/transcriptions（不存在，会 404）
-    const text = await fetchMinimaxASR(audioBase64, key);
-    return { ok: true, text: text || '' };
+    // MiniMax 原生 ASR：仅在用户明确选择 minimax 时调用（/v1/audio/asr，JSON body）
+    if (sttProvider === 'minimax') {
+      const text = await fetchMinimaxASR(audioBase64, sttKey);
+      return { ok: true, text: text || '' };
+    }
+
+    // OpenAI 兼容 /audio/transcriptions（multipart form），默认路径
+    const sttBaseUrl = String((config && config.sttBaseUrl) || '').replace(/\/+$/, '');
+    if (!sttBaseUrl) {
+      throw new Error('请先填写 STT 接口地址并保存（例如 https://api.openai.com/v1）');
+    }
+    const sttModel = String((config && config.sttModel) || '').trim();
+    if (!sttModel) {
+      throw new Error('请先填写 STT 模型名（例如 whisper-1 / gpt-4o-transcribe）');
+    }
+    const url = `${sttBaseUrl}/audio/transcriptions`;
+    const buf = Buffer.from(String(audioBase64 || ''), 'base64');
+    const form = new FormData();
+    form.append('file', new Blob([buf], { type: mime || 'audio/wav' }), 'voice.wav');
+    form.append('model', sttModel);
+    form.append('language', 'zh');
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${sttKey}` },
+      body: form,
+    });
+    const { status, data } = await readJsonResponse(resp);
+    if (status < 200 || status >= 300) {
+      const msg = (data && data.error && data.error.message) || `HTTP ${status}`;
+      const tip = status === 404
+        ? '：接口不存在，请确认「STT 接口地址」末尾为 /v1（例如 https://api.openai.com/v1）'
+        : ((status === 401 || status === 403)
+          ? '：API Key 无效或无语音识别(ASR)权限'
+          : '');
+      throw new Error(`语音识别失败（${msg}）${tip}`);
+    }
+    return { ok: true, text: (data && data.text) || '' };
   } catch (err) {
     return { ok: false, error: err && err.message ? err.message : String(err) };
   }
