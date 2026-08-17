@@ -24,7 +24,7 @@ const zlib = require('zlib');
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'ComputerUse';
-const SERVER_VERSION = '1.5.0';
+const SERVER_VERSION = '1.6.0';
 
 const TMP = path.join(os.tmpdir(), 'ai-copilot-computer-use');
 try { fs.mkdirSync(TMP, { recursive: true }); } catch (e) { /* ignore */ }
@@ -528,33 +528,104 @@ async function focusDescriptor() {
   }
 }
 
-// 抓取操作前的状态基线（截图指纹 + 焦点描述）
+// 读取浏览器当前前台窗口的活动标签 URL 与标题（best-effort）。
+// 用于点击后「以真实 URL/标题变化」作为成功证据，而非仅凭「按键已发出」就报告完成（需求 #6）。
+// 读不到（非浏览器 / 未授权 AppleScript / 个人资料选择等无标签窗口）时返回 null → 不参与判定。
+async function readBrowserState() {
+  const front = await getFrontAppName();
+  if (!front) return null;
+  if (!/chrome|chromium|edge|brave|safari|firefox|arc|opera|qqbrowser|360/i.test(front)) return null;
+  try {
+    const out = await runAppleScript(
+      `tell application "${asStrLiteral(front)}"\n` +
+      `  if (count of windows) is 0 then return "NOTITLE|NOURL"\n` +
+      `  try\n` +
+      `    set t to title of active tab of front window\n` +
+      `  on error\n` +
+      `    set t to ""\n` +
+      `  end try\n` +
+      `  try\n` +
+      `    set u to URL of active tab of front window\n` +
+      `  on error\n` +
+      `    set u to ""\n` +
+      `  end try\n` +
+      `  return t & "|" & u\n` +
+      `end tell`
+    );
+    const s = (out || '').trim();
+    if (!s) return null;
+    const idx = s.lastIndexOf('|');
+    const title = idx >= 0 ? s.slice(0, idx) : s;
+    const url = idx >= 0 ? s.slice(idx + 1) : '';
+    return { app: front, title: title, url: url };
+  } catch (e) {
+    return null; // 读不到就保守退出，不阻断主流程
+  }
+}
+
+// 判断浏览器状态是否相对点击前发生了变化（URL 或标题任一不同即视为导航/加载生效）。
+// before 为 null（之前读不到）而 after 读到了 → 视为变化（保守放行，因很可能正从个人资料页跳走）。
+function browserStateChanged(before, after) {
+  if (!after) return false;
+  if (!before) return true;
+  if (before.url && after.url && before.url !== after.url) return true;
+  if (before.title && after.title && before.title !== after.title) return true;
+  return false;
+}
+
+// 抓取操作前的状态基线（截图指纹 + 焦点描述 + 真实浏览器 URL/标题）
 async function captureState(display) {
-  const st = { sig: null, focus: '' };
+  const st = { sig: null, focus: '', browser: null };
   try {
     const f = await captureShotFile(display);
     st.sig = imageSignature(f);
   } catch (e) { /* 抓不到基线 → 后续判为 unknown */ }
   st.focus = await focusDescriptor();
+  try { st.browser = await readBrowserState(); } catch (e) { st.browser = null; }
   return st;
 }
 
-// 操作后重新截图/读状态比对：'ok' 已生效 / 'nochange' 无变化（判失败）/ 'unknown' 无法判定
-async function verifyChanged(display, before) {
-  if (!before) return 'unknown';
-  await sleep(220); // 给界面反应时间
-  let afterSig = null;
-  try {
-    const f = await captureShotFile(display);
-    afterSig = imageSignature(f);
-  } catch (e) { /* 截不到 → 靠焦点判定 */ }
-  const d = signaturesDiffer(before.sig, afterSig);
-  if (d && d.differ) return 'ok';
-  // 像素无明显变化时，看焦点是否转移（聚焦输入框这类操作视觉变化极小，但确实生效了）
-  const afterFocus = await focusDescriptor();
-  if (before.focus && afterFocus && before.focus !== afterFocus) return 'ok';
-  if (!d) return 'unknown';
-  return 'nochange';
+// 点击后验证（需求 #1/#2/#5/#6 强化）：
+//   ① 点击后不立即判定：随机等待 800~1500ms，给页面反应时间；
+//   ② 重新截图比对像素 + 读焦点描述 + 读真实浏览器 URL/标题；
+//   ③ 若页面仍在加载（暂时无变化），继续轮询最多 3 秒，不把「暂时无变化」当失败；
+//   ④ 只有「完整重试（含 3 秒轮询）后」仍无任何真实证据变化，才返回 nochange；
+//   ⑤ 成功必须由真实证据支撑：像素变化 / 焦点转移 / 浏览器 URL 或标题变化
+//      （需求 #6，绝不只凭「按键已发出」就报告完成）。
+// 返回 { result: 'ok'|'nochange'|'unknown', reason, browser? }
+async function verifyClick(display, before) {
+  if (!before) return { result: 'unknown', reason: 'nobaseline' };
+  // ① 初始等待 800~1500ms（随机，避免每次固定节奏被页面动画误判）
+  await sleep(800 + Math.floor(Math.random() * 700));
+  const deadline = Date.now() + 3000; // ② 最多再轮询 3 秒
+  let lastD = null;
+  let lastBrowser = null;
+  while (true) {
+    // 重新截图比对像素
+    let afterSig = null;
+    try {
+      const f = await captureShotFile(display);
+      afterSig = imageSignature(f);
+    } catch (e) { /* 截不到 → 靠焦点/浏览器判定 */ }
+    const d = signaturesDiffer(before.sig, afterSig);
+    lastD = d;
+    // 读焦点变化（聚焦输入框这类视觉变化极小但确实生效）
+    const afterFocus = await focusDescriptor();
+    // 读真实浏览器 URL/标题（最强证据）
+    let afterBrowser = null;
+    try { afterBrowser = await readBrowserState(); } catch (e) { afterBrowser = null; }
+    lastBrowser = afterBrowser;
+    // ⑤ 真实证据之一即判成功
+    if (d && d.differ) return { result: 'ok', reason: 'pixel' };
+    if (before.focus && afterFocus && before.focus !== afterFocus) return { result: 'ok', reason: 'focus' };
+    if (browserStateChanged(before.browser, afterBrowser)) return { result: 'ok', reason: 'browser', browser: afterBrowser };
+    // ③ 仍在加载/暂时无变化：若还有时间则继续轮询，不把「暂时无变化」当失败
+    if (Date.now() >= deadline) break;
+    await sleep(400);
+  }
+  // ④ 完整重试（含 3 秒轮询）后仍无变化
+  if (!lastD) return { result: 'unknown', reason: 'noread' };
+  return { result: 'nochange', reason: 'none', browser: lastBrowser };
 }
 
 // 每一步的状态行：当前应用 / 当前动作 / 目标位置 / 验证结果（需求：为每一步显示这四项）
@@ -947,6 +1018,8 @@ result;`;
 }
 
 // 在截图上绘制红色点击环（best-effort，失败不影响主流程）
+// 注（需求 #7）：红圈半径/线宽仅影响「视觉提示」大小，圆心 (x, y) 始终是真实点击坐标，
+// 绝不用光标/红圈的显示尺寸去修正或偏移点击落点 —— 点击落点只由 modelToTarget 的 CG 坐标决定。
 function annotateScreenshotJxa(png, x, y) {
   const j = JSON.stringify(png);
   return `ObjC.import('Cocoa');
@@ -1068,9 +1141,14 @@ const TOOLS = {
     return okText(`鼠标已移动到图像坐标 (${x}, ${y})（显示器 ${target.display}，逻辑点 ${Math.round(target.logical.x)}, ${Math.round(target.logical.y)}）`);
   },
 
-  // 点击流程（v1.5.0 强化）：
+  // 点击流程（v1.6.0 强化，对接需求 #1/#2/#5/#6/#7）：
   //   guard() 校验停止标记 / 连续失败 / 目标应用是否仍在前台（漂移则自动重新聚焦）
-  //   → 抓操作前基线指纹 → 点击 → 重新截图比对，界面无变化即判定失败并计入连续失败计数。
+  //   → 抓操作前基线（像素指纹 + 焦点 + 真实浏览器 URL/标题）
+  //   → 点击 → verifyClick：先随机等 800~1500ms 再重截 + 读 URL/标题，页面加载则轮询最多 3 秒，
+  //     不把「暂时无变化」当失败；只有完整重试后仍无真实证据变化才计入连续失败（需求 #5）。
+  //   成功必须由真实证据支撑（像素/焦点/URL/标题），绝不只凭「按键已发出」（需求 #6）。
+  //   注（需求 #7）：AI 光标遮罩大小只影响显示，点击坐标一律用真实 CG 坐标 target.cg，
+  //   绝不用光标尺寸去「修正」点击落点 —— 见下方 annotateScreenshotJxa 的圆心说明。
   async click(args) {
     await guard();
     const { x, y } = numPair(args, 'x', 'y');
@@ -1103,15 +1181,25 @@ const TOOLS = {
     }
     setLastPos(x, y, display);
     sendCursor('click', target.cg.x, target.cg.y);
-    const verdict = await verifyChanged(display, before);
+    const v = await verifyClick(display, before);
     let verify;
-    if (verdict === 'ok') { verify = '界面已变化，点击生效'; markSuccess(); }
-    else if (verdict === 'nochange') { verify = '界面无变化 → 判定未生效'; markFailure(); }
-    else { verify = '无法验证（保守视为已执行）'; markSuccess(); }
+    if (v.result === 'ok') {
+      const reasonText = v.reason === 'pixel' ? '像素已变化'
+        : v.reason === 'focus' ? '焦点已转移'
+        : '浏览器 URL/标题已变化';
+      verify = `已验证生效（${reasonText}${v.browser && v.browser.url ? '，当前 URL:' + v.browser.url : ''}）`;
+      markSuccess();
+    } else if (v.result === 'nochange') {
+      verify = '完整重试（含 3 秒加载轮询）后仍无任何真实变化（像素/焦点/URL/标题）→ 判定未生效';
+      markFailure();
+    } else {
+      verify = '无法验证（保守视为已执行）';
+      markSuccess();
+    }
     const frontApp = await getFrontAppName();
     const status = stepStatus(frontApp, `${button}键点击`, `(${x}, ${y}) 显示器${display}`, verify);
-    const tip = verdict === 'nochange'
-      ? ` 本次点击未产生界面变化，很可能落在控件边缘或目标不可点击。禁止用同一坐标重复点击：请改用键盘快捷键（浏览器地址栏用 focus_address_bar 即 ⌘L），或先 query_ui 读取控件中心坐标，或重新截图定位控件中心。已累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次失败，再失败一次将自动停止并需向用户报告原因。`
+    const tip = v.result === 'nochange'
+      ? ` 本次点击在多次轮询后仍未产生真实变化，很可能落在控件边缘或目标不可点击。禁止用同一坐标重复点击：请改用键盘快捷键（浏览器地址栏用 focus_address_bar 即 ⌘L），或先 query_ui 读取控件中心坐标，或重新截图定位控件中心。已累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次失败，再失败一次将自动停止并需向用户报告原因。`
       : '';
     return okText(`${status} 已在图像坐标 (${x}, ${y}) 点击（${button}键，显示器 ${display}）。${tip}`);
   },
@@ -1136,10 +1224,10 @@ const TOOLS = {
     }
     setLastPos(x, y, display);
     sendCursor('click', target.cg.x, target.cg.y);
-    const verdict = await verifyChanged(display, before);
+    const v = await verifyClick(display, before);
     let verify;
-    if (verdict === 'ok') { verify = '界面已变化，双击生效'; markSuccess(); }
-    else if (verdict === 'nochange') { verify = '界面无变化 → 判定未生效'; markFailure(); }
+    if (v.result === 'ok') { verify = '界面已变化，双击生效'; markSuccess(); }
+    else if (v.result === 'nochange') { verify = '完整重试后仍无真实变化 → 判定未生效'; markFailure(); }
     else { verify = '无法验证（保守视为已执行）'; markSuccess(); }
     const frontApp = await getFrontAppName();
     const status = stepStatus(frontApp, '双击', `(${x}, ${y}) 显示器${display}`, verify);
@@ -1166,10 +1254,10 @@ const TOOLS = {
     }
     setLastPos(x, y, display);
     sendCursor('click', target.cg.x, target.cg.y);
-    const verdict = await verifyChanged(display, before);
+    const v = await verifyClick(display, before);
     let verify;
-    if (verdict === 'ok') { verify = '右键菜单已出现'; markSuccess(); }
-    else if (verdict === 'nochange') { verify = '界面无变化 → 判定未生效'; markFailure(); }
+    if (v.result === 'ok') { verify = '右键菜单已出现'; markSuccess(); }
+    else if (v.result === 'nochange') { verify = '完整重试后仍无真实变化 → 判定未生效'; markFailure(); }
     else { verify = '无法验证（保守视为已执行）'; markSuccess(); }
     const frontApp = await getFrontAppName();
     const status = stepStatus(frontApp, '右键点击', `(${x}, ${y}) 显示器${display}`, verify);
@@ -1374,17 +1462,35 @@ const TOOLS = {
   },
 
   // 读取辅助功能元素（优先于截图坐标）：返回控件角色/名称/中心坐标（已换算为图像坐标系）/状态
+  // （v1.6.0 强化，对接需求 #3/#4）：
+  //   - 若只读到窗口控件 / 未枚举到可交互元素，等待后重试最多 2 次（共 3 次），给慢速界面/弹窗响应时间；
+  //   - 优先使用读到的辅助功能按钮中心点击，反复提示「不要盲点截图坐标」；
+  //   - 识别 Chrome 个人资料选择页的「打开用户资料 / 继续使用」等按钮，显式建议优先点击其坐标。
   async query_ui(args) {
     await guard();
     const display = Math.max(1, parseInt(args && args.display, 10) || 1);
     const frontApp = await getFrontAppName();
-    let parsed;
-    try {
-      parsed = await queryUiElements(display);
-    } catch (e) {
+    let parsed = null;
+    let lastErr = null;
+    // ③ 若只读到窗口控件 / 未枚举到可交互元素，等待后重试最多 2 次（共 3 次尝试）
+    const TRIES = 3;
+    for (let attempt = 1; attempt <= TRIES; attempt++) {
+      try {
+        parsed = await queryUiElements(display);
+        lastErr = null;
+      } catch (e) {
+        lastErr = e;
+        parsed = null;
+      }
+      // 成功拿到可交互元素即停止重试
+      if (parsed && parsed.status === 'OK' && parsed.items.length) break;
+      if (attempt < TRIES) await sleep(500); // 等待界面响应后再重试
+    }
+    // 读取彻底失败（权限/异常）
+    if (!parsed) {
       return okText(
         `${stepStatus(frontApp, '读取辅助功能元素', `显示器${display}`, '读取失败')} ` +
-        `无法读取辅助功能元素（${e.message}）。请改用 screenshot 观察界面，并点击控件中心（不要点边缘）。`
+        `无法读取辅助功能元素（${lastErr ? lastErr.message : '未知错误'}）。请改用 screenshot 观察界面，并点击控件中心（不要点边缘）。`
       );
     }
     if (parsed.status === 'NOPROC') {
@@ -1395,19 +1501,30 @@ const TOOLS = {
     }
     if (!parsed.items.length) {
       return okText(
-        `${stepStatus(parsed.appName || frontApp, '读取辅助功能元素', `显示器${display}`, '未枚举到可交互元素')} ` +
-        `未读到可交互元素（该应用可能未暴露辅助功能树，如 Chrome 网页内容）。请改用 screenshot，并点击控件中心。`
+        `${stepStatus(parsed.appName || frontApp, '读取辅助功能元素', `显示器${display}`, `连续 ${TRIES} 次未枚举到可交互元素`)} ` +
+        `连续 ${TRIES} 次都未读到可交互元素（该应用可能未暴露辅助功能树，如 Chrome 网页正文）。` +
+        `⚠️ 请勿盲点截图坐标：优先用 query_ui 反复读取、或 focus_app 后重试；若界面出现按钮` +
+        `（尤其 Chrome 个人资料选择页的「打开用户资料 / 继续使用」等），务必用 query_ui 读到的按钮中心坐标点击，而不是凭截图估计落点。`
       );
     }
+    // ④ 识别疑似浏览器个人资料/登录选择按钮，显式建议优先点击
+    const profileBtns = parsed.items.filter((it) =>
+      /打开用户资料|继续使用|选择资料|use profile|continue|profile|资料|登录|sign ?in|登录到|add profile/i.test(it.name || '')
+    );
     const lines = parsed.items.slice(0, 50).map((it) =>
       `${it.focused ? '★' : ' '}[${it.role}] ${it.name || '(无名)'} 中心≈(${it.cx}, ${it.cy})${it.enabled ? '' : ' 已禁用'}`
     );
-    return okText(
+    let header =
       `${stepStatus(parsed.appName || frontApp, '读取辅助功能元素', `显示器${display}`, `读到 ${parsed.items.length} 个控件`)} ` +
       `前台应用「${parsed.appName || frontApp}」可交互元素（坐标已换算为图像坐标系，且均为控件中心，可直接传给 click；★=当前焦点）：\n` +
       lines.join('\n') +
-      `\n优先使用上面给出的中心坐标点击；这里读不到的（如 Chrome 网页正文）再回退 screenshot 坐标。`
-    );
+      `\n优先使用上面给出的中心坐标点击（尤其按钮）；这里读不到的（如 Chrome 网页正文）再回退 screenshot 坐标。`;
+    if (profileBtns.length) {
+      header +=
+        `\n\n检测到疑似浏览器个人资料/登录选择按钮，请优先用其控制中心坐标点击：` +
+        profileBtns.map((b) => `「${b.name}」(${b.cx}, ${b.cy})`).join('、') + `。`;
+    }
+    return okText(header);
   },
 
   // 清除停止标记与连续失败计数（新一轮用户指令开始时由主进程自动下发，也可由模型显式调用）
@@ -1542,7 +1659,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'click',
-    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。坐标必须是控件的几何中心，不能是边缘（可先用 query_ui 拿到精确中心）。点击前会自动校验目标应用仍在前台（焦点漂移则自动重新聚焦），点击后会自动重新截图比对：界面无变化即判定本次点击「未生效」并计入连续失败——此时禁止用同一坐标重试，应改用键盘快捷键或重新定位；连续 2 次失败会自动停止并要求你向用户报告原因。左键优先走 System Events 辅助功能点击（对 Chrome/Electron HTML 控件命中可靠，5 秒超时保护），被拒时回退 CoreGraphics 真实事件。多显示器时传 display（1=主屏）。',
+    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。坐标必须是控件的几何中心，不能是边缘（可先用 query_ui 拿到精确中心）。点击前会自动校验目标应用仍在前台（焦点漂移则自动重新聚焦），点击后会自动验证：先随机等待 800~1500ms 再重新截图比对像素，并读取真实浏览器 URL/标题与焦点状态；若页面仍在加载（暂时无变化）会继续轮询最多 3 秒，不会把「暂时无变化」误判为点击失败；只有「完整重试后仍无任何真实变化」才判定本次点击「未生效」并计入连续失败——此时禁止用同一坐标重试，应改用键盘快捷键或重新定位；连续 2 次失败会自动停止并要求你向用户报告原因。成功一律以真实证据（像素/焦点/URL/标题变化）为准，不会只因「按键已发出」就报完成。左键优先走 System Events 辅助功能点击（对 Chrome/Electron HTML 控件命中可靠，5 秒超时保护），被拒时回退 CoreGraphics 真实事件。多显示器时传 display（1=主屏）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1665,7 +1782,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'query_ui',
-    description: '读取前台应用的可交互辅助功能元素（按钮/输入框/下拉/复选框/链接等）的角色、名称、启用与聚焦状态，以及已换算好的「控件中心」图像坐标，可直接传给 click。定位控件时优先用本工具，读不到（如 Chrome 网页正文不暴露 AX 树）再回退 screenshot 看图取坐标。',
+    description: '读取前台应用的可交互辅助功能元素（按钮/输入框/下拉/复选框/链接等）的角色、名称、启用与聚焦状态，以及已换算好的「控件中心」图像坐标，可直接传给 click。定位控件时优先用本工具，读不到（如 Chrome 网页正文不暴露 AX 树）再回退 screenshot 看图取坐标。若首次只读到窗口控件/未枚举到可交互元素，本工具会自动等待并重试最多 2 次（给慢速弹窗/界面响应时间），请勿盲点截图坐标——尤其 Chrome 个人资料选择页的「打开用户资料 / 继续使用」等按钮，若本工具能读到，务必用其控制中心坐标点击。',
     inputSchema: {
       type: 'object',
       properties: { display: { type: 'number', description: '显示器序号，1=主屏，默认 1' } },
