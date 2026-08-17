@@ -1,17 +1,17 @@
 {
-  "version": "0.9.55",
+  "version": "0.10.1",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-17",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.55/AI.Copilot-0.9.55-arm64.dmg",
-  "dmgSha256": "c3d34997111220684e172d4800aba31d6326290fa46d4f6b58b7ee864df1f23e",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.55/AI.Copilot-0.9.55.zip",
-  "patchSha256": "6d24513ef02cb4d8e5f51669b74d0d893673ffe2254a7208cbbbaf4a85d31d14",
-  "notes": "### ComputerUse 输入（type）修复（v0.9.55）\n- 根因：组合键事件缺少正确的 CoreGraphics 修饰键掩码，Chrome/Electron 把 ⌘V 误判为裸 v（只落一个字母、不粘贴）；旧逻辑仅凭剪贴板回读就报成功，未验证 ⌘V 真正进入窗口。\n- 修复：MOD_MASK 恢复为真实 CoreGraphics 掩码（command=1048576 / shift=131072 / control=262144 / option=524288 / fn=8388608），主键事件自身注入完整修饰掩码，⌘V/⌘C/⌘A/⌘L 在 Chrome、Electron、普通输入框均正确识别。\n- 防假报成功：粘贴前检查聚焦控件、粘贴后用 ⌘A+⌘C 回读字段严格判定（不含量=fail、确实读不到才 unknown），失败时如实上报，不再用 keystroke 重输整段。\n- 保留中文/长文本/换行（剪贴板 ⌘V）、剪贴板还原、点击/坐标映射/72 DPI 截图不变。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.1/AI.Copilot-0.10.1-arm64.dmg",
+  "dmgSha256": "a6f655b7a56c9c8ea5ffa1c385b9bb587eeaa5770e03f214b3129b508c1e2852",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.1/AI.Copilot-0.10.1.zip",
+  "patchSha256": "b9f74299d954a389d8c3d204ab8b6bf7d297f9154036dd32074fa289f2342d88",
+  "notes": "### 关闭外部 MCP 后内置 ComputerUse 仍可用（v0.10.1）\n- 根因：聊天栏的 MCP 开关关闭时，agent.js 把所有 MCP 工具都从模型工具列表和系统提示词中移除了，导致内置 ComputerUse 也被误判为不可用。\n- 修复：聊天栏开关现在只控制用户配置的外部 MCP；已在 AI 设置中启用的内置 ComputerUse 始终注入主 Agent，并明确提供截图、鼠标移动/点击、键盘输入和打开应用能力。\n- 保留：ComputerUse 原有坐标映射、可见鼠标移动、点击红圈、截图验证和输入校验逻辑不变（含 v0.9.55 的 MOD_MASK / ⌘V 真实 CoreGraphics 事件修复）。",
   "deltas": [
     {
-      "from": "0.9.54",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.9.55/AI.Copilot-0.9.55.zip",
-      "sha256": "6d24513ef02cb4d8e5f51669b74d0d893673ffe2254a7208cbbbaf4a85d31d14"
+      "from": "0.9.55",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.1/AI.Copilot-0.10.1.zip",
+      "sha256": "b9f74299d954a389d8c3d204ab8b6bf7d297f9154036dd32074fa289f2342d88"
     }
   ]
 }

@@ -1378,6 +1378,7 @@ function buildMcpToolList(serverName) {
   if (serverName) defs = defs.filter((d) => d.serverName === serverName);
   return defs.map((d) => ({
     name: d.toolName,
+    serverName: d.serverName,
     description: `[MCP·${d.serverName}] ${d.description || d.originalName}`,
     schema: normalizeMcpSchema(d.schema),
     tool: {
@@ -1388,7 +1389,7 @@ function buildMcpToolList(serverName) {
       isMcp: true,
       async run(args, ctx) {
         const brief = JSON.stringify(args || {}).slice(0, 300);
-        // 内置 Computer Use 服务器：用户已主动开启，视为已授权，跳过逐次确认直接执行
+        // 内置 Computer Use 服务器：由应用设置统一授权，跳过逐次确认直接执行
         const trusted = d.serverName === 'ComputerUse';
         if (!trusted) {
           const ok = await ctx.confirm({
@@ -1418,7 +1419,7 @@ function normalizeMcpSchema(schema) {
   return s;
 }
 
-// mcpEnabled=false 时完全不把 MCP 外部工具暴露给模型（用户可在聊天界面关掉）
+// mcpEnabled=false 时不注入外部 MCP；已开启的内置 ComputerUse 仍默认可用
 // mcpServer 指定时只注入该服务器的工具（用户单选了某个服务器）
 function buildToolList(allowedTools, isSubagent, webAccess, mcpEnabled = true, mcpServer = null) {
   const local = Object.entries(tools)
@@ -1430,9 +1431,20 @@ function buildToolList(allowedTools, isSubagent, webAccess, mcpEnabled = true, m
     })
     .map(([name, t]) => ({ name, description: t.description, schema: t.schema, tool: t }));
 
-  const mcpTools = mcpEnabled
-    ? buildMcpToolList(mcpServer).filter((t) => (allowedTools ? allowedTools.includes(t.name) : true))
+  const allowedMcpTool = (t) => !allowedTools || allowedTools.includes(t.name);
+  // 内置 ComputerUse 是本机能力，不跟随聊天栏的“外部 MCP”开关隐藏。
+  const builtinComputerUse = buildMcpToolList('ComputerUse').filter(allowedMcpTool);
+  const externalMcp = mcpEnabled
+    ? buildMcpToolList(mcpServer)
+        .filter((t) => t.serverName !== 'ComputerUse')
+        .filter(allowedMcpTool)
     : [];
+  const seen = new Set();
+  const mcpTools = builtinComputerUse.concat(externalMcp).filter((t) => {
+    if (seen.has(t.name)) return false;
+    seen.add(t.name);
+    return true;
+  });
 
   return local.concat(mcpTools);
 }
@@ -1502,27 +1514,34 @@ function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatI
   const webGuidance = webAccess
     ? `\n- 需要查最新信息、技术文档、新闻时用 web_search 搜索互联网；需要读取某个网页的详细内容时用 web_fetch。`
     : '';
-  // MCP 外部工具（用户在「AI 设置 → MCP 服务器」中配置）。关闭 MCP 开关时不注入，避免模型调用外部服务
-  // mcpServer 指定时只注入该服务器的工具
+  // 内置 ComputerUse 不受聊天栏 MCP 开关影响；该开关只控制用户配置的外部 MCP。
+  // mcpServer 指定时只筛选外部服务器，内置 ComputerUse 仍保留。
   let mcpSection = '';
-  if (mcpEnabled) {
-    try {
-      let defs = require('./mcp').getMcpToolDefs() || [];
-      if (mcpServer) defs = defs.filter((d) => d.serverName === mcpServer);
-      if (defs.length) {
-        const byServer = {};
-        for (const d of defs) {
-          (byServer[d.serverName] = byServer[d.serverName] || []).push(
-            `  - ${d.toolName}：${(d.description || d.originalName).slice(0, 160)}`
-          );
-        }
-        const lines = Object.entries(byServer)
-          .map(([s, arr]) => `- 服务器 ${s}：\n${arr.join('\n')}`)
-          .join('\n');
-        mcpSection = `\n\n## MCP 外部工具（用户已接入）\n以下工具由用户配置的 MCP 服务器提供，命名规则 mcp__<服务器>__<工具名>，调用前会请求用户授权：\n${lines}\n优先在这些工具能力覆盖的场景使用它们（例如数据库、云服务、第三方 API）。`;
+  try {
+    const defs = require('./mcp').getMcpToolDefs() || [];
+    const builtinDefs = defs.filter((d) => d.serverName === 'ComputerUse');
+    const externalDefs = defs.filter((d) =>
+      d.serverName !== 'ComputerUse' && (!mcpServer || d.serverName === mcpServer)
+    );
+    if (builtinDefs.length) {
+      const lines = builtinDefs
+        .map((d) => `  - ${d.toolName}：${(d.description || d.originalName).slice(0, 160)}`)
+        .join('\n');
+      mcpSection += `\n\n## 内置 ComputerUse 工具（默认可用）\n内置 ComputerUse 用于截图、鼠标移动/点击、键盘输入和打开本机应用，不受聊天栏“外部 MCP”开关影响。用户要求操作屏幕时优先使用这些工具，并按截图确认目标、移动后短暂停顿、点击后再次截图验证的流程执行；工具自带可见鼠标效果。\n${lines}`;
+    }
+    if (mcpEnabled && externalDefs.length) {
+      const byServer = {};
+      for (const d of externalDefs) {
+        (byServer[d.serverName] = byServer[d.serverName] || []).push(
+          `  - ${d.toolName}：${(d.description || d.originalName).slice(0, 160)}`
+        );
       }
-    } catch (e) { /* ignore */ }
-  }
+      const lines = Object.entries(byServer)
+        .map(([s, arr]) => `- 服务器 ${s}：\n${arr.join('\n')}`)
+        .join('\n');
+      mcpSection += `\n\n## MCP 外部工具（用户已接入）\n以下工具由用户配置的 MCP 服务器提供，命名规则 mcp__<服务器>__<工具名>，调用前会请求用户授权：\n${lines}\n优先在这些工具能力覆盖的场景使用它们（例如数据库、云服务、第三方 API）。`;
+    }
+  } catch (e) { /* ignore */ }
   // 长期记忆注入：用户级 + 当前对话级
   const userMem = memory.formatMemory('user', null, 30);
   const chatMem = chatId ? memory.formatMemory('chat', chatId, 15) : '';
@@ -1812,7 +1831,7 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
     confirm: callbacks.onConfirm,
     rulesChanged: callbacks.onRulesChanged || (() => {}),
     webAccess: callbacks.webAccess || false,
-    mcpEnabled: callbacks.mcpEnabled === true, // 默认关闭；用户在聊天栏开启后传 true
+    mcpEnabled: callbacks.mcpEnabled === true, // 外部 MCP 开关；内置 ComputerUse 由应用设置控制
     mcpServer: callbacks.mcpServer || null,    // 用户单选的服务器名（null=未指定）
     skillsDir: callbacks.skillsDir || null,
     attachments: callbacks.attachments || [],  // 本轮拖入对话框的附件（图片 base64 / 文档文本）
