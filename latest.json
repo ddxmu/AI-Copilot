@@ -1,12 +1,12 @@
 {
-  "version": "0.10.4",
+  "version": "0.10.5",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-17",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.4/AI.Copilot-0.10.4-arm64.dmg",
-  "dmgSha256": "a1439877ed2fb35a89048b80fe1a9d9563570a4361cb75df08f77d3531acd7a2",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.4/AI.Copilot-0.10.4.zip",
-  "patchSha256": "8bede339fb69dfdf5c0a0e954d2594e18c16dd524b5f5d0b1a743b684e6e5db7",
-  "notes": "### 修复 v0.10.3 语音设置「测试语音 / 保存」点不动 + 语音识别（STT）独立区块\n- 根因：v0.10.3 编辑 initVoiceSettings 时误删了 `const saveBtn = document.getElementById('btn-voice-save')` 声明，导致 `if (saveBtn)` 抛 ReferenceError，整个初始化函数在绑定测试语音点击处理器之前就中断 → 测试语音与保存两个按钮全部失效。\n- 修复：\n  - 恢复 `saveBtn` 声明，「测试语音」与「保存」按钮恢复正常可用（功能与 v0.10.2 一致，未改算法）。\n  - 语音识别（麦克风转文字 / STT）从 TTS 区块拆出，独立成单独卡片单独显示；STT 拉取模型状态改用独立元素 voice-stt-status，不再污染 TTS 状态。\n  - TTS 三个供应商（本地 / MiniMax / 自定义）与 STT 独立配置（sttEnabled / sttProvider / sttBaseUrl / sttKey / sttModel）保持解耦，保存时一并写入 aiVoiceConfigSet。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.5/AI.Copilot-0.10.5-arm64.dmg",
+  "dmgSha256": "f7eb8c8c989c9a0d2dd2b51c7486b8c9b703556f61888c6e3e3ff4886868e774",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.5/AI.Copilot-0.10.5.zip",
+  "patchSha256": "7630d1880c06dd14e61fbaf8238d1e99696c2a3fa0c1d992dbea59cdb485067d",
+  "notes": "### ComputerUse 可靠性与灵活性打磨 + 全局硬停止 + 光标/点击红圈视觉微调\n- **可靠性（7 项）**：统一超时/重试/串行工具队列；点击 moveAndSettle 修落点、点击前隐藏覆盖层；输入改剪贴板粘贴（治中文乱码）；拖拽 animatedMove + 必松左键；72 DPI 截图归一化 + 降采样上限；多显示器取屏修复；新增 focus_app + 危险快捷键二次确认。\n- **灵活性（6 项）**：新增全局停止（Esc / 停止按钮中断 Agent 循环 + 模型请求）；多显示器支持；点击红圈更小更轻；降采样回传真实坐标比例；F1–F12 自动补 fn；工具调用输入回显到「工作完成」面板。\n- **光标 / 点击红圈视觉微调（纯视觉，未动坐标换算）**：指针直径 14–18px；点击红圈直径 32–40px、线宽 2–3px、300–500ms 后淡出；截图中红圈不覆盖按钮文字；移动保留动画。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -17,6 +17,11 @@
       "from": "0.10.3",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.4/AI.Copilot-0.10.4.zip",
       "sha256": "8bede339fb69dfdf5c0a0e954d2594e18c16dd524b5f5d0b1a743b684e6e5db7"
+    },
+    {
+      "from": "0.10.4",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.5/AI.Copilot-0.10.5.zip",
+      "sha256": "7630d1880c06dd14e61fbaf8238d1e99696c2a3fa0c1d992dbea59cdb485067d"
     }
   ]
 }

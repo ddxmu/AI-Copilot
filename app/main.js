@@ -1697,11 +1697,13 @@ ipcMain.handle('open-computer-use-perms', async () => {
   return true;
 });
 
-// 中断 Computer Use 当前在途操作（Esc / 停止按钮触发）：杀掉在途 osascript，
-// 并通知渲染进程重置发送状态。
+// 中断 Computer Use 当前在途操作（Esc / 停止按钮触发）：杀掉在途 osascript、
+// 同时请求 Agent 主循环立即停止（取消在途模型请求、不再执行后续工具与轮次）、
+// 并通知渲染进程重置发送状态。三者合力实现需求 #1 的「立即停止」。
 ipcMain.handle('computer-use-abort', async () => {
   let ok = false;
   try { ok = mcp.cancelTool('computeruse'); } catch (e) { /* ignore */ }
+  try { agent.requestStop(); } catch (e) { /* ignore */ }
   if (mainWindow && !mainWindow.isDestroyed()) {
     try { mainWindow.webContents.send('computer-use-aborted'); } catch (e) { /* ignore */ }
   }
@@ -1829,6 +1831,8 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
       resolvedAttachments = await Promise.all(attachments.map((a) => readAttachmentForAi(a)));
     }
     const activeChatId = currentChatId || null;
+    // 新一轮对话开始：清空 ComputerUse 的会话级硬停止 / 连续失败计数（需求：连续两次失败才停、新对话必须真正清理）
+    try { mcp.resetTool('computeruse'); } catch (e) { /* ComputerUse 未启用时忽略 */ }
     const result = await agent.runAgent(profile, history, text, {
       skillsDir: SKILLS_DIR,
       attachments: resolvedAttachments,

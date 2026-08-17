@@ -1320,7 +1320,25 @@ const tools = {
 
 /* ================= 协议适配 ================= */
 
-function httpPostJson(urlStr, headers, body, timeoutMs = 300000) {
+/* ================= 硬停止（需求 #1：点「停止」立即取消 Agent 循环 + 在途模型请求） ================= */
+// 用模块级标志 + AbortController 切断正在飞的 HTTP 请求；ComputerUse 子进程的中断由 main.js 的
+// computer-use-abort IPC 另行触发（杀在途 osascript）。两者合力覆盖「停止」语义的全部维度。
+let _stopRequested = false;
+let _currentAbort = null; // 当前轮次的 AbortController
+
+function requestStop() {
+  _stopRequested = true;
+  if (_currentAbort && typeof _currentAbort.abort === 'function') {
+    try { _currentAbort.abort(); } catch (e) { /* ignore */ }
+  }
+}
+function clearStop() {
+  _stopRequested = false;
+  _currentAbort = null;
+}
+function isStopRequested() { return _stopRequested; }
+
+function httpPostJson(urlStr, headers, body, timeoutMs = 300000, signal = null) {
   return new Promise((resolve, reject) => {
     const url = new URL(urlStr);
     const lib = url.protocol === 'http:' ? http : https;
@@ -1333,6 +1351,7 @@ function httpPostJson(urlStr, headers, body, timeoutMs = 300000) {
         path: url.pathname + url.search,
         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), 'Accept-Encoding': 'identity', ...headers },
         timeout: timeoutMs,
+        signal,
       },
       (res) => {
         const chunks = [];
@@ -1357,11 +1376,11 @@ function httpPostJson(urlStr, headers, body, timeoutMs = 300000) {
 }
 
 // 带重试的 API 调用：超时/网络错误自动重试最多 2 次，指数退避
-async function httpPostJsonWithRetry(urlStr, headers, body, timeoutMs = 300000, maxRetries = 2) {
+async function httpPostJsonWithRetry(urlStr, headers, body, timeoutMs = 300000, maxRetries = 2, signal = null) {
   let lastErr = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await httpPostJson(urlStr, headers, body, timeoutMs);
+      return await httpPostJson(urlStr, headers, body, timeoutMs, signal);
     } catch (e) {
       lastErr = e;
       const isRetryable = /请求超时|ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|HTTP 429|HTTP 502|HTTP 503|HTTP 504/i.test(e.message);
@@ -1455,7 +1474,7 @@ function buildToolList(allowedTools, isSubagent, webAccess, mcpEnabled = true, m
   return local.concat(mcpTools);
 }
 
-async function callApi(profile, apiType, system, messages, toolList) {
+async function callApi(profile, apiType, system, messages, toolList, signal = null) {
   const base = profile.baseUrl.replace(/\/+$/, '');
   if (apiType === 'anthropic') {
     const msgUrl = /\/v\d+(?:\.\d+)?$/.test(base) ? `${base}/messages` : `${base}/v1/messages`;
@@ -1463,7 +1482,8 @@ async function callApi(profile, apiType, system, messages, toolList) {
     const resp = await httpPostJsonWithRetry(
       msgUrl,
       { 'x-api-key': profile.apiKey, 'anthropic-version': '2023-06-01' },
-      { model: profile.model, max_tokens: 8192, system, tools: toolDefs.length ? toolDefs : undefined, messages }
+      { model: profile.model, max_tokens: 8192, system, tools: toolDefs.length ? toolDefs : undefined, messages },
+      undefined, undefined, signal
     );
     const text = resp.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
     const toolCalls = resp.content.filter((b) => b.type === 'tool_use').map((b) => ({ id: b.id, name: b.name, input: b.input }));
@@ -1483,7 +1503,8 @@ async function callApi(profile, apiType, system, messages, toolList) {
   const resp = await httpPostJsonWithRetry(
     `${base}/chat/completions`,
     { Authorization: `Bearer ${profile.apiKey}` },
-    { model: profile.model, messages: apiMessages, tools: toolDefs.length ? toolDefs : undefined, tool_choice: 'auto' }
+    { model: profile.model, messages: apiMessages, tools: toolDefs.length ? toolDefs : undefined, tool_choice: 'auto' },
+    undefined, undefined, signal
   );
   const choice = resp.choices[0].message;
   const toolCalls = (choice.tool_calls || []).map((tc) => {
@@ -1703,6 +1724,9 @@ function sanitizeMessages(messages, apiType) {
 /* ================= Agent Loop（核心，主对话与子代理共用） ================= */
 // opts: { system, allowedTools, maxTurns, isSubagent }
 async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
+  // 本轮 AbortController：停止时中断正在飞的模型 HTTP 请求
+  const ac = new AbortController();
+  _currentAbort = ac;
   const system = opts.system || buildSystemPrompt(ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer, ctx.chatId);
   const maxTurns = opts.maxTurns || MAX_TURNS;
   const toolList = buildToolList(opts.allowedTools, opts.isSubagent, ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer);
@@ -1745,6 +1769,11 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   const compactThreshold = getCompactThreshold(profile.model);
 
   for (let turn = 0; turn < maxTurns; turn++) {
+    // 需求 #1：停止后不再发起任何模型请求、不再执行工具、不再进入下一轮
+    if (_stopRequested) {
+      _currentAbort = null;
+      return { ok: true, stopped: true, text: (finalText || '') + '\n\n（已按你的要求停止。）', usage: totalUsage, messages };
+    }
     // 上下文压缩：主对话且超阈值时触发
     if (!opts.isSubagent && !compacted && totalUsage.input > compactThreshold && messages.length > KEEP_RECENT_TURNS + 2) {
       ctx.emit('compact', {});
@@ -1760,7 +1789,17 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
     }
 
     // 调用前清洗历史，确保 tool / tool_calls 配对（防压缩导致的 HTTP 400）
-    const r = await callApi(profile, apiType, system, sanitizeMessages(messages, apiType), toolList);
+    let r;
+    try {
+      r = await callApi(profile, apiType, system, sanitizeMessages(messages, apiType), toolList, ac.signal);
+    } catch (e) {
+      // 停止导致的请求中断（AbortError）或已请求停止 → 直接结束，不算异常
+      if (_stopRequested || e.name === 'AbortError') {
+        _currentAbort = null;
+        return { ok: true, stopped: true, text: (finalText || '') + '\n\n（已按你的要求停止。）', usage: totalUsage, messages };
+      }
+      throw e;
+    }
     if (r.usage) { totalUsage.input += r.usage.input; totalUsage.output += r.usage.output; }
     if (r.text) { finalText = r.text; ctx.emit('text', r.text); }
 
@@ -1772,6 +1811,8 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
     const results = [];
     const pendingImages = []; // view_image 收集的待注入视觉输入
     for (const call of r.toolCalls) {
+      // 停止后不再执行后续工具（不截图、不点击、不输入）
+      if (_stopRequested) break;
       const entry = toolList.find((t) => t.name === call.name);
       ctx.emit('tool-start', { name: call.name, input: call.input });
       let result;
@@ -1817,6 +1858,7 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   const lastIsToolOnly = lastMsg && lastMsg.role === 'tool';
   const hitMaxTurns = lastIsToolOnly;
   const extra = hitMaxTurns ? '\n\n（系统提示：本轮已达最大工具调用次数（' + maxTurns + '），任务可能未完成。如需继续请回复"继续"接着处理。）' : '';
+  _currentAbort = null;
   return { ok: true, text: (finalText || (hitMaxTurns ? '已完成部分操作。' : '')) + extra, usage: totalUsage, messages, hitMaxTurns };
 }
 
@@ -1824,6 +1866,8 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
 // profile: AI 配置；chatHistory: UI 层简版历史 [{role, content}]; userText: 本轮输入
 // callbacks: { onText, onToolStart, onToolEnd, onConfirm, onTodo, onSubagentStart, onSubagentEnd, onCompact, getRules, onRulesChanged }
 async function runAgent(profile, chatHistory, userText, callbacks) {
+  // 新一轮对话开始：清掉上一次可能残留的停止标志 / AbortController
+  clearStop();
   // 动态加载外部技能（userData/skills/*/SKILL.md），合并进技能表
   if (callbacks.skillsDir) {
     CURRENT_SKILLS_DIR = callbacks.skillsDir;
@@ -1866,10 +1910,10 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
     if (ctx.memoryEnabled && Array.isArray(result.messages)) {
       extractMemoryFacts(profile, apiType, result.messages).catch(() => {});
     }
-    return { ok: true, usage: result.usage, rules: ctx.rules, todos: ctx.todos, messages: result.messages, hitMaxTurns: result.hitMaxTurns };
+    return { ok: true, stopped: !!result.stopped, usage: result.usage, rules: ctx.rules, todos: ctx.todos, messages: result.messages, hitMaxTurns: result.hitMaxTurns };
   } catch (err) {
     return { ok: false, error: err.message };
   }
 }
 
-module.exports = { runAgent, sanitizeMessages, SKILLS, BUILTIN_SKILLS, RECOMMENDED_SKILLS, loadExternalSkills, parseSkillMd, getContextWindow, getCompactThreshold };
+module.exports = { runAgent, sanitizeMessages, SKILLS, BUILTIN_SKILLS, RECOMMENDED_SKILLS, loadExternalSkills, parseSkillMd, getContextWindow, getCompactThreshold, requestStop, clearStop, isStopRequested };

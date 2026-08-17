@@ -13,15 +13,18 @@
       background: transparent;
       -webkit-app-region: no-drag;
     }
+    /* 鼠标指针：容器 ≈17px，使 200x200 内的箭头缩放到约 16px（清晰可见，符合 14~18px 要求）。
+       仅调整视觉尺寸，不影响任何坐标换算。 */
     #cursor {
       position: absolute;
       left: 0;
       top: 0;
-      width: 28px;
-      height: 28px;
+      width: 17px;
+      height: 17px;
       pointer-events: none;
       will-change: transform, opacity;
       transform: translate3d(0, 0, 0);
+      /* 保留移动可视动画（平滑过渡） */
       transition: transform 0.06s linear, opacity 0.25s ease;
       opacity: 0;
       z-index: 999999;
@@ -32,27 +35,31 @@
       height: 100%;
       object-fit: contain;
       pointer-events: none;
-      filter: drop-shadow(1px 2px 2px rgba(0, 0, 0, 0.25));
+      filter: drop-shadow(1px 2px 2px rgba(0, 0, 0, 0.35));
     }
     #cursor.visible { opacity: 1; }
+    /* 点击反馈红圈：直径 ~36px（32~40px 区间），线宽 2.5px，显示约 300~500ms 后淡出。
+       中心透明，不遮挡下方内容。 */
     .ripple {
       position: absolute;
       left: 0;
       top: 0;
-      width: 18px;
-      height: 18px;
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
-      border: 3px solid rgba(255, 75, 120, 0.9);
-      background: rgba(255, 75, 120, 0.14);
-      box-shadow: 0 0 14px rgba(255, 75, 120, 0.55);
+      border: 2.5px solid rgba(255, 75, 120, 0.95);
+      background: transparent;
+      box-shadow: 0 0 10px rgba(255, 75, 120, 0.4);
       pointer-events: none;
       transform: translate(-50%, -50%);
       animation: ripple 0.48s ease-out forwards;
       z-index: 999998;
     }
     @keyframes ripple {
-      0% { width: 16px; height: 16px; opacity: 1; }
-      100% { width: 84px; height: 84px; opacity: 0; }
+      0%   { opacity: 0;    transform: translate(-50%, -50%) scale(0.85); }
+      12%  { opacity: 1;    transform: translate(-50%, -50%) scale(1); }
+      65%  { opacity: 1;    transform: translate(-50%, -50%) scale(1.05); }
+      100% { opacity: 0;    transform: translate(-50%, -50%) scale(1.1); }
     }
   </style>
 </head>
@@ -64,10 +71,12 @@
     (function () {
       const cursor = document.getElementById('cursor');
       let visible = false;
-      // cursor.png (200x200) 的可见箭头尖端约在 (31, 3)；28x28 容器里缩放后约 (4, 0)。
+      // cursor.png (200x200) 的可见箭头尖端（最左上不透明像素）实测在 (21, 13)。
+      // 17x17 容器内缩放比为 17/200=0.085，故尖端在容器内约 (1.8, 1.1)。
       // 把容器左上角往左/上偏移同样距离，让尖端与目标坐标重合。
-      const TIP_OFFSET_X = 4;
-      const TIP_OFFSET_Y = 0;
+      // 仅视觉偏移，不改动任何坐标换算。
+      const TIP_OFFSET_X = 1.8;
+      const TIP_OFFSET_Y = 1.1;
       function setPos(x, y) {
         cursor.style.transform = `translate3d(${x - TIP_OFFSET_X}px, ${y - TIP_OFFSET_Y}px, 0)`;
         if (!visible) {

@@ -20,10 +20,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const net = require('net');
+const zlib = require('zlib');
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'ComputerUse';
-const SERVER_VERSION = '1.4.2';
+const SERVER_VERSION = '1.5.0';
 
 const TMP = path.join(os.tmpdir(), 'ai-copilot-computer-use');
 try { fs.mkdirSync(TMP, { recursive: true }); } catch (e) { /* ignore */ }
@@ -233,13 +234,335 @@ function setCurrentChild(p) { _currentChild = p; }
 function clearCurrentChild(p) { if (_currentChild === p) _currentChild = null; }
 
 // 中断当前操作：杀掉在途 osascript，并尽力释放鼠标左键（防 drag 中途被杀卡键）。
+// 同时置位「会话级硬停止」——即使主进程侧还有排队中的 tools/call 抵达，也一律拒绝，
+// 不再截图 / 点击 / 输入（对应需求 1：点停止后立即取消后续操作）。
 function abortCurrent() {
   _aborted = true;
   _abortKill = true;
+  _sessionStopped = true;
   if (_lastCg) runJxa(mouseUpJxa(_lastCg.x, _lastCg.y)).catch(() => {});
   if (_currentChild) {
     try { _currentChild.kill('SIGTERM'); } catch (e) { /* ignore */ }
   }
+}
+
+/* ---------------- 会话状态与健壮性基础设施（v1.5.0） ---------------- */
+
+// 目标应用：focus_app 成功后记录；后续每步操作前校验它仍在前台，焦点漂移则自动重新聚焦。
+let _targetApp = null;
+// 连续失败计数：定位/点击/输入连续失败达阈值即停止并报告原因，避免盲目循环。
+let _consecutiveFailures = 0;
+const MAX_CONSECUTIVE_FAILURES = 2;
+// 会话级硬停止：用户点「停止」后置位，任何后续工具调用立即拒绝，直到主进程下发 __reset。
+let _sessionStopped = false;
+// 内部截图文件（仅用于变化验证，不回传模型），限制数量避免堆积占盘。
+const _shotFiles = [];
+const MAX_SHOT_FILES = 6;
+
+// 主进程在新一轮用户指令开始时下发 __reset，清空停止标记与失败计数。
+function resetSession() {
+  _sessionStopped = false;
+  _consecutiveFailures = 0;
+  _aborted = false;
+  _abortKill = false;
+  pruneShotHistory(0);
+}
+
+function trackShotFile(file) {
+  if (!file) return;
+  _shotFiles.push(file);
+  pruneShotHistory();
+}
+
+// 只保留最近 MAX_SHOT_FILES 张内部截图，其余删除（需求：截图只保留最近几张）。
+function pruneShotHistory(keep) {
+  const limit = keep == null ? MAX_SHOT_FILES : keep;
+  while (_shotFiles.length > limit) {
+    const old = _shotFiles.shift();
+    try { fs.unlinkSync(old); } catch (e) { /* ignore */ }
+  }
+}
+
+function markSuccess() { _consecutiveFailures = 0; }
+function markFailure() { _consecutiveFailures += 1; }
+
+// 每个工具执行前的统一守卫：
+//   ① 会话已被用户停止 → 立即拒绝（硬停止）
+//   ② 连续失败已达阈值 → 停止并报告原因（不盲目循环）
+//   ③ 目标应用焦点漂移 → 自动重新聚焦（best-effort）
+async function guard(opts) {
+  const o = opts || {};
+  if (_sessionStopped) {
+    throw new Error('会话已被用户停止（点击了「停止」）。本轮不再执行任何截图/点击/输入操作。');
+  }
+  if (_consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+    _sessionStopped = true;
+    throw new Error(
+      `已连续 ${_consecutiveFailures} 次定位/操作失败，为避免盲目循环已停止本轮操作。` +
+      `请向用户说明失败原因（坐标定位不准 / 目标控件未出现 / 权限不足），并建议改用键盘快捷键或先 focus_app 重新定位，等用户确认后再继续。`
+    );
+  }
+  if (o.checkFront !== false && _targetApp) {
+    try {
+      const front = await getFrontAppName();
+      if (front && !frontMatches(front, _targetApp)) {
+        logErr(`焦点漂移：前台「${front}」≠ 目标「${_targetApp}」，自动重新聚焦`);
+        await focusAppByName(_targetApp);
+      }
+    } catch (e) { /* 读前台失败不阻断，交由后续验证兜底 */ }
+  }
+}
+
+// 读取当前前台应用名（best-effort，读不到返回空串）
+async function getFrontAppName() {
+  try {
+    const out = await runAppleScript('tell application "System Events" to get name of first process whose frontmost is true');
+    return (out || '').trim();
+  } catch (e) {
+    return '';
+  }
+}
+
+// 前台应用名与目标名的宽松匹配（兼容 bundle id、"Google Chrome" vs "Chrome" 等）
+function frontMatches(front, target) {
+  const a = String(front || '').trim().toLowerCase();
+  const b = String(target || '').trim().toLowerCase();
+  if (!a || !b) return true; // 读不到就不判定漂移，避免误伤
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  const tail = b.split('.').pop(); // com.google.Chrome -> chrome
+  if (tail && tail.length >= 3 && a.includes(tail)) return true;
+  return false;
+}
+
+// 聚焦/启动应用，并轮询等待窗口稳定后再返回（需求：focus_app 后等窗口稳定再截图操作）
+async function focusAppByName(name) {
+  const nm = String(name || '').trim();
+  if (!nm) return false;
+  let launched = false;
+  try {
+    const out = await runJxa(
+      `ObjC.import('Cocoa');\n` +
+      `var ws = $.NSWorkspace.sharedWorkspace;\n` +
+      `var ok = ws.launchApplication($(${JSON.stringify(nm)}));\n` +
+      `ok ? '1' : '0';`
+    );
+    launched = String(out || '').trim() === '1';
+  } catch (e) {
+    logErr('focusAppByName launchApplication failed: ' + e.message);
+  }
+  if (!launched) {
+    // 回退：AppleScript activate（需要「自动化」授权）
+    try { await runAppleScript(`tell application "${asStrLiteral(nm)}" to activate`); } catch (e) { /* 交给轮询判定 */ }
+  }
+  // 轮询前台应用名，命中后再多等一拍让窗口/动画稳定
+  for (let i = 0; i < 8; i++) {
+    await sleep(180);
+    const front = await getFrontAppName();
+    if (front && frontMatches(front, nm)) {
+      await sleep(150);
+      return true;
+    }
+  }
+  return false;
+}
+
+// 浏览器地址栏优先 ⌘L（比按截图坐标点地址栏可靠得多），返回是否拿到可编辑焦点
+async function focusAddressBar() {
+  await runJxa(buildKeyScript(CHAR_KEYCODES['l'], ['command']));
+  await sleep(180);
+  try { return await hasEditableFocus(); } catch (e) { return false; }
+}
+
+// 变化判定网格：截图统一重采样到 SIG_GRID × SIG_GRID 灰度格，比较各格灰度差。
+// 32×32 = 1024 格：既能让「弹出菜单 / 页面跳转」这类真实变化落到足够多格上，
+// 又能让「文本光标闪烁 / 菜单栏时钟跳秒」这类噪声被格内均值吃掉（不误判为变化）。
+const SIG_GRID = 32;
+const SIG_DELTA = 10;      // 单格灰度差阈值（0-255）
+const SIG_MIN_FRAC = 0.005; // 变化格占比阈值：≥0.5%（约 6/1024 格）才算界面真的变了
+
+// 内部验证截图：截屏 → 重采样到 32×32（仅用于变化比对，不标注、不回传模型、不计入上下文）
+async function captureShotFile(display) {
+  const idx = Math.max(1, parseInt(display, 10) || 1);
+  const stamp = Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  const src = path.join(TMP, `verify_${stamp}.png`);
+  const capArgs = ['-x', '-t', 'png'];
+  if (idx > 1) capArgs.unshift('-D', String(idx));
+  await spawnAsync('screencapture', capArgs.concat([src]));
+  if (!fs.existsSync(src)) throw new Error('验证截图未生成');
+  trackShotFile(src);
+  const dst = path.join(TMP, `verify_${stamp}_s.png`);
+  // -z 强制重采样到固定 32×32（不保持长宽比），保证两次采样网格严格可比
+  await spawnAsync('sips', ['-z', String(SIG_GRID), String(SIG_GRID), src, '--out', dst]);
+  if (!fs.existsSync(dst)) throw new Error('验证截图重采样失败');
+  trackShotFile(dst);
+  return dst;
+}
+
+// 极简 PNG 解码（8bit、非隔行，灰度/灰度+A/RGB/RGBA）→ 逐像素灰度数组。
+// 只用 Node 内置 zlib，无外部依赖；比走 osascript 取色快一个数量级，且不需要任何系统授权。
+// 注：JXA 并未桥接 NSBitmapImageRep 的 colorAtX:y:（调用会报 not a function），故不能走 JXA 取色。
+function decodePngGray(buf) {
+  if (!buf || buf.length < 8) return null;
+  if (buf.readUInt32BE(0) !== 0x89504e47) return null; // PNG 签名
+  let pos = 8;
+  let width = 0, height = 0, bitDepth = 0, colorType = 0, interlace = 0;
+  const idat = [];
+  while (pos + 8 <= buf.length) {
+    const len = buf.readUInt32BE(pos);
+    const type = buf.toString('ascii', pos + 4, pos + 8);
+    const dataStart = pos + 8;
+    if (type === 'IHDR') {
+      width = buf.readUInt32BE(dataStart);
+      height = buf.readUInt32BE(dataStart + 4);
+      bitDepth = buf[dataStart + 8];
+      colorType = buf[dataStart + 9];
+      interlace = buf[dataStart + 12];
+    } else if (type === 'IDAT') {
+      idat.push(buf.slice(dataStart, dataStart + len));
+    } else if (type === 'IEND') {
+      break;
+    }
+    pos = dataStart + len + 4; // 跳过 CRC
+  }
+  if (!width || !height || bitDepth !== 8 || interlace !== 0 || !idat.length) return null;
+  const channels = colorType === 0 ? 1 : colorType === 2 ? 3 : colorType === 4 ? 2 : colorType === 6 ? 4 : 0;
+  if (!channels) return null; // 调色板（colorType 3）等不支持
+  let raw;
+  try { raw = zlib.inflateSync(Buffer.concat(idat)); } catch (e) { return null; }
+  const stride = width * channels;
+  if (raw.length < (stride + 1) * height) return null;
+  const gray = new Array(width * height);
+  let prev = Buffer.alloc(stride);
+  let off = 0;
+  for (let y = 0; y < height; y++) {
+    const filter = raw[off]; off += 1;
+    const line = Buffer.from(raw.slice(off, off + stride)); off += stride;
+    if (!unfilterPngLine(filter, line, prev, channels)) return null;
+    for (let x = 0; x < width; x++) {
+      const i = x * channels;
+      gray[y * width + x] = channels >= 3
+        ? Math.round((line[i] + line[i + 1] + line[i + 2]) / 3)
+        : line[i];
+    }
+    prev = line;
+  }
+  return { width, height, gray };
+}
+
+// PNG 行滤波还原（None/Sub/Up/Average/Paeth），原地改写 line
+function unfilterPngLine(type, line, prev, bpp) {
+  const n = line.length;
+  if (type === 0) return true;
+  if (type === 1) { for (let i = bpp; i < n; i++) line[i] = (line[i] + line[i - bpp]) & 255; return true; }
+  if (type === 2) { for (let i = 0; i < n; i++) line[i] = (line[i] + prev[i]) & 255; return true; }
+  if (type === 3) {
+    for (let i = 0; i < n; i++) {
+      const a = i >= bpp ? line[i - bpp] : 0;
+      line[i] = (line[i] + ((a + prev[i]) >> 1)) & 255;
+    }
+    return true;
+  }
+  if (type === 4) {
+    for (let i = 0; i < n; i++) {
+      const a = i >= bpp ? line[i - bpp] : 0;
+      const b = prev[i];
+      const c = i >= bpp ? prev[i - bpp] : 0;
+      const p = a + b - c;
+      const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+      const pr = (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c);
+      line[i] = (line[i] + pr) & 255;
+    }
+    return true;
+  }
+  return false; // 未知滤波类型
+}
+
+// 读取 32×32 灰度指纹（失败返回 null → 判定为 unknown，保守放行而非误杀）
+function imageSignature(file) {
+  try {
+    const res = decodePngGray(fs.readFileSync(file));
+    if (!res || !res.gray || res.gray.length < 64) return null;
+    return res.gray;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 纯函数：比较两张截图指纹，判断界面是否发生了可见变化（可单测，无需 macOS）。
+// 返回 null 表示无法判定；differ=true 表示界面确实变了。
+function signaturesDiffer(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || !a.length || a.length !== b.length) return null;
+  let changed = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (Math.abs(a[i] - b[i]) > SIG_DELTA) changed += 1;
+  }
+  const frac = changed / a.length;
+  return { changed, total: a.length, frac, differ: frac >= SIG_MIN_FRAC };
+}
+
+// 读取「当前焦点」描述串（前台应用 + 焦点控件角色/说明/取值）。
+// 用于像素几乎无变化、但焦点确实转移了的场景（例如点进一个输入框），避免误判为点击失败。
+async function focusDescriptor() {
+  try {
+    const out = await runAppleScript(
+      'tell application "System Events"\n' +
+      '  set p to first process whose frontmost is true\n' +
+      '  set d to (name of p)\n' +
+      '  try\n' +
+      '    set fe to focused UI element of p\n' +
+      '    set d to d & "|" & (role of fe)\n' +
+      '    try\n' +
+      '      set d to d & "|" & (description of fe)\n' +
+      '    end try\n' +
+      '    try\n' +
+      '      set d to d & "|" & (value of fe as text)\n' +
+      '    end try\n' +
+      '  end try\n' +
+      '  return d\n' +
+      'end tell'
+    );
+    return (out || '').trim();
+  } catch (e) {
+    return '';
+  }
+}
+
+// 抓取操作前的状态基线（截图指纹 + 焦点描述）
+async function captureState(display) {
+  const st = { sig: null, focus: '' };
+  try {
+    const f = await captureShotFile(display);
+    st.sig = imageSignature(f);
+  } catch (e) { /* 抓不到基线 → 后续判为 unknown */ }
+  st.focus = await focusDescriptor();
+  return st;
+}
+
+// 操作后重新截图/读状态比对：'ok' 已生效 / 'nochange' 无变化（判失败）/ 'unknown' 无法判定
+async function verifyChanged(display, before) {
+  if (!before) return 'unknown';
+  await sleep(220); // 给界面反应时间
+  let afterSig = null;
+  try {
+    const f = await captureShotFile(display);
+    afterSig = imageSignature(f);
+  } catch (e) { /* 截不到 → 靠焦点判定 */ }
+  const d = signaturesDiffer(before.sig, afterSig);
+  if (d && d.differ) return 'ok';
+  // 像素无明显变化时，看焦点是否转移（聚焦输入框这类操作视觉变化极小，但确实生效了）
+  const afterFocus = await focusDescriptor();
+  if (before.focus && afterFocus && before.focus !== afterFocus) return 'ok';
+  if (!d) return 'unknown';
+  return 'nochange';
+}
+
+// 每一步的状态行：当前应用 / 当前动作 / 目标位置 / 验证结果（需求：为每一步显示这四项）
+function stepStatus(app, action, target, verify) {
+  const parts = ['应用:' + (app || '未知'), '动作:' + (action || '-')];
+  parts.push('目标:' + (target || '-'));
+  parts.push('验证:' + (verify || '未验证'));
+  return '【' + parts.join(' | ') + '】';
 }
 
 /* ---------------- 按键 / 鼠标映射与 CoreGraphics 实现 ---------------- */
@@ -533,6 +856,96 @@ function pasteVerificationResult(fieldContent, pasted) {
   return 'fail';                                          // 能读到字段但内容不对 → 明确失败（不假报成功）
 }
 
+// ASCII 兜底输入：剪贴板路径失败时的「换一条路」重试（仅限可打印 ASCII；
+// 中文/emoji 走 keystroke 会丢字，故非 ASCII 不用这条路）。
+async function typeAsciiKeystroke(text) {
+  await runAppleScript(`tell application "System Events" to keystroke "${asStrLiteral(text)}"`);
+  await sleep(Math.min(1500, 80 + text.length * 12));
+}
+
+// 读取前台应用的可交互辅助功能元素（角色/名称/位置/尺寸/状态），并把全局逻辑点坐标
+// 换算成「图像坐标系」的控件中心，供 click 直接使用（优先元素定位，读不到再回退截图坐标）。
+// 深度与数量都做了硬上限，避免在复杂界面上无限递归/卡死。
+async function queryUiElements(display) {
+  const idx = Math.max(1, parseInt(display, 10) || 1);
+  const displays = await ensureDisplays();
+  const d = displays[idx - 1] || displays[0];
+  const shot = computeShotSize(d.width, d.height);
+  const script = `function safe(fn){ try { return fn(); } catch (e) { return null; } }
+var se = Application('System Events');
+var procs = safe(function(){ return se.processes.whose({ frontmost: true })(); }) || [];
+var result;
+if (!procs.length) {
+  result = 'NOPROC';
+} else {
+  var proc = procs[0];
+  var appName = safe(function(){ return proc.name(); }) || '';
+  var wins = safe(function(){ return proc.windows(); }) || [];
+  if (!wins.length) {
+    result = 'APP:' + appName + '\\nNOWIN';
+  } else {
+    var WANTED = {
+      'button': 1, 'text field': 1, 'text area': 1, 'pop up button': 1, 'menu button': 1,
+      'checkbox': 1, 'radio button': 1, 'link': 1, 'combo box': 1, 'search field': 1,
+      'tab group': 1, 'slider': 1, 'incrementor': 1, 'menu item': 1, 'static text': 0
+    };
+    var out = [];
+    var CAP = 60, MAX_DEPTH = 5;
+    function walk(el, depth) {
+      if (out.length >= CAP || depth > MAX_DEPTH) return;
+      var kids = safe(function(){ return el.uiElements(); }) || [];
+      for (var i = 0; i < kids.length && out.length < CAP; i++) {
+        var k = kids[i];
+        var role = safe(function(){ return k.role(); }) || '';
+        var rl = String(role).toLowerCase().replace(/^ax/, '');
+        if (WANTED[rl]) {
+          var pos = safe(function(){ return k.position(); });
+          var sz = safe(function(){ return k.size(); });
+          if (pos && sz && pos.length === 2 && sz.length === 2 && sz[0] > 0 && sz[1] > 0) {
+            var name = safe(function(){ return k.title(); }) || safe(function(){ return k.name(); }) ||
+                       safe(function(){ return k.description(); }) || safe(function(){ return k.value(); }) || '';
+            var en = safe(function(){ return k.enabled(); });
+            if (en === null) en = true;
+            var fc = safe(function(){ return k.focused(); }) || false;
+            out.push([rl, String(name).replace(/[\\t\\n]/g, ' ').slice(0, 40),
+                      Math.round(pos[0]), Math.round(pos[1]),
+                      Math.round(sz[0]), Math.round(sz[1]),
+                      en ? 1 : 0, fc ? 1 : 0].join('\\t'));
+          }
+        }
+        walk(k, depth + 1);
+      }
+    }
+    walk(wins[0], 0);
+    result = 'APP:' + appName + '\\n' + out.join('\\n');
+  }
+}
+result;`;
+  const raw = String(await runJxa(script) || '').trim();
+  if (raw === 'NOPROC') return { status: 'NOPROC', appName: '', items: [] };
+  const lines = raw.split('\n');
+  let appName = '';
+  const items = [];
+  for (const ln of lines) {
+    if (ln.indexOf('APP:') === 0) { appName = ln.slice(4); continue; }
+    if (ln === 'NOWIN') return { status: 'NOWIN', appName, items: [] };
+    const p = ln.split('\t');
+    if (p.length < 8) continue;
+    const gx = Number(p[2]); const gy = Number(p[3]);
+    const w = Number(p[4]); const h = Number(p[5]);
+    if (![gx, gy, w, h].every(isFinite)) continue;
+    // 控件中心（全局逻辑点）→ 该显示器图像坐标系；与 modelToTarget 严格互逆
+    const cx = (gx + w / 2 - d.originX) / shot.coordScale;
+    const cy = (gy + h / 2 - d.originY) / shot.coordScale;
+    items.push({
+      role: p[0], name: p[1],
+      cx: Math.round(cx), cy: Math.round(cy),
+      enabled: p[6] === '1', focused: p[7] === '1',
+    });
+  }
+  return { status: 'OK', appName, items };
+}
+
 // 在截图上绘制红色点击环（best-effort，失败不影响主流程）
 function annotateScreenshotJxa(png, x, y) {
   const j = JSON.stringify(png);
@@ -553,9 +966,11 @@ var cs = $.CGColorSpaceCreateDeviceRGB();
 var ctx = $.CGBitmapContextCreate(0, w, h, 8, 4 * w, cs, 1);
 if (!ctx) { throw new Error('ctx fail'); }
 $.CGContextDrawImage(ctx, $.CGRectMake(0,0,w,h), cg);
-var r = Math.max(16, Math.min(w, h) * 0.035);
-$.CGContextSetStrokeColorWithColor(ctx, $.CGColorCreateGenericRGB(1,0,0,1));
-$.CGContextSetLineWidth(ctx, 5);
+// 红圈标记仅作视觉提示：缩小半径、减细线宽、半透明，避免覆盖按钮文字。
+// 圆心仍为真实点击坐标（x, y），不改动任何坐标换算。
+var r = Math.max(9, Math.min(w, h) * 0.014);
+$.CGContextSetStrokeColorWithColor(ctx, $.CGColorCreateGenericRGB(1,0,0,0.85));
+$.CGContextSetLineWidth(ctx, 3);
 $.CGContextStrokeEllipseInRect(ctx, $.CGRectMake(${x} - r, h - ${y} - r, 2 * r, 2 * r));
 var out = $.CGBitmapContextCreateImage(ctx);
 var rep = $.NSBitmapImageRep.alloc.initWithCGImage(out);
@@ -568,6 +983,7 @@ data.writeToFileAtomically(path, true);
 
 const TOOLS = {
   async get_screen_size(args) {
+    await guard({ checkFront: false });
     const display = Math.max(1, parseInt(args && args.display, 10) || 1);
     const size = await getDisplaySize(display);
     const shot = computeShotSize(size.width, size.height);
@@ -584,6 +1000,8 @@ const TOOLS = {
   },
 
   async screenshot(args) {
+    await guard();
+    pruneShotHistory();
     const display = Math.max(1, parseInt(args && args.display, 10) || 1);
     const size = await getDisplaySize(display);
     const shot = computeShotSize(size.width, size.height);
@@ -628,15 +1046,18 @@ const TOOLS = {
     try { fs.unlinkSync(dst); } catch (e) { /* ignore */ }
     const mark = _lastPos && _lastDisplay === display ? `截图中已用红圈标出最近一次鼠标操作位置 (${_lastPos.x}, ${_lastPos.y})。` : '';
     sendCursor('show');
+    const frontApp = await getFrontAppName();
+    const status = stepStatus(frontApp, '截图', `显示器${display}`, `${shot.imgW}×${shot.imgH}`);
     return {
       content: [
-        { type: 'text', text: `已截取显示器 ${display} 全屏，图像尺寸 ${shot.imgW} × ${shot.imgH}（逻辑分辨率 ${size.width} × ${size.height}），已包含鼠标光标。${mark}请基于此图像尺寸输出坐标（原点左上角）。` },
+        { type: 'text', text: `${status} 已截取显示器 ${display} 全屏，图像尺寸 ${shot.imgW} × ${shot.imgH}（逻辑分辨率 ${size.width} × ${size.height}），已包含鼠标光标。${mark}请基于此图像尺寸输出坐标（原点左上角），点击时务必取控件中心而非边缘。` },
         { type: 'image', data: b64, mimeType: 'image/png' },
       ],
     };
   },
 
   async move(args) {
+    await guard();
     const { x, y } = numPair(args, 'x', 'y');
     const target = await modelToTarget(x, y, args.display);
     const from = _lastCg && isFinite(_lastCg.x) ? _lastCg : { x: target.cg.x, y: target.cg.y };
@@ -647,61 +1068,116 @@ const TOOLS = {
     return okText(`鼠标已移动到图像坐标 (${x}, ${y})（显示器 ${target.display}，逻辑点 ${Math.round(target.logical.x)}, ${Math.round(target.logical.y)}）`);
   },
 
+  // 点击流程（v1.5.0 强化）：
+  //   guard() 校验停止标记 / 连续失败 / 目标应用是否仍在前台（漂移则自动重新聚焦）
+  //   → 抓操作前基线指纹 → 点击 → 重新截图比对，界面无变化即判定失败并计入连续失败计数。
   async click(args) {
+    await guard();
     const { x, y } = numPair(args, 'x', 'y');
     const target = await modelToTarget(x, y, args.display);
     _lastCg = target.cg;
     const button = String(args.button || 'left').toLowerCase();
+    const display = target.display;
+    const before = await captureState(display);
     sendCursor('move', target.cg.x, target.cg.y);
     await sleep(30);
     // 真正点击前隐藏覆盖层，避免透明窗口拦截命中测试
     sendCursor('hide');
     await sleep(40);
-    if (button === 'left') {
-      // 左键优先 System Events 辅助功能点击；若被系统拒绝（权限/特殊 UI）回退 CoreGraphics
-      try {
-        await runAppleScript(mouseClickAppleScript(target.cg.x, target.cg.y));
-      } catch (e) {
-        logErr('System Events 辅助功能点击失败，回退 CoreGraphics：' + e.message);
+    try {
+      if (button === 'left') {
+        // 左键优先 System Events 辅助功能点击；若被系统拒绝（权限/特殊 UI）回退 CoreGraphics
+        try {
+          await runAppleScript(mouseClickAppleScript(target.cg.x, target.cg.y));
+        } catch (e) {
+          logErr('System Events 辅助功能点击失败，回退 CoreGraphics：' + e.message);
+          await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
+        }
+      } else {
         await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
       }
-    } else {
-      await runJxa(mouseClickJxa(target.cg.x, target.cg.y, button, false));
+    } catch (e) {
+      markFailure();
+      sendCursor('show');
+      throw new Error(`点击失败：${e.message}（已记为第 ${_consecutiveFailures} 次失败；禁止用同一坐标重试，请改用键盘快捷键或重新定位控件中心）`);
     }
-    setLastPos(x, y, target.display);
+    setLastPos(x, y, display);
     sendCursor('click', target.cg.x, target.cg.y);
-    return okText(`已在图像坐标 (${x}, ${y}) 点击（${button}键，显示器 ${target.display}）`);
+    const verdict = await verifyChanged(display, before);
+    let verify;
+    if (verdict === 'ok') { verify = '界面已变化，点击生效'; markSuccess(); }
+    else if (verdict === 'nochange') { verify = '界面无变化 → 判定未生效'; markFailure(); }
+    else { verify = '无法验证（保守视为已执行）'; markSuccess(); }
+    const frontApp = await getFrontAppName();
+    const status = stepStatus(frontApp, `${button}键点击`, `(${x}, ${y}) 显示器${display}`, verify);
+    const tip = verdict === 'nochange'
+      ? ` 本次点击未产生界面变化，很可能落在控件边缘或目标不可点击。禁止用同一坐标重复点击：请改用键盘快捷键（浏览器地址栏用 focus_address_bar 即 ⌘L），或先 query_ui 读取控件中心坐标，或重新截图定位控件中心。已累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次失败，再失败一次将自动停止并需向用户报告原因。`
+      : '';
+    return okText(`${status} 已在图像坐标 (${x}, ${y}) 点击（${button}键，显示器 ${display}）。${tip}`);
   },
 
   async double_click(args) {
+    await guard();
     const { x, y } = numPair(args, 'x', 'y');
     const target = await modelToTarget(x, y, args.display);
     _lastCg = target.cg;
+    const display = target.display;
+    const before = await captureState(display);
     sendCursor('move', target.cg.x, target.cg.y);
     await sleep(30);
     sendCursor('hide');
     await sleep(40);
-    await runJxa(mouseClickJxa(target.cg.x, target.cg.y, 'left', true));
-    setLastPos(x, y, target.display);
+    try {
+      await runJxa(mouseClickJxa(target.cg.x, target.cg.y, 'left', true));
+    } catch (e) {
+      markFailure();
+      sendCursor('show');
+      throw new Error(`双击失败：${e.message}（已记为第 ${_consecutiveFailures} 次失败）`);
+    }
+    setLastPos(x, y, display);
     sendCursor('click', target.cg.x, target.cg.y);
-    return okText(`已在图像坐标 (${x}, ${y}) 双击（显示器 ${target.display}）`);
+    const verdict = await verifyChanged(display, before);
+    let verify;
+    if (verdict === 'ok') { verify = '界面已变化，双击生效'; markSuccess(); }
+    else if (verdict === 'nochange') { verify = '界面无变化 → 判定未生效'; markFailure(); }
+    else { verify = '无法验证（保守视为已执行）'; markSuccess(); }
+    const frontApp = await getFrontAppName();
+    const status = stepStatus(frontApp, '双击', `(${x}, ${y}) 显示器${display}`, verify);
+    return okText(`${status} 已在图像坐标 (${x}, ${y}) 双击（显示器 ${display}）。`);
   },
 
   async right_click(args) {
+    await guard();
     const { x, y } = numPair(args, 'x', 'y');
     const target = await modelToTarget(x, y, args.display);
     _lastCg = target.cg;
+    const display = target.display;
+    const before = await captureState(display);
     sendCursor('move', target.cg.x, target.cg.y);
     await sleep(30);
     sendCursor('hide');
     await sleep(40);
-    await runJxa(mouseClickJxa(target.cg.x, target.cg.y, 'right', false));
-    setLastPos(x, y, target.display);
+    try {
+      await runJxa(mouseClickJxa(target.cg.x, target.cg.y, 'right', false));
+    } catch (e) {
+      markFailure();
+      sendCursor('show');
+      throw new Error(`右键点击失败：${e.message}（已记为第 ${_consecutiveFailures} 次失败）`);
+    }
+    setLastPos(x, y, display);
     sendCursor('click', target.cg.x, target.cg.y);
-    return okText(`已在图像坐标 (${x}, ${y}) 右键点击（显示器 ${target.display}）`);
+    const verdict = await verifyChanged(display, before);
+    let verify;
+    if (verdict === 'ok') { verify = '右键菜单已出现'; markSuccess(); }
+    else if (verdict === 'nochange') { verify = '界面无变化 → 判定未生效'; markFailure(); }
+    else { verify = '无法验证（保守视为已执行）'; markSuccess(); }
+    const frontApp = await getFrontAppName();
+    const status = stepStatus(frontApp, '右键点击', `(${x}, ${y}) 显示器${display}`, verify);
+    return okText(`${status} 已在图像坐标 (${x}, ${y}) 右键点击（显示器 ${display}）。`);
   },
 
   async drag(args) {
+    await guard();
     const f = await modelToTarget(args.from_x, args.from_y, args.display);
     const t = await modelToTarget(args.to_x, args.to_y, args.display);
     _lastCg = t.cg;
@@ -724,25 +1200,57 @@ const TOOLS = {
     return okText(`已从 (${args.from_x}, ${args.from_y}) 拖拽到 (${args.to_x}, ${args.to_y})（显示器 ${t.display}）`);
   },
 
+  // 输入（v1.5.0 强化）：失败最多重试一次，且第二次必须换路径——
+  //   ASCII 文本改用 System Events keystroke；非 ASCII 则重新确认输入焦点后再粘贴一次。
+  //   两次都失败即计入连续失败并如实报错，要求改用快捷键或重新定位，绝不用同一坐标死循环。
   async type(args) {
+    await guard();
     const text = String(args.text != null ? args.text : '');
     if (!text) return okText('（未输入任何文字）');
     if (_lastPos) sendCursor('move', _lastPos.x, _lastPos.y);
+    const brief = text.length > 60 ? text.slice(0, 60) + '…' : text;
+    const isAscii = /^[\x20-\x7E\n\r\t]*$/.test(text);
+    let firstErr = null;
     try {
       await typeViaClipboard(text);
-      return okText(`已粘贴输入文字：${text.length > 60 ? text.slice(0, 60) + '…' : text}（剪贴板方式，完整支持中文/长文本/换行）`);
+      markSuccess();
+      const frontApp = await getFrontAppName();
+      return okText(`${stepStatus(frontApp, '输入文字', '当前焦点输入框', '已回读确认内容落入输入框')} 已粘贴输入：${brief}（剪贴板方式，完整支持中文/长文本/换行）`);
     } catch (e) {
-      // 剪贴板（⌘V）已是 Chrome/Electron/普通输入框最可靠的输入路径，失败时不再用 keystroke
-      // 重输整段——那会丢中文/长文本/换行，并可能假报成功。如实上报错误并提示授权。
-      const msg = String(e.message || '');
-      if (/辅助功能|Automation|accessibility|-10004|not allowed|not authorized|权限/i.test(msg)) {
-        throw new Error('输入失败：请到「系统设置 › 隐私与安全性 › 辅助功能 / 自动化」中允许 AI Copilot 控制「系统事件」，并重试。');
+      firstErr = e;
+      logErr('type 第一次失败：' + e.message);
+    }
+
+    // ---- 唯一一次重试：必须换路径 ----
+    try {
+      if (isAscii) {
+        await typeAsciiKeystroke(text);
+        markSuccess();
+        const frontApp = await getFrontAppName();
+        return okText(`${stepStatus(frontApp, '输入文字(重试)', '当前焦点输入框', '剪贴板路径失败，已改用键盘逐字输入')} 已输入：${brief}`);
       }
-      throw new Error('输入失败：' + msg);
+      const focused = await hasEditableFocus();
+      if (!focused) throw new Error('当前焦点仍不在可编辑输入框');
+      await typeViaClipboard(text);
+      markSuccess();
+      const frontApp = await getFrontAppName();
+      return okText(`${stepStatus(frontApp, '输入文字(重试)', '当前焦点输入框', '第二次粘贴已回读确认')} 已粘贴输入：${brief}`);
+    } catch (e2) {
+      markFailure();
+      const msg = String((firstErr && firstErr.message) || e2.message || '');
+      const hint =
+        ` 已重试 1 次仍失败（累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次）。` +
+        `禁止再用同一坐标点击后重输：请改用键盘快捷键聚焦目标（浏览器地址栏用 focus_address_bar 即 ⌘L；表单用 tab 键切换焦点），` +
+        `或先 query_ui 读取输入框中心坐标重新定位。`;
+      if (/辅助功能|Automation|accessibility|-10004|not allowed|not authorized|权限/i.test(msg)) {
+        throw new Error('输入失败：请到「系统设置 › 隐私与安全性 › 辅助功能 / 自动化」中允许 AI Copilot 控制「系统事件」，并重试。' + hint);
+      }
+      throw new Error('输入失败：' + msg + hint);
     }
   },
 
   async key(args) {
+    await guard();
     const key = String(args.key || '').toLowerCase();
     const code = KEY_CODES[key];
     if (code == null) throw new Error(`不支持的按键名：${key}（支持 return/tab/space/escape/方向键/command/shift/option/control/f1-f16 等）`);
@@ -753,11 +1261,20 @@ const TOOLS = {
       throw new Error(`危险操作已拦截：${danger}。若你确认要执行，请在同一调用中加上 confirm: true 再次发起。`);
     }
     if (_lastCg && isFinite(_lastCg.x)) sendCursor('move', _lastCg.x, _lastCg.y);
-    await runJxa(buildKeyScript(code, mods));
-    return okText(`已按下按键 ${key}${mods.length ? '（修饰键：' + mods.join('+') + '）' : ''}${danger ? '（已确认执行危险操作）' : ''}`);
+    try {
+      await runJxa(buildKeyScript(code, mods));
+    } catch (e) {
+      markFailure();
+      throw new Error(`按键失败：${e.message}（已记为第 ${_consecutiveFailures} 次失败）`);
+    }
+    markSuccess();
+    const frontApp = await getFrontAppName();
+    const combo = `${mods.length ? mods.join('+') + '+' : ''}${key}`;
+    return okText(`${stepStatus(frontApp, '按键 ' + combo, '当前焦点', '按键事件已发出')} 已按下按键 ${key}${mods.length ? '（修饰键：' + mods.join('+') + '）' : ''}${danger ? '（已确认执行危险操作）' : ''}`);
   },
 
   async hotkey(args) {
+    await guard();
     const keys = Array.isArray(args.keys) ? args.keys : [];
     if (!keys.length) throw new Error('keys 不能为空，例如 ["command","c"]');
     const main = String(keys[keys.length - 1]);
@@ -771,11 +1288,19 @@ const TOOLS = {
     if (FN_KEYCODES.has(mainCode)) mods.push('fn'); // 功能键自动补 fn
     if (main.length === 1 && main >= 'A' && main <= 'Z') mods.push('shift'); // 大写字母自动补 shift
     if (_lastCg && isFinite(_lastCg.x)) sendCursor('move', _lastCg.x, _lastCg.y);
-    await runJxa(buildKeyScript(mainCode, mods));
-    return okText(`已触发快捷键 ${keys.join('+')}${danger ? '（已确认执行危险操作）' : ''}`);
+    try {
+      await runJxa(buildKeyScript(mainCode, mods));
+    } catch (e) {
+      markFailure();
+      throw new Error(`快捷键失败：${e.message}（已记为第 ${_consecutiveFailures} 次失败）`);
+    }
+    markSuccess();
+    const frontApp = await getFrontAppName();
+    return okText(`${stepStatus(frontApp, '快捷键 ' + keys.join('+'), '当前焦点', '快捷键事件已发出')} 已触发快捷键 ${keys.join('+')}${danger ? '（已确认执行危险操作）' : ''}`);
   },
 
   async scroll(args) {
+    await guard();
     const { x, y } = numPair(args, 'x', 'y');
     const target = await modelToTarget(x, y, args.display);
     _lastCg = target.cg;
@@ -792,31 +1317,106 @@ const TOOLS = {
       await runJxa(jxa);
     } catch (e) {
       // 兜底：部分 macOS 下 CoreGraphics 桥接不可用，给出清晰提示
+      markFailure();
       throw new Error('滚动失败：' + e.message + '（部分系统需辅助功能权限，或暂不支持编程滚动）');
     }
-    return okText(`已在图像坐标 (${x}, ${y}) 向 ${direction} 滚动 ${amount}（显示器 ${target.display}）`);
+    markSuccess();
+    const frontApp = await getFrontAppName();
+    return okText(`${stepStatus(frontApp, `滚动 ${direction} ${amount}`, `(${x}, ${y}) 显示器${target.display}`, '滚轮事件已发出')} 已在图像坐标 (${x}, ${y}) 向 ${direction} 滚动 ${amount}（显示器 ${target.display}）`);
   },
 
+  // 聚焦应用（v1.5.0 强化）：记录目标应用用于后续每步焦点校验，并轮询等待窗口稳定后才返回，
+  // 避免「刚 activate 就截图」拍到旧画面或动画中间态。
   async focus_app(args) {
+    await guard({ checkFront: false });
     const name = String(args.name || '').trim();
     if (!name) throw new Error('name 不能为空，例如 "Safari"、"Finder"，或 bundle id 如 "com.apple.Safari"');
-    let launched = false;
-    try {
-      const out = await runJxa(
-        `ObjC.import('Cocoa');\n` +
-        `var ws = $.NSWorkspace.sharedWorkspace;\n` +
-        `var ok = ws.launchApplication($(${JSON.stringify(name)}));\n` +
-        `ok ? '1' : '0';`
+    const stable = await focusAppByName(name);
+    _targetApp = name; // 后续每步操作前都会校验它仍在前台，漂移则自动重新聚焦
+    const frontApp = await getFrontAppName();
+    if (!stable) {
+      markFailure();
+      return okText(
+        `${stepStatus(frontApp, '聚焦应用', name, '未在 ~1.5s 内确认到前台 → 判定未稳定')} ` +
+        `已尝试将「${name}」切换/启动到前台，但轮询未确认其成为前台应用（当前前台：${frontApp || '未知'}）。` +
+        `请确认应用名称是否正确（可用 get_front_app 查看真实名称），或在「系统设置 › 隐私与安全性 › 辅助功能 / 自动化」中允许 AI Copilot。` +
+        `已累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次失败。`
       );
-      launched = String(out || '').trim() === '1';
+    }
+    markSuccess();
+    return okText(`${stepStatus(frontApp, '聚焦应用', name, '已确认在前台且窗口已稳定')} 「${name}」已在前台，窗口已稳定，可以继续截图/操作。`);
+  },
+
+  // 读取当前前台应用名：定位前先确认「我在跟哪个应用打交道」
+  async get_front_app() {
+    await guard({ checkFront: false });
+    const frontApp = await getFrontAppName();
+    if (!frontApp) return okText('无法读取前台应用名（可能未授权辅助功能）。');
+    const targetNote = _targetApp ? `（本轮目标应用：${_targetApp}${frontMatches(frontApp, _targetApp) ? '，焦点一致' : '，焦点已漂移，下一步操作会自动重新聚焦'}）` : '';
+    return okText(`${stepStatus(frontApp, '读取前台应用', '-', '已读取')} 当前前台应用：${frontApp}${targetNote}`);
+  },
+
+  // 浏览器地址栏：一律优先 ⌘L，不要用截图坐标点地址栏
+  async focus_address_bar() {
+    await guard();
+    const ok = await focusAddressBar();
+    const frontApp = await getFrontAppName();
+    if (!ok) {
+      markFailure();
+      return okText(
+        `${stepStatus(frontApp, '聚焦地址栏(⌘L)', '浏览器地址栏', '未检测到可编辑焦点')} ` +
+        `已发出 ⌘L，但未检测到可编辑输入焦点。请确认前台是浏览器（可用 get_front_app 确认，或先 focus_app 切到浏览器）再重试。` +
+        `已累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次失败。`
+      );
+    }
+    markSuccess();
+    return okText(`${stepStatus(frontApp, '聚焦地址栏(⌘L)', '浏览器地址栏', '已确认取得可编辑焦点')} 地址栏已聚焦并全选，可直接调用 type 输入网址，再用 key(return) 回车。`);
+  },
+
+  // 读取辅助功能元素（优先于截图坐标）：返回控件角色/名称/中心坐标（已换算为图像坐标系）/状态
+  async query_ui(args) {
+    await guard();
+    const display = Math.max(1, parseInt(args && args.display, 10) || 1);
+    const frontApp = await getFrontAppName();
+    let parsed;
+    try {
+      parsed = await queryUiElements(display);
     } catch (e) {
-      logErr('focus_app launchApplication failed: ' + e.message);
+      return okText(
+        `${stepStatus(frontApp, '读取辅助功能元素', `显示器${display}`, '读取失败')} ` +
+        `无法读取辅助功能元素（${e.message}）。请改用 screenshot 观察界面，并点击控件中心（不要点边缘）。`
+      );
     }
-    if (!launched) {
-      // 回退：AppleScript activate（需要「自动化」授权）
-      await runAppleScript(`tell application "${asStrLiteral(name)}" to activate`);
+    if (parsed.status === 'NOPROC') {
+      return okText(`${stepStatus(frontApp, '读取辅助功能元素', `显示器${display}`, '无前台进程')} 未获取到前台应用，请先 focus_app。`);
     }
-    return okText(`已尝试将「${name}」切换/启动到前台（best-effort）。若未生效，请确认应用名称正确，并在「系统设置 › 隐私与安全性 › 辅助功能 / 自动化」中允许 AI Copilot。`);
+    if (parsed.status === 'NOWIN') {
+      return okText(`${stepStatus(parsed.appName || frontApp, '读取辅助功能元素', `显示器${display}`, '无可读窗口')} 该应用当前无可读窗口，请改用 screenshot 观察。`);
+    }
+    if (!parsed.items.length) {
+      return okText(
+        `${stepStatus(parsed.appName || frontApp, '读取辅助功能元素', `显示器${display}`, '未枚举到可交互元素')} ` +
+        `未读到可交互元素（该应用可能未暴露辅助功能树，如 Chrome 网页内容）。请改用 screenshot，并点击控件中心。`
+      );
+    }
+    const lines = parsed.items.slice(0, 50).map((it) =>
+      `${it.focused ? '★' : ' '}[${it.role}] ${it.name || '(无名)'} 中心≈(${it.cx}, ${it.cy})${it.enabled ? '' : ' 已禁用'}`
+    );
+    return okText(
+      `${stepStatus(parsed.appName || frontApp, '读取辅助功能元素', `显示器${display}`, `读到 ${parsed.items.length} 个控件`)} ` +
+      `前台应用「${parsed.appName || frontApp}」可交互元素（坐标已换算为图像坐标系，且均为控件中心，可直接传给 click；★=当前焦点）：\n` +
+      lines.join('\n') +
+      `\n优先使用上面给出的中心坐标点击；这里读不到的（如 Chrome 网页正文）再回退 screenshot 坐标。`
+    );
+  },
+
+  // 清除停止标记与连续失败计数（新一轮用户指令开始时由主进程自动下发，也可由模型显式调用）
+  async reset_computer_use() {
+    const wasStopped = _sessionStopped;
+    const fails = _consecutiveFailures;
+    resetSession();
+    _targetApp = null;
+    return okText(`已重置 Computer Use 会话状态（原停止标记=${wasStopped ? '已停止' : '正常'}，原连续失败=${fails}）。`);
   },
 
   async get_displays() {
@@ -921,7 +1521,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'screenshot',
-    description: '截取指定显示器全屏并返回一张图片。图像会被等比缩放到上限尺寸（约 1366×887），因此你看到的图像像素即为坐标空间，后续点击/移动请基于该图像尺寸（用 get_screen_size 获取精确值）输出坐标，原点在左上角。多显示器时传 display（1=主屏）。每次操作电脑前通常先截图，观察界面后再决定下一步动作。',
+    description: '截取指定显示器全屏并返回一张图片。图像会被等比缩放到上限尺寸（约 1366×887），因此你看到的图像像素即为坐标空间，后续点击/移动请基于该图像尺寸（用 get_screen_size 获取精确值）输出坐标，原点在左上角。多显示器时传 display（1=主屏）。截图坐标是「最后手段」：能用快捷键就用快捷键，能用 query_ui 读到控件中心就用 query_ui；必须用坐标时，务必取控件几何中心，不要点边缘。',
     inputSchema: {
       type: 'object',
       properties: { display: { type: 'number', description: '显示器序号，1=主屏，默认 1' } },
@@ -942,7 +1542,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'click',
-    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。左键优先走 macOS System Events 辅助功能点击（对 Chrome/Electron 等 HTML 控件命中可靠，5 秒超时保护），被系统拒绝时自动回退 CoreGraphics 真实事件；下一次同显示器截图会用红圈标出点击位置。多显示器时传 display（1=主屏）。',
+    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。坐标必须是控件的几何中心，不能是边缘（可先用 query_ui 拿到精确中心）。点击前会自动校验目标应用仍在前台（焦点漂移则自动重新聚焦），点击后会自动重新截图比对：界面无变化即判定本次点击「未生效」并计入连续失败——此时禁止用同一坐标重试，应改用键盘快捷键或重新定位；连续 2 次失败会自动停止并要求你向用户报告原因。左键优先走 System Events 辅助功能点击（对 Chrome/Electron HTML 控件命中可靠，5 秒超时保护），被拒时回退 CoreGraphics 真实事件。多显示器时传 display（1=主屏）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -997,7 +1597,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'type',
-    description: '在当前焦点处输入一段文字（支持换行）。',
+    description: '在当前焦点处输入一段文字（支持中文/长文本/换行）。走剪贴板 ⌘V 并回读校验，确保内容真的落进输入框。调用前请确保已有可编辑焦点（浏览器地址栏用 focus_address_bar 即 ⌘L；表单可用 key(tab) 切换焦点），否则会直接报错而不是假报成功。失败时本工具只会换路径重试一次（ASCII 改用键盘逐字输入），仍失败则如实报错——此时不要用同一坐标点一遍再输一遍，请改用快捷键或 query_ui 重新定位输入框。',
     inputSchema: {
       type: 'object',
       properties: { text: { type: 'string', description: '要输入的文字' } },
@@ -1019,7 +1619,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'hotkey',
-    description: '触发组合快捷键，例如复制 ["command","c"]、保存 ["command","s"]、切换应用 ["command","tab"]。数组中最后一个元素为主键，前面为修饰键。主键为功能键（f1-f12）时会自动附带 fn，大写字母自动补 shift。注意：含 ⌘Q/⌘W/⌘⇧Q/⌘⌥Esc 的危险组合会被拦截，需 confirm:true 才执行。',
+    description: '触发组合快捷键。凡是能用快捷键完成的操作都优先用本工具，而不是截图找坐标点击：地址栏 ["command","l"]（也可直接用 focus_address_bar）、新标签页 ["command","t"]、刷新 ["command","r"]、复制 ["command","c"]、粘贴 ["command","v"]、全选 ["command","a"]、保存 ["command","s"]、查找 ["command","f"]、切换应用 ["command","tab"]、Spotlight ["command","space"]。数组中最后一个元素为主键，前面为修饰键。主键为功能键（f1-f12）时自动附带 fn，大写字母自动补 shift。注意：含 ⌘Q/⌘W/⌘⇧Q/⌘⌥Esc 的危险组合会被拦截，需 confirm:true 才执行。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1046,12 +1646,35 @@ const TOOL_DEFS = [
   },
   {
     name: 'focus_app',
-    description: '将指定应用切换/启动到前台（best-effort）。name 可为应用名（如 "Safari"、"Finder"、"Chrome"）或 bundle id（如 "com.apple.Safari"）。若应用未运行会尝试启动。',
+    description: '将指定应用切换/启动到前台，并轮询等待其真正成为前台、窗口稳定后才返回（因此 focus_app 之后可以直接截图/操作，无需自己 sleep）。name 可为应用名（如 "Safari"、"Finder"、"Google Chrome"）或 bundle id（如 "com.apple.Safari"）。调用成功后该应用会被记为「本轮目标应用」：之后每一步鼠标/键盘操作前都会校验它仍在前台，若焦点漂移到别的应用会自动重新聚焦再操作。开始任何一串操作前都应先调用本工具。',
     inputSchema: {
       type: 'object',
       properties: { name: { type: 'string', description: '应用名或 bundle id，如 "Safari" / "com.apple.Safari"' } },
       required: ['name'],
     },
+  },
+  {
+    name: 'get_front_app',
+    description: '读取当前前台应用的真实名称，并报告它与「本轮目标应用」是否一致。用于操作前确认焦点、或 focus_app 报名称不符时查真名。',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'focus_address_bar',
+    description: '聚焦浏览器地址栏（发送 ⌘L 并校验确实拿到可编辑焦点）。操作 Chrome/Safari/Edge 地址栏时必须用本工具，禁止用截图坐标去点地址栏。成功后地址栏内容已全选，可直接 type 输入网址，再 key(return) 回车。',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'query_ui',
+    description: '读取前台应用的可交互辅助功能元素（按钮/输入框/下拉/复选框/链接等）的角色、名称、启用与聚焦状态，以及已换算好的「控件中心」图像坐标，可直接传给 click。定位控件时优先用本工具，读不到（如 Chrome 网页正文不暴露 AX 树）再回退 screenshot 看图取坐标。',
+    inputSchema: {
+      type: 'object',
+      properties: { display: { type: 'number', description: '显示器序号，1=主屏，默认 1' } },
+    },
+  },
+  {
+    name: 'reset_computer_use',
+    description: '重置 Computer Use 会话状态（清除停止标记、连续失败计数与目标应用）。用户点「停止」后本轮会拒绝所有操作，正常情况下新一轮指令由主进程自动重置，一般无需手动调用。',
+    inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'get_displays',
@@ -1085,6 +1708,8 @@ function handleMessage(msg) {
   // 控制消息：用户中断（Esc / 停止按钮）通过 stdin 注入 __abort，或 MCP cancelled 通知
   if (msg.__abort) { abortCurrent(); return; }
   if (msg.method === 'notifications/cancelled') { abortCurrent(); return; }
+  // 控制消息：新一轮用户指令开始，主进程注入 __reset 清除停止标记与失败计数
+  if (msg.__reset) { resetSession(); return; }
 
   if (msg.method === 'tools/list') {
     send({ jsonrpc: '2.0', id: msg.id, result: { tools: TOOL_DEFS } });
@@ -1144,9 +1769,11 @@ function start() {
 }
 
 module.exports = {
-  start, SERVER_NAME, computeShotSize, mouseClickAppleScript, MAX_SHOT_W, MAX_SHOT_H,
+  start, SERVER_NAME, SERVER_VERSION, computeShotSize, mouseClickAppleScript, MAX_SHOT_W, MAX_SHOT_H,
   buildKeyScript, pasteAppleScript, pasteVerificationResult, typeViaClipboard,
   KEY_CODES, CHAR_KEYCODES,
+  // v1.5.0 健壮性相关（纯函数，便于单测）
+  signaturesDiffer, frontMatches, stepStatus, MAX_CONSECUTIVE_FAILURES, TOOL_DEFS,
 };
 
 // 直接以 `node computer-use.js` 运行时自启动（Electron 子进程由 main.js 早退分支调用 start()，不会触发此分支）

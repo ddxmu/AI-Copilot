@@ -232,6 +232,11 @@ class McpConnection {
     return this.writeRaw(JSON.stringify({ __abort: true }));
   }
 
+  // 新一轮对话开始：清空 computer-use 的会话级硬停止 / 连续失败计数（等价于用户新开会话）
+  resetTool() {
+    return this.writeRaw(JSON.stringify({ __reset: true }));
+  }
+
   rejectAll(err) {
     for (const [, p] of this.pending) {
       clearTimeout(p.timer);
@@ -758,6 +763,12 @@ function cancelTool(serverName) {
   return conn.cancelTool();
 }
 
+function resetTool(serverName) {
+  const conn = connections.get(serverName);
+  if (!conn) return false;
+  return conn.resetTool();
+}
+
 module.exports = {
   connectFromConfig,
   disconnectAll,
@@ -766,6 +777,7 @@ module.exports = {
   getMcpToolDefs,
   callTool,
   cancelTool,
+  resetTool,
   contentToText,
   McpConnection,
   McpConnectionSSE,
