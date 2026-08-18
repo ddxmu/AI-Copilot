@@ -5551,24 +5551,27 @@ async function renderRecommendedSkills() {
       actions.push(Object.assign(document.createElement('span'), { className: 'skill-tag ext', textContent: '已安装' }));
     } else {
       const btn = document.createElement('button');
-      btn.className = 'btn small primary'; btn.textContent = '安装';
+      btn.className = 'btn small primary'; btn.textContent = '一键安装';
       btn.addEventListener('click', async () => {
-        btn.disabled = true; btn.textContent = '准备下载…';
+        btn.disabled = true; btn.textContent = '安装中…（CLI 首次约 1~2 分钟）';
         currentSkillInstallBtn = btn;
         currentSkillInstallName = s.name;
         try {
           const res = await window.api.skillsInstallRecommended(s.name);
           if (res.ok) {
             btn.textContent = '✓ 已安装';
-            if (res.note) btn.title = res.note;
+            if (res.note) {
+              btn.title = res.note;
+              if (res.note.startsWith('技能已写入')) alert('⚠️ ' + res.note);
+            }
             renderSkills();
             renderRecommendedSkills();
           } else {
-            btn.disabled = false; btn.textContent = '安装';
+            btn.disabled = false; btn.textContent = '一键安装';
             alert('安装失败：' + res.error);
           }
         } catch (e) {
-          btn.disabled = false; btn.textContent = '安装';
+          btn.disabled = false; btn.textContent = '一键安装';
           alert('安装异常：' + e.message);
         } finally {
           currentSkillInstallBtn = null;
@@ -5577,19 +5580,19 @@ async function renderRecommendedSkills() {
       });
       actions.push(btn);
     }
-    // 「启动/检查」：验证带 CLI 的技能是否可用（如 macos-harness doctor）
+    // 「一键配置」：确保带 CLI 的技能开箱可用（自动装 CLI + PATH + doctor 权限检查）
     if (s.hasCheck) {
       const runBtn = document.createElement('button');
-      runBtn.className = 'btn small ghost'; runBtn.textContent = '启动/检查';
+      runBtn.className = 'btn small ghost'; runBtn.textContent = '一键配置';
       runBtn.addEventListener('click', async () => {
-        runBtn.disabled = true; runBtn.textContent = '检查中…';
+        runBtn.disabled = true; runBtn.textContent = '配置中…';
         try {
-          const res = await window.api.skillsRunCheck(s.name);
-          alert((res.ok ? '✅ 检查通过\n\n' : '⚠️ 检查未通过\n\n') + (res.output || ''));
-          runBtn.textContent = '启动/检查';
+          const res = await window.api.skillsRunConfig(s.name);
+          alert((res.ok ? '✅ 配置完成\n\n' : '⚠️ 配置未完成\n\n') + (res.output || ''));
+          runBtn.textContent = '一键配置';
         } catch (e) {
-          alert('检查异常：' + e.message);
-          runBtn.textContent = '启动/检查';
+          alert('配置异常：' + e.message);
+          runBtn.textContent = '一键配置';
         } finally {
           runBtn.disabled = false;
         }

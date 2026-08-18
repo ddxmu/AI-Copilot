@@ -502,21 +502,21 @@ const RECOMMENDED_SKILLS = {
   'macos-harness': {
     description: 'Mac 桌面控制（browser-use/macos-harness）：截图、鼠标点击/移动/拖拽、键盘输入、打开/聚焦应用、读取辅助功能树、控制真实浏览器——无需把目标应用切到前台',
     category: '桌面控制',
-    postInstall: 'command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh; uv tool install --python 3.12 --upgrade --force macos-harness',
+    postInstall: 'command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh; uv tool uninstall macos-harness >/dev/null 2>&1 || true; uv tool install --python 3.12 --upgrade --force macos-harness',
     runCheck: true,
     body: `# Mac 桌面控制（macos-harness）
 
 需要控制 Mac 桌面（截图、点击、键盘输入、打开应用、操作真实浏览器）时使用本技能。它基于 browser-use/macos-harness：**向指定应用 PID 定向注入事件（CGEventPostToPid），不需要把目标应用切到前台**；截图按应用截取后台窗口，不打扰用户。
 
 ## 前置
-- 确保 CLI 可用：\`macos-harness --help\` 能输出帮助。若报“command not found”，先执行：\`uv tool install --python 3.12 --upgrade --force macos-harness\`（需要 uv；没有 uv 先装：\`curl -LsSf https://astral.sh/uv/install.sh | sh\`）。
+- 确保 CLI 可用：\`macos-harness --help\` 能输出帮助。若报“command not found”，先点技能条目的「一键安装」（自动安装 CLI），或手动执行：\`uv tool install --python 3.12 --upgrade --force macos-harness\`（需要 uv；没有 uv 先装：\`curl -LsSf https://astral.sh/uv/install.sh | sh\`）。
 - 权限自检：运行 \`macos-harness doctor\`。缺失的权限请在「系统设置 › 隐私与安全性 › 辅助功能 / 屏幕录制 / 自动化」中允许 AI Copilot 后重试。
 
 ## 用法（用 run_command 执行，脚本通过 stdin 传给 macos-harness）
 
 ### 1) 截图（不激活目标应用，可截后台窗口）
 \`\`\`bash
-macos-harness <<'PY'
+"$HOME/.local/bin/macos-harness" <<'PY'
 print(mac.see("Finder"))
 PY
 \`\`\`
@@ -525,7 +525,7 @@ PY
 
 ### 2) 点击 / 移动 / 拖拽（坐标基于截图坐标系，左上角原点）
 \`\`\`bash
-macos-harness <<'PY'
+"$HOME/.local/bin/macos-harness" <<'PY'
 mac.click(640, 420, app="Safari")            # 左键点击
 mac.move(100, 100, app="Safari")             # 移动指针（画可点击 overlay，不移动真实鼠标）
 mac.drag(100, 100, 400, 300, app="Safari")   # 拖拽
@@ -535,7 +535,7 @@ PY
 
 ### 3) 按键 / 输入
 \`\`\`bash
-macos-harness <<'PY'
+"$HOME/.local/bin/macos-harness" <<'PY'
 mac.key("cmd+l", app="Safari")     # 地址栏
 mac.type("https://example.com", app="Safari")
 mac.key("return", app="Safari")
@@ -544,7 +544,7 @@ PY
 
 ### 4) 应用与界面状态
 \`\`\`bash
-macos-harness <<'PY'
+"$HOME/.local/bin/macos-harness" <<'PY'
 print(mac.list_apps())                 # 已安装应用（名称/bundle id/pid）
 print(mac.get_app_state("Safari"))     # 前台应用的辅助功能树（按钮/输入框等控件）
 mac.ax.at(640, 420, app="Safari")      # 读某坐标处的 AX 元素
@@ -553,7 +553,7 @@ PY
 
 ### 5) 真实浏览器（可选，需 Browser Harness）
 \`\`\`bash
-macos-harness <<'PY'
+"$HOME/.local/bin/macos-harness" <<'PY'
 print(browser.page_info())
 PY
 \`\`\`

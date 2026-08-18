@@ -1197,23 +1197,48 @@ ipcMain.handle('skills-install-recommended', async (_e, name) => {
   } catch (e) {
     return { ok: false, error: e.message };
   }
-  // 可选的安装后动作（如安装 CLI 依赖）：后台执行，不阻塞；结果通过进度通知透出
+  // 可选的安装后动作（如安装 CLI 依赖）：同步等待完成，返回真实结果（「一键安装」要能显示成功/失败）
   let installNote = '';
   if (typeof def.postInstall === 'string' && def.postInstall.trim()) {
-    execFile('/bin/zsh', ['-c', def.postInstall], { timeout: 600000 }, (err, _so, se) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('skill-install-progress', {
-          name,
-          bytes: 0,
-          done: true,
-          ok: !err,
-          note: err ? String(se || err.message || '').slice(0, 400) : '依赖安装完成',
+    try {
+      await new Promise((resolve, reject) => {
+        execFile('/bin/zsh', ['-c', def.postInstall], { timeout: 600000, maxBuffer: 16 * 1024 * 1024 }, (err, _so, se) => {
+          if (err) reject(new Error(String(se || err.message || '').slice(0, 400)));
+          else resolve();
         });
-      }
-    });
-    installNote = '（正在后台安装 CLI 依赖，完成后可点「启动/检查」验证）';
+      });
+      installNote = '✓ CLI 依赖已安装';
+    } catch (e) {
+      return { ok: true, installed: listInstalledSkills(), note: '技能已写入，但 CLI 安装失败：' + e.message + '（可点「一键配置」重试）' };
+    }
   }
   return { ok: true, installed: listInstalledSkills(), note: installNote };
+});
+
+// 「一键配置」：确保带 CLI 的技能开箱可用——CLI 缺失则自动安装、PATH 就绪、权限 doctor 检查，返回汇总结果
+ipcMain.handle('skills-run-config', async (_e, name) => {
+  const def = RECOMMENDED_SKILLS[name];
+  if (!def || !def.runCheck) return { ok: false, output: '该技能不支持一键配置' };
+  const cfgScript =
+    'export PATH="$HOME/.local/bin:$PATH"\n' +
+    'if [ ! -x "$HOME/.local/bin/macos-harness" ]; then\n' +
+    '  echo "[1/3] CLI 未安装，开始自动安装…"\n' +
+    '  command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1\n' +
+    '  "$HOME/.local/bin/uv" tool uninstall macos-harness >/dev/null 2>&1 || true\n' +
+    '  "$HOME/.local/bin/uv" tool install --python 3.12 --upgrade --force macos-harness || { echo "[1/3] CLI 安装失败，请检查网络后重试"; exit 1; }\n' +
+    '  echo "[1/3] CLI 安装完成"\n' +
+    'else\n' +
+    '  echo "[1/3] CLI 已就绪"\n' +
+    'fi\n' +
+    'echo "[2/3] 运行 doctor 检查权限…"\n' +
+    '"$HOME/.local/bin/macos-harness" doctor 2>&1\n' +
+    'echo "[3/3] 配置完成。CLI 路径: $HOME/.local/bin/macos-harness"';
+  return new Promise((resolve) => {
+    execFile('/bin/zsh', ['-c', cfgScript], { timeout: 600000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const out = ((stdout || '') + '\n' + (stderr || '')).trim();
+      resolve({ ok: !err, output: out.slice(0, 2000) });
+    });
+  });
 });
 
 // 「启动/检查」：验证带 CLI 的技能是否可用（如 macos-harness doctor）
