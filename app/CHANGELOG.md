@@ -1,3 +1,16 @@
+## v0.10.22 — 2026-08-19
+
+### 1. 技能「Mac 桌面控制」改为一键安装 + 一键配置 + 删除 CLI
+
+- **一键安装**：写 SKILL.md + **同步等待** CLI 安装完成并返回真实结果（不再后台静默）；安装走**清华镜像**加速（`--default-index`），失败自动回退官方源；安装前自动清理上次中断留下的半成品（uv tool uninstall 再装）。
+- **一键配置**（替代原「启动/检查」）：自动三步——CLI 缺失则自动安装（镜像+回退）、PATH 就绪（`~/.local/bin`）、运行 `macos-harness doctor` 检查权限；弹窗分步显示结果，明确「可用 / 缺什么」。
+- **删除 CLI**（新增）：技能条目在 CLI 已安装时显示「删除 CLI」按钮，确认后**彻底卸载**（uv tool uninstall + 删除 `~/.local/bin` 链接 + 清空 `~/.local/share/uv/tools/macos-harness`），技能文件不受影响。
+- 技能正文所有命令改为**绝对路径** `$HOME/.local/bin/macos-harness` 调用，不依赖 shell PATH，避免 command not found。
+
+### 2. MCP 市场移除「Mac 桌面控制（Computer Use）」模板
+
+- 从「从市场添加」中移除 Zooeyii/macos-computer-use-mcp 模板（该方案需 git clone + tsup 构建，首次安装会撞 MCP 握手超时，体验不佳）；已添加过的服务器配置不受影响。
+
 ## v0.10.21 — 2026-08-18
 
 ### 1. 智能体技能新增「Mac 桌面控制（macos-harness）」+ 安装/启动选项

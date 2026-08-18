@@ -1,12 +1,12 @@
 {
-  "version": "0.10.21",
+  "version": "0.10.22",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-18",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.21/AI.Copilot-0.10.21-arm64.dmg",
-  "dmgSha256": "78d49ba1269ac2333812843991ccb8d0985c47c269cfdb8b08b418bfac67cd82",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.21/AI.Copilot-0.10.21.zip",
-  "patchSha256": "de40263a6ac77332d1296d6b22e5304f17c8d173ef4c223f036af864835e6bf6",
-  "notes": "### 智能体技能新增「Mac 桌面控制（macos-harness）」+ 安装/启动选项\n\n- 推荐技能新增 🖥️ Mac 桌面控制（macos-harness），默认出现，一键安装。\n- 能力：截图（按应用截后台窗口、不激活目标）、点击/移动/拖拽、键盘输入、打开/聚焦应用、辅助功能树、真实浏览器——基于 browser-use/macos-harness，向目标 PID 定向注入（CGEventPostToPid），无需把目标切到前台。\n- 「安装」按钮：写 SKILL.md 并自动安装 CLI（uv tool install macos-harness，后台）。\n- 新增「启动/检查」按钮：跑 macos-harness doctor 验证权限与可用性；CLI 未装时给安装指引。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.22/AI.Copilot-0.10.22-arm64.dmg",
+  "dmgSha256": "130f716426a8905883d0001ba2a005880ec97b2e95032c48350d93110e4cb96b",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.22/AI.Copilot-0.10.22.zip",
+  "patchSha256": "4ecd6e27f368d4b0bb9cc4ba82a0e340cab24614007dbd3698e513e417a23c02",
+  "notes": "### 1. 技能「Mac 桌面控制」改为一键安装 + 一键配置 + 删除 CLI\n\n- 一键安装：写 SKILL.md + 同步等待 CLI 安装完成并返回真实结果；走**清华镜像**加速，失败自动回退官方源；安装前自动清理半成品。\n- 一键配置：CLI 缺失自动安装 + PATH 就绪 + `macos-harness doctor` 权限检查，弹窗分步显示结果。\n- 删除 CLI：CLI 已安装时显示「删除 CLI」按钮，确认后彻底卸载（uv tool uninstall + 删链接 + 清 tools 目录），技能文件不受影响。\n- 技能正文命令改绝对路径 `$HOME/.local/bin/macos-harness`，不依赖 PATH。\n\n### 2. MCP 市场移除「Mac 桌面控制（Computer Use）」模板\n\n- 移除 Zooeyii/macos-computer-use-mcp 模板（git clone+tsup 构建会撞 MCP 握手超时）；已添加的服务器配置不受影响。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -102,6 +102,11 @@
       "from": "0.10.20",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.21/AI.Copilot-0.10.21.zip",
       "sha256": "de40263a6ac77332d1296d6b22e5304f17c8d173ef4c223f036af864835e6bf6"
+    },
+    {
+      "from": "0.10.21",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.22/AI.Copilot-0.10.22.zip",
+      "sha256": "4ecd6e27f368d4b0bb9cc4ba82a0e340cab24614007dbd3698e513e417a23c02"
     }
   ]
 }

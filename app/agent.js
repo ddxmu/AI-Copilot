@@ -502,7 +502,7 @@ const RECOMMENDED_SKILLS = {
   'macos-harness': {
     description: 'Mac 桌面控制（browser-use/macos-harness）：截图、鼠标点击/移动/拖拽、键盘输入、打开/聚焦应用、读取辅助功能树、控制真实浏览器——无需把目标应用切到前台',
     category: '桌面控制',
-    postInstall: 'command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh; uv tool uninstall macos-harness >/dev/null 2>&1 || true; uv tool install --python 3.12 --upgrade --force macos-harness',
+    postInstall: 'export PATH="$HOME/.local/bin:$PATH"; command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1; "$HOME/.local/bin/uv" tool uninstall macos-harness >/dev/null 2>&1 || true; "$HOME/.local/bin/uv" tool install --python 3.12 --upgrade --force --default-index https://pypi.tuna.tsinghua.edu.cn/simple macos-harness || "$HOME/.local/bin/uv" tool install --python 3.12 --upgrade --force macos-harness',
     runCheck: true,
     body: `# Mac 桌面控制（macos-harness）
 
