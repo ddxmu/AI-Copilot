@@ -1166,6 +1166,7 @@ ipcMain.handle('skills-install-github', async (_e, { fullName, defaultBranch }) 
 ipcMain.handle('skills-list-recommended', () => {
   const installed = listInstalledSkills();
   const installedNames = new Set(installed.map((s) => s.name));
+  const cliExists = fs.existsSync(path.join(os.homedir(), '.local', 'bin', 'macos-harness'));
   return Object.entries(RECOMMENDED_SKILLS).map(([name, v]) => ({
     name,
     description: v.description,
@@ -1173,7 +1174,30 @@ ipcMain.handle('skills-list-recommended', () => {
     repo: v.repo || null,
     installed: installedNames.has(name),
     hasCheck: !!v.runCheck,       // 是否有「启动/检查」能力（如跑 CLI doctor）
+    cliInstalled: !!v.runCheck && cliExists, // CLI 是否已安装（显示「删除 CLI」按钮）
   }));
+});
+
+// 「删除 CLI」：彻底卸载带 CLI 技能的程序（uv tool uninstall + 删除 ~/.local/bin 链接 + 清空 tools 目录）
+ipcMain.handle('skills-uninstall-cli', async (_e, name) => {
+  const def = RECOMMENDED_SKILLS[name];
+  if (!def || !def.runCheck) return { ok: false, output: '该技能不支持 CLI 卸载' };
+  const script =
+    'export PATH="$HOME/.local/bin:$PATH"\n' +
+    'if [ -x "$HOME/.local/bin/macos-harness" ] || [ -d "$HOME/.local/share/uv/tools/macos-harness" ]; then\n' +
+    '  "$HOME/.local/bin/uv" tool uninstall macos-harness 2>&1 || true\n' +
+    '  rm -f "$HOME/.local/bin/macos-harness"\n' +
+    '  rm -rf "$HOME/.local/share/uv/tools/macos-harness"\n' +
+    '  echo "✅ CLI 已彻底卸载（uv tool 记录 + ~/.local/bin 链接 + tools 目录均已清除）"\n' +
+    'else\n' +
+    '  echo "CLI 未安装，无需清理"\n' +
+    'fi';
+  return new Promise((resolve) => {
+    execFile('/bin/zsh', ['-c', script], { timeout: 120000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const out = ((stdout || '') + '\n' + (stderr || '')).trim();
+      resolve({ ok: !err, output: out.slice(0, 1000) });
+    });
+  });
 });
 
 ipcMain.handle('skills-install-recommended', async (_e, name) => {
@@ -1202,7 +1226,7 @@ ipcMain.handle('skills-install-recommended', async (_e, name) => {
   if (typeof def.postInstall === 'string' && def.postInstall.trim()) {
     try {
       await new Promise((resolve, reject) => {
-        execFile('/bin/zsh', ['-c', def.postInstall], { timeout: 600000, maxBuffer: 16 * 1024 * 1024 }, (err, _so, se) => {
+        execFile('/bin/zsh', ['-c', def.postInstall], { timeout: 300000, maxBuffer: 16 * 1024 * 1024 }, (err, _so, se) => {
           if (err) reject(new Error(String(se || err.message || '').slice(0, 400)));
           else resolve();
         });
@@ -1222,10 +1246,10 @@ ipcMain.handle('skills-run-config', async (_e, name) => {
   const cfgScript =
     'export PATH="$HOME/.local/bin:$PATH"\n' +
     'if [ ! -x "$HOME/.local/bin/macos-harness" ]; then\n' +
-    '  echo "[1/3] CLI 未安装，开始自动安装…"\n' +
+    '  echo "[1/3] CLI 未安装，开始自动安装（国内镜像）…"\n' +
     '  command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1\n' +
     '  "$HOME/.local/bin/uv" tool uninstall macos-harness >/dev/null 2>&1 || true\n' +
-    '  "$HOME/.local/bin/uv" tool install --python 3.12 --upgrade --force macos-harness || { echo "[1/3] CLI 安装失败，请检查网络后重试"; exit 1; }\n' +
+    '  "$HOME/.local/bin/uv" tool install --python 3.12 --upgrade --force --default-index https://pypi.tuna.tsinghua.edu.cn/simple macos-harness || { echo "  镜像安装失败，回退官方源重试…"; "$HOME/.local/bin/uv" tool install --python 3.12 --upgrade --force macos-harness || { echo "[1/3] CLI 安装失败，请检查网络后重试"; exit 1; }; }\n' +
     '  echo "[1/3] CLI 安装完成"\n' +
     'else\n' +
     '  echo "[1/3] CLI 已就绪"\n' +
@@ -1234,7 +1258,7 @@ ipcMain.handle('skills-run-config', async (_e, name) => {
     '"$HOME/.local/bin/macos-harness" doctor 2>&1\n' +
     'echo "[3/3] 配置完成。CLI 路径: $HOME/.local/bin/macos-harness"';
   return new Promise((resolve) => {
-    execFile('/bin/zsh', ['-c', cfgScript], { timeout: 600000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile('/bin/zsh', ['-c', cfgScript], { timeout: 300000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
       const out = ((stdout || '') + '\n' + (stderr || '')).trim();
       resolve({ ok: !err, output: out.slice(0, 2000) });
     });

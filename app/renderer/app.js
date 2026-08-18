@@ -1405,17 +1405,6 @@ const MCP_MARKET_TEMPLATES = [
     params: [
       { key: 'DASHSCOPE_API_KEY', label: 'DashScope API Key', placeholder: 'sk-...', required: true, type: 'password' }
     ]
-  },
-  {
-    id: 'macos-computer-use',
-    name: 'Mac 桌面控制（Computer Use）',
-    category: '开发',
-    icon: '🖥️',
-    desc: '让 AI 助手控制你的 Mac 桌面：截图、鼠标点击、键盘输入、打开/聚焦应用（开源 Zooeyii/macos-computer-use-mcp）。首次「添加并连接」会自动克隆并构建到 ~/.local/share/macos-computer-use-mcp（约 1~2 分钟），构建完成后重新连接即可使用；若上次安装中断，会自动清理半成品重装。需在「系统设置 › 隐私与安全性 › 辅助功能 / 屏幕录制」中允许 AI Copilot。',
-    command: 'bash',
-    args: ['-c', 'DIR="$HOME/.local/share/macos-computer-use-mcp"; if [ -d "$DIR" ] && [ ! -f "$DIR/package.json" ]; then rm -rf "$DIR"; fi; if [ ! -f "$DIR/package.json" ]; then mkdir -p "$DIR" && git clone --depth 1 https://github.com/Zooeyii/macos-computer-use-mcp.git "$DIR" || exit 1; fi; cd "$DIR" || exit 1; [ -d node_modules ] || npm install --no-audit --no-fund || exit 1; [ -f dist/cli.js ] || npm run build || exit 1; exec node dist/cli.js'],
-    env: {},
-    params: []
   }
 ];
 
@@ -5598,6 +5587,26 @@ async function renderRecommendedSkills() {
         }
       });
       actions.push(runBtn);
+    }
+    // 「删除 CLI」：彻底卸载带 CLI 技能的程序（仅 CLI 已安装时显示）
+    if (s.hasCheck && s.cliInstalled) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn small ghost'; delBtn.textContent = '删除 CLI';
+      delBtn.addEventListener('click', async () => {
+        if (!confirm('确认彻底卸载 macos-harness CLI（uv tool 记录 + ~/.local/bin 链接 + tools 目录）？技能文件不受影响。')) return;
+        delBtn.disabled = true; delBtn.textContent = '卸载中…';
+        try {
+          const res = await window.api.skillsUninstallCli(s.name);
+          alert(res.ok ? res.output : ('卸载失败：' + res.output));
+          renderRecommendedSkills();
+        } catch (e) {
+          alert('卸载异常：' + e.message);
+          delBtn.textContent = '删除 CLI';
+        } finally {
+          delBtn.disabled = false;
+        }
+      });
+      actions.push(delBtn);
     }
     skillRecommendedListEl.appendChild(makeSkillItem({
       badge: skillBadge(s.name), name: s.name, desc: s.description,
