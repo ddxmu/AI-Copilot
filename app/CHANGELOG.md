@@ -1,3 +1,13 @@
+## v0.10.21 — 2026-08-18
+
+### 1. 智能体技能新增「Mac 桌面控制（macos-harness）」+ 安装/启动选项
+
+- 推荐技能（设置 › 技能 › 推荐技能）新增 **🖥️ Mac 桌面控制（macos-harness）**：默认出现，一键安装。
+- 技能能力：截图（按应用截后台窗口、不激活目标）、鼠标点击/移动/拖拽、键盘输入、打开/聚焦应用、读取辅助功能树、控制真实浏览器——基于 browser-use/macos-harness，**向目标应用 PID 定向注入事件（CGEventPostToPid），无需把目标切到前台**。
+- 「安装」按钮：写入 SKILL.md 并**自动安装 CLI 依赖**（uv tool install macos-harness，后台执行）。
+- 新增「启动/检查」按钮：运行 `macos-harness doctor` 验证权限与可用性，输出检查结果；CLI 未装时给出安装指引。
+- 技能正文包含完整用法（mac.see / mac.click / mac.key / mac.type / mac.ax / browser 等），AI 助手通过 run_command 按需调用。
+
 ## v0.10.20 — 2026-08-18
 
 ### 1. 修复「Mac 桌面控制」市场模板安装失败（MODULE_NOT_FOUND）

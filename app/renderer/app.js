@@ -5560,6 +5560,7 @@ async function renderRecommendedSkills() {
           const res = await window.api.skillsInstallRecommended(s.name);
           if (res.ok) {
             btn.textContent = '✓ 已安装';
+            if (res.note) btn.title = res.note;
             renderSkills();
             renderRecommendedSkills();
           } else {
@@ -5575,6 +5576,25 @@ async function renderRecommendedSkills() {
         }
       });
       actions.push(btn);
+    }
+    // 「启动/检查」：验证带 CLI 的技能是否可用（如 macos-harness doctor）
+    if (s.hasCheck) {
+      const runBtn = document.createElement('button');
+      runBtn.className = 'btn small ghost'; runBtn.textContent = '启动/检查';
+      runBtn.addEventListener('click', async () => {
+        runBtn.disabled = true; runBtn.textContent = '检查中…';
+        try {
+          const res = await window.api.skillsRunCheck(s.name);
+          alert((res.ok ? '✅ 检查通过\n\n' : '⚠️ 检查未通过\n\n') + (res.output || ''));
+          runBtn.textContent = '启动/检查';
+        } catch (e) {
+          alert('检查异常：' + e.message);
+          runBtn.textContent = '启动/检查';
+        } finally {
+          runBtn.disabled = false;
+        }
+      });
+      actions.push(runBtn);
     }
     skillRecommendedListEl.appendChild(makeSkillItem({
       badge: skillBadge(s.name), name: s.name, desc: s.description,

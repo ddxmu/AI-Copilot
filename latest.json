@@ -1,12 +1,12 @@
 {
-  "version": "0.10.20",
+  "version": "0.10.21",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-18",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.20/AI.Copilot-0.10.20-arm64.dmg",
-  "dmgSha256": "4b6ef43a7574907387818ccaa47e39201a6708297b9aef18a2b7f91f94aa44a1",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.20/AI.Copilot-0.10.20.zip",
-  "patchSha256": "10cd8ca94ccfd8fbbbc38e124a3d7474307de0f468fe20f3b38f1ba261bd217e",
-  "notes": "### 修复「Mac 桌面控制」市场模板安装失败（MODULE_NOT_FOUND）\n\n- 问题：首次添加时若 clone/npm install 中途中断，会留下只有 .git 的半成品；旧脚本吞错继续执行，最终 node 运行不存在的 dist/cli.js 报 MODULE_NOT_FOUND，且残留 .git 导致重装永远失败。\n- 修复：安装脚本改为健壮幂等版——半成品自动删除重建；git clone --depth 1；clone / npm install / npm run build 任一失败立即退出并如实报错（不再吞错）；已装好则直接启动（可反复重连）。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.21/AI.Copilot-0.10.21-arm64.dmg",
+  "dmgSha256": "78d49ba1269ac2333812843991ccb8d0985c47c269cfdb8b08b418bfac67cd82",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.21/AI.Copilot-0.10.21.zip",
+  "patchSha256": "de40263a6ac77332d1296d6b22e5304f17c8d173ef4c223f036af864835e6bf6",
+  "notes": "### 智能体技能新增「Mac 桌面控制（macos-harness）」+ 安装/启动选项\n\n- 推荐技能新增 🖥️ Mac 桌面控制（macos-harness），默认出现，一键安装。\n- 能力：截图（按应用截后台窗口、不激活目标）、点击/移动/拖拽、键盘输入、打开/聚焦应用、辅助功能树、真实浏览器——基于 browser-use/macos-harness，向目标 PID 定向注入（CGEventPostToPid），无需把目标切到前台。\n- 「安装」按钮：写 SKILL.md 并自动安装 CLI（uv tool install macos-harness，后台）。\n- 新增「启动/检查」按钮：跑 macos-harness doctor 验证权限与可用性；CLI 未装时给安装指引。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -97,6 +97,11 @@
       "from": "0.10.19",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.20/AI.Copilot-0.10.20.zip",
       "sha256": "10cd8ca94ccfd8fbbbc38e124a3d7474307de0f468fe20f3b38f1ba261bd217e"
+    },
+    {
+      "from": "0.10.20",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.21/AI.Copilot-0.10.21.zip",
+      "sha256": "de40263a6ac77332d1296d6b22e5304f17c8d173ef4c223f036af864835e6bf6"
     }
   ]
 }

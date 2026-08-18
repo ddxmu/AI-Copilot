@@ -499,6 +499,71 @@ const RECOMMENDED_SKILLS = {
     repo: 'ddxmu/computeruse-file-authoring-skill',
     branch: 'main',
   },
+  'macos-harness': {
+    description: 'Mac 桌面控制（browser-use/macos-harness）：截图、鼠标点击/移动/拖拽、键盘输入、打开/聚焦应用、读取辅助功能树、控制真实浏览器——无需把目标应用切到前台',
+    category: '桌面控制',
+    postInstall: 'command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh; uv tool install --python 3.12 --upgrade --force macos-harness',
+    runCheck: true,
+    body: `# Mac 桌面控制（macos-harness）
+
+需要控制 Mac 桌面（截图、点击、键盘输入、打开应用、操作真实浏览器）时使用本技能。它基于 browser-use/macos-harness：**向指定应用 PID 定向注入事件（CGEventPostToPid），不需要把目标应用切到前台**；截图按应用截取后台窗口，不打扰用户。
+
+## 前置
+- 确保 CLI 可用：\`macos-harness --help\` 能输出帮助。若报“command not found”，先执行：\`uv tool install --python 3.12 --upgrade --force macos-harness\`（需要 uv；没有 uv 先装：\`curl -LsSf https://astral.sh/uv/install.sh | sh\`）。
+- 权限自检：运行 \`macos-harness doctor\`。缺失的权限请在「系统设置 › 隐私与安全性 › 辅助功能 / 屏幕录制 / 自动化」中允许 AI Copilot 后重试。
+
+## 用法（用 run_command 执行，脚本通过 stdin 传给 macos-harness）
+
+### 1) 截图（不激活目标应用，可截后台窗口）
+\`\`\`bash
+macos-harness <<'PY'
+print(mac.see("Finder"))
+PY
+\`\`\`
+- see 返回截图信息（含保存路径），用 view_image 查看图片再给用户描述。
+- app 传应用名或 bundle id（如 "Safari" / "com.google.Chrome"）；缺省=当前前台应用。
+
+### 2) 点击 / 移动 / 拖拽（坐标基于截图坐标系，左上角原点）
+\`\`\`bash
+macos-harness <<'PY'
+mac.click(640, 420, app="Safari")            # 左键点击
+mac.move(100, 100, app="Safari")             # 移动指针（画可点击 overlay，不移动真实鼠标）
+mac.drag(100, 100, 400, 300, app="Safari")   # 拖拽
+PY
+\`\`\`
+- 坐标一定要先 see() 截图、从截图里读出目标控件中心，再传给 click/move。
+
+### 3) 按键 / 输入
+\`\`\`bash
+macos-harness <<'PY'
+mac.key("cmd+l", app="Safari")     # 地址栏
+mac.type("https://example.com", app="Safari")
+mac.key("return", app="Safari")
+PY
+\`\`\`
+
+### 4) 应用与界面状态
+\`\`\`bash
+macos-harness <<'PY'
+print(mac.list_apps())                 # 已安装应用（名称/bundle id/pid）
+print(mac.get_app_state("Safari"))     # 前台应用的辅助功能树（按钮/输入框等控件）
+mac.ax.at(640, 420, app="Safari")      # 读某坐标处的 AX 元素
+PY
+\`\`\`
+
+### 5) 真实浏览器（可选，需 Browser Harness）
+\`\`\`bash
+macos-harness <<'PY'
+print(browser.page_info())
+PY
+\`\`\`
+
+## 要点
+- 点击前**必须先 see() 截图**，坐标从截图里读（截图坐标系，左上角原点）。
+- 它**不激活目标应用、不移动真实鼠标**；与内置 ComputerUse（需前台）互补，优先用它处理“目标不在前台”的场景。
+- 出错时先跑 \`macos-harness doctor\` 排查权限；CLI 报错先检查是否已安装（\`macos-harness --help\`）。
+- 不要用 run_command 的 shell 去猜坐标——一律以截图为准。`,
+  },
 };
 
 // 运行时技能表 = 内置 + 外部安装（userData/skills/<name>/SKILL.md）

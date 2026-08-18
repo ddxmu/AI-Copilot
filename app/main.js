@@ -1172,6 +1172,7 @@ ipcMain.handle('skills-list-recommended', () => {
     category: v.category || '通用',
     repo: v.repo || null,
     installed: installedNames.has(name),
+    hasCheck: !!v.runCheck,       // 是否有「启动/检查」能力（如跑 CLI doctor）
   }));
 });
 
@@ -1193,10 +1194,49 @@ ipcMain.handle('skills-install-recommended', async (_e, name) => {
     fs.mkdirSync(dir, { recursive: true });
     const md = `---\nname: ${name}\ndescription: ${def.description}\n---\n\n${def.body}`;
     fs.writeFileSync(path.join(dir, 'SKILL.md'), md, 'utf8');
-    return { ok: true, installed: listInstalledSkills() };
   } catch (e) {
     return { ok: false, error: e.message };
   }
+  // 可选的安装后动作（如安装 CLI 依赖）：后台执行，不阻塞；结果通过进度通知透出
+  let installNote = '';
+  if (typeof def.postInstall === 'string' && def.postInstall.trim()) {
+    execFile('/bin/zsh', ['-c', def.postInstall], { timeout: 600000 }, (err, _so, se) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('skill-install-progress', {
+          name,
+          bytes: 0,
+          done: true,
+          ok: !err,
+          note: err ? String(se || err.message || '').slice(0, 400) : '依赖安装完成',
+        });
+      }
+    });
+    installNote = '（正在后台安装 CLI 依赖，完成后可点「启动/检查」验证）';
+  }
+  return { ok: true, installed: listInstalledSkills(), note: installNote };
+});
+
+// 「启动/检查」：验证带 CLI 的技能是否可用（如 macos-harness doctor）
+ipcMain.handle('skills-run-check', async (_e, name) => {
+  const def = RECOMMENDED_SKILLS[name];
+  if (!def || !def.runCheck) return { ok: false, output: '该技能不支持运行检查' };
+  const checkCmd = def.checkCommand || 'macos-harness doctor';
+  return new Promise((resolve) => {
+    execFile('/bin/zsh', ['-c', checkCmd], { timeout: 40000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const out = (stdout || '').trim() + (stderr ? '\n' + (stderr || '').trim() : '');
+      if (err) {
+        const missingCli = /command not found/i.test(out || '');
+        resolve({
+          ok: false,
+          output: missingCli
+            ? `CLI 未安装（${checkCmd.split(' ')[0]}）。请先点「安装」完成技能安装（会自动安装 CLI），或手动执行：uv tool install --python 3.12 --upgrade --force macos-harness`
+            : (out || String(err.message || '')).slice(0, 800),
+        });
+      } else {
+        resolve({ ok: true, output: out.slice(0, 800) || '检查通过' });
+      }
+    });
+  });
 });
 
 /* ---------------- 文件格式转换 ---------------- */
