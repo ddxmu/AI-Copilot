@@ -1,12 +1,12 @@
 {
-  "version": "0.10.11",
+  "version": "0.10.12",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-18",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.11/AI.Copilot-0.10.11-arm64.dmg",
-  "dmgSha256": "50b16e9ccbecc2dc0c444b7ddb9084b44a6849346386d510e402cd6d26fe419a",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.11/AI.Copilot-0.10.11.zip",
-  "patchSha256": "75f61ad87a2261e7d2918e8e8fc6f966747238e06128288b9ca9b031a708cb25",
-  "notes": "### 1. ComputerUse 焦点漂移即停 + AX 真焦点探测（桌面改版回灌）\n\n- **焦点漂移直接停止**：focus_app 成功后记录目标应用，后续每步操作前校验仍在前台；漂移即失败并停止本轮操作。\n- 新增 readFrontWindowState：读取前台窗口通用状态，不依赖浏览器名称，避免误判。\n- 新增 requireActionContext：每步操作前统一校验前台应用 + 可操作窗口。\n- 新增 focusedElementSnapshot：通过 AXFocusedUIElement 读取真正获得焦点的 AX 元素，兼容中英文与不同 macOS 版本。\n- 新增 EDITABLE_AX_ROLES / isEditableRole / parseFocusedElement / normalizeAxRole：归一化 AX role，判定可编辑角色。\n- 新增 readSelectedText：读取 ⌘L 后选中内容，哨兵避免误读剪贴板，结束恢复。\n- 新增 isAddressBarEvidence + 地址栏能力重写：基于 AX 语义焦点判定地址栏，不依赖 Chrome/Safari 固定名。\n- type 只能继续向同一个真实焦点输入。\n\n### 2. UI：智能体工作中状态文字改灰色左→右流光\n\n- #chat-status .agent-working 渐变由黑色改为灰色系（#9aa3b2 → #5b626d → #9aa3b2），角度 90deg。\n- 保留 agentWorkingShimmer 流光动画与 prefers-reduced-motion 回退。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.12/AI.Copilot-0.10.12-arm64.dmg",
+  "dmgSha256": "1b9e29e2e95b9ccbe3ad61885b5c5bc72746f57fa9b2a967cf95c1d7024bbfc8",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.12/AI.Copilot-0.10.12.zip",
+  "patchSha256": "3236f6f8c9f9aaf80276dd6d33a3418903707deef70eb85b36e2ace750371064",
+  "notes": "### 1. 六大模块非 AI 处理新增实时进度条\n\n- 「文件内容替换」「文件名修改」「文件格式转换」「PDF 去水印」「文件自动化」「PPT 写手（手动保存）」六个模块的**本地（非 AI）处理路径**，在开始按钮所在行的**最左侧**新增进度条，实时显示 1%–100%。\n- 主进程新增 emitModuleProgress，六个处理函数逐文件回传进度（module-progress IPC）。\n- preload.js 暴露 onModuleProgress 订阅接口；渲染进程在各模块 .wizard-nav 首位插入进度条元素，与六个入口按钮联动，含填充条与百分比数字，支持深色模式。\n- AI 路径（走技能 / 智能体的分支）不显示该进度条，保持原有状态提示。\n\n### 2. 文件格式转换默认改为本地引擎\n\n- 「转换方式（技能）」下拉默认值由 AI 技能改为 **「本地引擎（快速，不依赖 AI）」**，打开即离线快速转换，无需等待 AI。\n- 面板提示文案同步更新。\n\n### 3. 修复：文件名修改出错时不再漏记结果\n\n- rename-files 处理函数补回 catch 分支：单个文件重命名失败时正确写入 error 结果，进度计数不再跳号。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -52,6 +52,11 @@
       "from": "0.10.10",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.11/AI.Copilot-0.10.11.zip",
       "sha256": "75f61ad87a2261e7d2918e8e8fc6f966747238e06128288b9ca9b031a708cb25"
+    },
+    {
+      "from": "0.10.11",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.12/AI.Copilot-0.10.12.zip",
+      "sha256": "3236f6f8c9f9aaf80276dd6d33a3418903707deef70eb85b36e2ace750371064"
     }
   ]
 }

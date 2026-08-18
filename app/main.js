@@ -553,6 +553,13 @@ ipcMain.handle('filter-files', (_e, { files, exts }) => {
 });
 
 // 执行批量替换：files + rules + saveMode（overwrite/output）+ keepStructure
+// 向渲染进程推送「模块处理进度」（真实逐文件进度，1%-100%）
+function emitModuleProgress(sender, module, index, total) {
+  if (!sender || typeof sender.send !== 'function') return;
+  const pct = total > 0 ? Math.min(100, Math.max(0, Math.round((index / total) * 100))) : 0;
+  sender.send('module-progress', { module, index, total, pct });
+}
+
 ipcMain.handle('run-replace', (_e, { files, rules, saveMode, outputDir, baseDir, keepStructure }) => {
   const results = [];
   let totalReplaced = 0;
@@ -561,6 +568,7 @@ ipcMain.handle('run-replace', (_e, { files, rules, saveMode, outputDir, baseDir,
     const r = processFile(file, rules, saveMode || 'overwrite', { outputDir, baseDir, keepStructure });
     if (r.status === 'done') { doneCount++; totalReplaced += r.replacements; }
     results.push({ file, ...r });
+    emitModuleProgress(_e.sender, 'replace', results.length, files.length);
   }
   return { results, summary: { total: files.length, done: doneCount, replaced: totalReplaced } };
 });
@@ -661,6 +669,8 @@ ipcMain.handle('rename-files', (_e, { files, rules, saveMode, outputDir }) => {
       }
     } catch (e) {
       results.push({ file: f, status: 'error', message: e.message });
+    } finally {
+      emitModuleProgress(_e.sender, 'rename', results.length, files.length);
     }
   }
   return { results, summary: { total: files.length, done } };
@@ -818,7 +828,7 @@ ipcMain.handle('automation-convert', (_e, { templateKind, templateFolder, files,
     try { templateFiles = collectTemplateFiles(templateFolder); } catch (e) {}
   }
 
-  let matched = 0, skipped = 0;
+  let matched = 0, skipped = 0, processed = 0;
 
   if (useTemplate) {
     // 按关键字匹配：需编写文件 → 模版位置
@@ -840,6 +850,9 @@ ipcMain.handle('automation-convert', (_e, { templateKind, templateFolder, files,
           });
         } catch (e) {
           results.push({ file: m.input, status: 'error', message: e.message });
+        } finally {
+          processed++;
+          emitModuleProgress(_e.sender, 'automation', processed, files.length);
         }
       }
       // 模版有但需编写文件没有的 → 跳过，不复制模版文件
@@ -848,6 +861,8 @@ ipcMain.handle('automation-convert', (_e, { templateKind, templateFolder, files,
     // 需编写文件中模版没有对应位置的 → 跳过
     for (const f of skippedFiles) {
       results.push({ file: f, status: 'skip', message: '模版无对应位置，不同步' });
+      processed++;
+      emitModuleProgress(_e.sender, 'automation', processed, files.length);
     }
   } else {
     // 非模版结构：平铺 / 按类型
@@ -863,6 +878,9 @@ ipcMain.handle('automation-convert', (_e, { templateKind, templateFolder, files,
         results.push({ file: f, status: 'done', message: '→ ' + path.relative(outputDir, target), outputPath: target });
       } catch (e) {
         results.push({ file: f, status: 'error', message: e.message });
+      } finally {
+        processed++;
+        emitModuleProgress(_e.sender, 'automation', processed, files.length);
       }
     }
   }
@@ -934,6 +952,7 @@ ipcMain.handle('ppt-save', (_e, { files, saveMode, outputDir }) => {
     } catch (e) {
       results.push({ file: f, status: 'error', message: e.message });
     }
+    emitModuleProgress(_e.sender, 'ppt', results.length, files.length);
   }
   return { results, summary: { total: files.length, done } };
 });
@@ -1509,6 +1528,8 @@ ipcMain.handle('convert-files', async (_e, { files, srcFormat, dstFormat, saveMo
       results.push({ file: f, status: 'done', message: '→ ' + relOut + engineTag, outputPath: target, engine: r && r.label });
     } catch (e) {
       results.push({ file: f, status: 'error', message: e.message });
+    } finally {
+      emitModuleProgress(_e.sender, 'convert', results.length, files.length);
     }
   }
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
@@ -1572,6 +1593,7 @@ ipcMain.handle('pdf-remove-watermark', (_e, { files, watermarks, outputDir }) =>
     const r = pdfwm.remove(f, watermarks, target);
     if (r.ok) { done++; results.push({ file: f, status: 'done', message: `已去除 ${r.removed} 处水印 → ${path.basename(target)}`, outputPath: target }); }
     else results.push({ file: f, status: 'error', message: r.error });
+    emitModuleProgress(_e.sender, 'pdfwm', results.length, files.length);
   }
   return { results, summary: { total: files.length, done } };
 });

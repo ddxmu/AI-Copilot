@@ -85,6 +85,7 @@ contextBridge.exposeInMainWorld('api', {
   // 中断 Computer Use 当前在途操作（Esc / 停止按钮）
   computerUseAbort: () => ipcRenderer.invoke('computer-use-abort'),
   onComputerUseAborted: (cb) => ipcRenderer.on('computer-use-aborted', () => cb()),
+  onModuleProgress: (cb) => ipcRenderer.on('module-progress', (_e, data) => cb(data)),
   syncRules: (rules) => ipcRenderer.send('sync-rules', rules),
   // 文件自动化：编写规范预设
   automationGetPresets: () => ipcRenderer.invoke('automation-get-presets'),

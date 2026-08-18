@@ -2801,6 +2801,39 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
 .wizard-tip.engine-cupsfilter,
 .wizard-tip.engine-textutil-html { color: #8a6d3b; border-color: #e8d9b5; background: #faf6ec; }
 
+/* ========== 模块非 AI 处理进度条（开始按钮行左侧，1%-100%） ========== */
+.module-progress {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 190px;
+  flex-shrink: 0;
+}
+.module-progress.active { display: flex; }
+.mp-bar {
+  flex: 1;
+  height: 6px;
+  min-width: 110px;
+  background: var(--border-light, #e6e9ef);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.mp-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #2f6fed, #4f8bff);
+  border-radius: 999px;
+  transition: width 0.18s ease;
+}
+.mp-pct {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim, #8a8f99);
+  min-width: 36px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ========== 保存方式 ========== */
 .radio-row {
   display: flex;
@@ -3861,6 +3894,9 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
 :root.dark .wizard-tip.engine-electron,
 :root.dark .wizard-tip.engine-cupsfilter,
 :root.dark .wizard-tip.engine-textutil-html { color: #fbbf24; border-color: #4a3a1a; background: #2a1f0a; }
+
+/* 模块进度条（深色） */
+:root.dark .module-progress .mp-bar { background: #2a2f3a; }
 
 /* 转换提示 */
 :root.dark .conv-note {

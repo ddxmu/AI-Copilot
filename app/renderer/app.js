@@ -403,6 +403,50 @@ document.getElementById('btn-notice-go').addEventListener('click', async () => {
   }
 });
 
+// ========== 模块非 AI 处理进度条（开始按钮行左侧，1%-100%） ==========
+const MODULE_PROGRESS_BTNS = {
+  replace: 'btn-start',
+  rename: 'rename-start',
+  convert: 'conv-start',
+  pdfwm: 'wm-start',
+  automation: 'auto-convert',
+  ppt: 'ppt-manual-save',
+};
+const _moduleProgressEls = {};
+function ensureModuleProgressEl(module) {
+  if (_moduleProgressEls[module]) return _moduleProgressEls[module];
+  const btn = document.getElementById(MODULE_PROGRESS_BTNS[module]);
+  const nav = btn && btn.closest('.wizard-nav');
+  if (!nav) return null;
+  const el = document.createElement('div');
+  el.className = 'module-progress';
+  el.innerHTML = '<div class="mp-bar"><div class="mp-fill"></div></div><span class="mp-pct">0%</span>';
+  nav.insertBefore(el, nav.firstElementChild);
+  _moduleProgressEls[module] = el;
+  return el;
+}
+function showModuleProgress(module) {
+  const el = ensureModuleProgressEl(module);
+  if (!el) return;
+  if (el._hideTimer) { clearTimeout(el._hideTimer); el._hideTimer = null; }
+  el.classList.add('active');
+  el.querySelector('.mp-fill').style.width = '0%';
+  el.querySelector('.mp-pct').textContent = '0%';
+}
+function hideModuleProgress(module) {
+  const el = _moduleProgressEls[module];
+  if (!el) return;
+  if (el._hideTimer) clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => { el.classList.remove('active'); }, 450);
+}
+window.api.onModuleProgress((data) => {
+  const el = _moduleProgressEls[data.module];
+  if (!el) return;
+  const pct = data.done ? 100 : (data.pct != null ? data.pct : 0);
+  el.querySelector('.mp-fill').style.width = pct + '%';
+  el.querySelector('.mp-pct').textContent = pct + '%';
+});
+
 async function executeReplace() {
   const activeRules = state.rules.filter((r) => r.enabled && r.find);
   const saveMode = getSaveMode();
@@ -410,9 +454,11 @@ async function executeReplace() {
   document.getElementById('step3-msg').textContent = '';
   document.getElementById('btn-start').disabled = true;
   document.getElementById('btn-start').textContent = '处理中…';
+  showModuleProgress('replace');
   const { results, summary } = await window.api.runReplace(
     state.filteredFiles, activeRules, saveMode, outputDir, state.sourceFolder, keepStructure
   );
+  hideModuleProgress('replace');
   document.getElementById('btn-start').disabled = false;
   document.getElementById('btn-start').textContent = '▶ 开始处理';
   showResults(results, summary);
@@ -4239,11 +4285,13 @@ document.getElementById('auto-convert').addEventListener('click', async () => {
 
   const btn = document.getElementById('auto-convert');
   btn.disabled = true; btn.textContent = '转换中…';
+  showModuleProgress('automation');
   const { results, summary } = await window.api.automationConvert(
     auto.template ? auto.template.kind : null,
     auto.template ? auto.template.folder : null,
     auto.files, outDir, layout
   );
+  hideModuleProgress('automation');
   btn.disabled = false; btn.textContent = '⇄ 转换';
 
   const card = document.getElementById('auto-result-card');
@@ -4659,7 +4707,9 @@ document.getElementById('ppt-manual-save').addEventListener('click', async () =>
 
   const btn = document.getElementById('ppt-manual-save');
   btn.disabled = true; btn.textContent = '保存中…';
+  showModuleProgress('ppt');
   const { results, summary } = await window.api.pptSave(ppt.files, saveMode, outDir);
+  hideModuleProgress('ppt');
   btn.disabled = false; btn.textContent = '💾 手动保存';
 
   const card = document.getElementById('ppt-result-card');
@@ -4867,7 +4917,9 @@ document.getElementById('rename-start').addEventListener('click', async () => {
   if (saveMode === 'copy' && !rn.outputDir) { setRnMsg('请先选择输出文件夹'); return; }
   const btn = document.getElementById('rename-start');
   btn.disabled = true; btn.textContent = '处理中…';
+  showModuleProgress('rename');
   const { results, summary } = await window.api.renameFiles(rn.files, activeRules, saveMode, rn.outputDir);
+  hideModuleProgress('rename');
   btn.disabled = false; btn.textContent = '▶ 开始重命名';
   const card = document.getElementById('rename-result-card');
   card.classList.remove('hidden');
@@ -4927,7 +4979,7 @@ function populateConvFormats() {
   const cvSkillSel = document.getElementById('conv-skill');
   if (cvSkillSel) {
     CONV_SKILLS.forEach((s) => { const o = document.createElement('option'); o.value = s.v; o.textContent = s.t; cvSkillSel.appendChild(o); });
-    cvSkillSel.value = 'document-converter';
+    cvSkillSel.value = 'local';
   }
 }
 
@@ -5007,10 +5059,12 @@ document.getElementById('conv-start').addEventListener('click', async () => {
   if (saveMode === 'output' && !cv.outputDir) { setCvMsg('请先选择输出文件夹'); return; }
   const btn = document.getElementById('conv-start');
   btn.disabled = true; btn.textContent = '转换中…';
+  showModuleProgress('convert');
   const keepStructure = document.getElementById('conv-keep-structure').checked;
   const { results, summary } = await window.api.convertFiles(
     cv.files, cvSrcSel.value, cvDstSel.value, saveMode, cv.outputDir, cv.sourceFolder, keepStructure
   );
+  hideModuleProgress('convert');
   btn.disabled = false; btn.textContent = '▶ 开始转换';
   const card = document.getElementById('conv-result-card');
   card.classList.remove('hidden');
@@ -5333,7 +5387,9 @@ document.getElementById('wm-start').addEventListener('click', async () => {
   if (!wm.outputDir) { setWmMsg('请先选择输出文件夹'); return; }
   const btn = document.getElementById('wm-start');
   btn.disabled = true; btn.textContent = '处理中…';
+  showModuleProgress('pdfwm');
   const { results, summary } = await window.api.pdfRemoveWatermark(wm.files, marks, wm.outputDir);
+  hideModuleProgress('pdfwm');
   btn.disabled = false; btn.textContent = '▶ 去除水印';
   const card = document.getElementById('wm-result-card');
   card.classList.remove('hidden');
