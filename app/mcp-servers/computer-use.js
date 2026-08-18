@@ -24,7 +24,7 @@ const zlib = require('zlib');
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'ComputerUse';
-const SERVER_VERSION = '1.6.1';
+const SERVER_VERSION = '1.6.2';
 
 const TMP = path.join(os.tmpdir(), 'ai-copilot-computer-use');
 try { fs.mkdirSync(TMP, { recursive: true }); } catch (e) { /* ignore */ }
@@ -307,9 +307,20 @@ async function guard(opts) {
       const front = await getFrontAppName();
       if (front && !frontMatches(front, _targetApp)) {
         logErr(`焦点漂移：前台「${front}」≠ 目标「${_targetApp}」，自动重新聚焦`);
-        await focusAppByName(_targetApp);
+        const reFocused = await focusAppByName(_targetApp);
+        if (!reFocused) {
+          // 重聚焦也未确认前台 → 硬失败：立即中止本轮，禁止继续点击/输入（绝不在目标未前台时用旧坐标操作）
+          _sessionStopped = true;
+          throw new Error(
+            `焦点漂移后重新聚焦失败：「${_targetApp}」未能在 5 秒内确认为前台应用（当前前台：${front}）。` +
+            `已中止操作，禁止继续点击/输入——请先重新 focus_app 并重新截图，再继续。`
+          );
+        }
       }
-    } catch (e) { /* 读前台失败不阻断，交由后续验证兜底 */ }
+    } catch (e) {
+      if (e && /重新聚焦失败/.test(e.message)) throw e;
+      /* 读前台失败不阻断，交由后续验证兜底 */
+    }
   }
 }
 
@@ -335,33 +346,78 @@ function frontMatches(front, target) {
   return false;
 }
 
-// 聚焦/启动应用，并轮询等待窗口稳定后再返回（需求：focus_app 后等窗口稳定再截图操作）
+// 读取目标应用是否拥有可操作窗口（best-effort）：
+// 用于 focus_app 的「窗口稳定」判定——只确认到前台名还不够，必须有窗口才算真正就绪。
+// 读取失败（如无辅助功能/自动化授权）时保守返回 true，不因读不到窗口而误判未稳定（由连续匹配兜底）。
+async function readFrontWindowState(name) {
+  try {
+    const out = await runAppleScript(
+      'tell application "System Events"\n' +
+      '  set p to first process whose frontmost is true\n' +
+      '  set n to count of windows of p\n' +
+      '  return n as string\n' +
+      'end tell'
+    );
+    const n = parseInt((out || '').trim(), 10);
+    return isFinite(n) ? n > 0 : true;
+  } catch (e) {
+    return true;
+  }
+}
+
+// 聚焦/启动应用（v1.7.0 强化）：open -a/-b 真正切前台 + 3~5 秒轮询确认「前台且窗口稳定」。
+//   - 支持中文应用名（open -a）与 bundle id（open -b），不再把「应用已启动」当成「已激活」。
+//   - 轮询 25×200ms ≈ 5s：要求前台名匹配 **且** 目标应用拥有可操作窗口，
+//     连续 2 次稳定才返回 true；任一时刻不匹配/无窗口即重新计时。
+//   - 未确认前台则返回 false：调用方（focus_app）立即失败并禁止后续点击/输入。
 async function focusAppByName(name) {
   const nm = String(name || '').trim();
   if (!nm) return false;
+  const isBundleId = /^[A-Za-z0-9.\-]+\.[A-Za-z0-9.\-]+$/.test(nm);
   let launched = false;
+  // ① 主路径：open -a <应用名/中文名> / open -b <bundle id>（真正把目标切到前台）
   try {
-    const out = await runJxa(
-      `ObjC.import('Cocoa');\n` +
-      `var ws = $.NSWorkspace.sharedWorkspace;\n` +
-      `var ok = ws.launchApplication($(${JSON.stringify(nm)}));\n` +
-      `ok ? '1' : '0';`
-    );
-    launched = String(out || '').trim() === '1';
+    await runCmdCapture('open', [isBundleId ? '-b' : '-a', nm]);
+    launched = true;
   } catch (e) {
-    logErr('focusAppByName launchApplication failed: ' + e.message);
+    logErr('focusAppByName open 失败：' + e.message);
   }
   if (!launched) {
-    // 回退：AppleScript activate（需要「自动化」授权）
+    // ② 回退：NSWorkspace launchApplication（JXA）
+    try {
+      const out = await runJxa(
+        `ObjC.import('Cocoa');\n` +
+        `var ws = $.NSWorkspace.sharedWorkspace;\n` +
+        `var ok = ws.launchApplication($(${JSON.stringify(nm)}));\n` +
+        `ok ? '1' : '0';`
+      );
+      launched = String(out || '').trim() === '1';
+    } catch (e) {
+      logErr('focusAppByName launchApplication failed: ' + e.message);
+    }
+  }
+  if (!launched) {
+    // ③ 兜底：AppleScript activate（需要「自动化」授权）
     try { await runAppleScript(`tell application "${asStrLiteral(nm)}" to activate`); } catch (e) { /* 交给轮询判定 */ }
   }
-  // 轮询前台应用名，命中后再多等一拍让窗口/动画稳定
-  for (let i = 0; i < 8; i++) {
-    await sleep(180);
+  // ④ 轮询 3~5 秒确认前台：要求前台名匹配 **且** 拥有窗口，连续 2 次稳定才成功
+  const POLL_ROUNDS = 25;   // 25 × 200ms = 5s（覆盖冷启动）
+  const STABLE_N = 2;
+  let stable = 0;
+  for (let i = 0; i < POLL_ROUNDS; i++) {
+    await sleep(200);
     const front = await getFrontAppName();
     if (front && frontMatches(front, nm)) {
-      await sleep(150);
-      return true;
+      let hasWin = true;
+      try { hasWin = await readFrontWindowState(nm); } catch (e) { /* 读窗口失败不阻断 */ }
+      if (hasWin) {
+        stable += 1;
+        if (stable >= STABLE_N) return true;
+      } else {
+        stable = 0; // 前台匹配但窗口未就绪 → 重新计时
+      }
+    } else {
+      stable = 0; // 前台不匹配 → 重新计时
     }
   }
   return false;
@@ -844,10 +900,11 @@ async function typeViaClipboard(text) {
     const back = await runCmdCapture('pbpaste', []);
     if (back !== text) throw new Error('剪贴板写入/回读不一致，放弃粘贴');
 
-    // ③ 粘贴前确认有可编辑输入焦点（防假报成功）
+    // ③ 粘贴前 AX 焦点检查：AX 返回空 role/value（未确认可编辑焦点）时**不阻止**——
+    //    继续执行一次剪贴板 ⌘V 输入，由步骤 ⑥ 回读验证兜底判定（绝不假报成功）。
     const focused = await hasEditableFocus();
     if (!focused) {
-      throw new Error('当前焦点不在可编辑输入框（地址栏/文本框）。请先用 click 聚焦目标输入控件，再调用 type。');
+      logErr('AX 未确认可编辑焦点（空 role/value）——不阻止，继续执行一次剪贴板 ⌘V，由回读验证兜底判定');
     }
 
     // ④ 粘贴：⌘V
@@ -880,8 +937,8 @@ function pasteAppleScript() {
 }
 
 // 检查前台进程是否有「可编辑、聚焦」的文本控件（AX role 为文本类）。
-// 用于粘贴前确认目标能接收输入，避免把内容粘贴到无处 → 假报成功。
-// 读取失败（如无辅助功能/自动化授权）时保守返回 true：仍尝试粘贴，由后续回读验证兜底。
+// 用于粘贴前了解焦点状态；**AX 返回空 role/value 或读取失败时不阻止输入**——
+// 由调用方（typeViaClipboard）决定继续执行一次剪贴板 ⌘V，再由回读验证兜底判定（不假报成功）。
 async function hasEditableFocus() {
   try {
     const out = await runAppleScript(
@@ -1416,26 +1473,38 @@ const TOOLS = {
     return okText(`${stepStatus(frontApp, `滚动 ${direction} ${amount}`, `(${x}, ${y}) 显示器${target.display}`, '滚轮事件已发出')} 已在图像坐标 (${x}, ${y}) 向 ${direction} 滚动 ${amount}（显示器 ${target.display}）`);
   },
 
-  // 聚焦应用（v1.5.0 强化）：记录目标应用用于后续每步焦点校验，并轮询等待窗口稳定后才返回，
-  // 避免「刚 activate 就截图」拍到旧画面或动画中间态。
+  // 聚焦应用（v1.7.0 强化）：open -a/-b 真正切前台 + 3~5s 轮询确认「前台且窗口稳定」。
+  //   - 未确认成为前台 → 立即失败并中止本轮：不记录目标应用、后续点击/输入一律禁止。
+  //   - 确认前台后 → 记录目标应用供每步焦点校验，并清空旧截图坐标（焦点已切换，
+  //     旧坐标一律作废），提示模型必须重新截图后再操作（绝不复用旧坐标）。
   async focus_app(args) {
     await guard({ checkFront: false });
     const name = String(args.name || '').trim();
     if (!name) throw new Error('name 不能为空，例如 "Safari"、"Finder"，或 bundle id 如 "com.apple.Safari"');
     const stable = await focusAppByName(name);
-    _targetApp = name; // 后续每步操作前都会校验它仍在前台，漂移则自动重新聚焦
     const frontApp = await getFrontAppName();
     if (!stable) {
       markFailure();
-      return okText(
-        `${stepStatus(frontApp, '聚焦应用', name, '未在 ~1.5s 内确认到前台 → 判定未稳定')} ` +
-        `已尝试将「${name}」切换/启动到前台，但轮询未确认其成为前台应用（当前前台：${frontApp || '未知'}）。` +
-        `请确认应用名称是否正确（可用 get_front_app 查看真实名称），或在「系统设置 › 隐私与安全性 › 辅助功能 / 自动化」中允许 AI Copilot。` +
-        `已累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次失败。`
+      _targetApp = null;   // 聚焦失败：不记录目标应用，guard 不再自动重新聚焦
+      _lastPos = null;     // 旧坐标作废
+      _sessionStopped = true; // 立即失败并中止本轮：禁止继续任何点击/输入，直到新一轮指令重置
+      throw new Error(
+        `${stepStatus(frontApp, '聚焦应用', name, '未在 ~5s 内确认到前台且窗口稳定')} ` +
+        `「${name}」未能在 5 秒内确认为前台应用（当前前台：${frontApp || '未知'}）。` +
+        `已中止本轮操作，禁止继续点击/输入。请确认应用名称或 bundle id 是否正确` +
+        `（可用 get_front_app 查看真实前台名），或在「系统设置 › 隐私与安全性 › 辅助功能 / 自动化」` +
+        `中允许 AI Copilot 后重试。已累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次失败。`
       );
     }
+    // 成功：记录目标应用 + 清空旧截图坐标（焦点已切换，旧坐标作废，必须重新截图）
+    _targetApp = name;
+    _lastPos = null;
+    _lastCg = { x: 0, y: 0 };
     markSuccess();
-    return okText(`${stepStatus(frontApp, '聚焦应用', name, '已确认在前台且窗口已稳定')} 「${name}」已在前台，窗口已稳定，可以继续截图/操作。`);
+    return okText(
+      `${stepStatus(frontApp, '聚焦应用', name, '已确认在前台且窗口已稳定')} 「${name}」已在前台，窗口已稳定。` +
+      `⚠️ 焦点已切换：旧截图坐标一律作废，请先重新 screenshot 获取最新画面，再基于新截图坐标点击/输入。`
+    );
   },
 
   // 读取当前前台应用名：定位前先确认「我在跟哪个应用打交道」
@@ -1733,7 +1802,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'type',
-    description: '在当前焦点处输入一段文字（支持中文/长文本/换行）。走剪贴板 ⌘V 并回读校验，确保内容真的落进输入框。调用前请确保已有可编辑焦点（浏览器地址栏用 focus_address_bar 即 ⌘L；表单可用 key(tab) 切换焦点），否则会直接报错而不是假报成功。失败时本工具只会换路径重试一次（ASCII 改用键盘逐字输入），仍失败则如实报错——此时不要用同一坐标点一遍再输一遍，请改用快捷键或 query_ui 重新定位输入框。',
+    description: '在当前焦点处输入一段文字（支持中文/长文本/换行）。走剪贴板 ⌘V 并回读校验，确保内容真的落进输入框。AX 返回空 role/value（未确认可编辑焦点）时**不阻止**——仍会执行一次剪贴板 ⌘V，由回读验证兜底判定（绝不假报成功）。调用前建议先确保目标已聚焦（浏览器地址栏用 focus_address_bar 即 ⌘L；表单可用 key(tab) 切换焦点）。失败时本工具只会换路径重试一次（ASCII 改用键盘逐字输入），仍失败则如实报错——此时不要用同一坐标点一遍再输一遍，请改用快捷键或 query_ui 重新定位输入框。',
     inputSchema: {
       type: 'object',
       properties: { text: { type: 'string', description: '要输入的文字' } },
@@ -1782,10 +1851,10 @@ const TOOL_DEFS = [
   },
   {
     name: 'focus_app',
-    description: '将指定应用切换/启动到前台，并轮询等待其真正成为前台、窗口稳定后才返回（因此 focus_app 之后可以直接截图/操作，无需自己 sleep）。name 可为应用名（如 "Safari"、"Finder"、"Google Chrome"）或 bundle id（如 "com.apple.Safari"）。调用成功后该应用会被记为「本轮目标应用」：之后每一步鼠标/键盘操作前都会校验它仍在前台，若焦点漂移到别的应用会自动重新聚焦再操作。开始任何一串操作前都应先调用本工具。',
+    description: '将指定应用切换/启动到前台（open -a/-b 真正切前台，支持中文应用名与 bundle id），并轮询 3~5 秒确认其**真的成为前台且窗口稳定**（连续 2 次稳定）才返回成功；若未能在 5 秒内确认到前台，本工具**立即失败并中止本轮**——禁止继续任何点击/输入。成功后该应用被记为「本轮目标应用」：之后每一步操作前都会校验它仍在前台，焦点漂移则自动重新聚焦，**重新聚焦失败同样立即中止**。⚠️ 成功后焦点已切换，**旧截图坐标一律作废**，必须先重新 screenshot 再基于新截图坐标点击/输入，绝不复用旧坐标。开始任何一串操作前都应先调用本工具。',
     inputSchema: {
       type: 'object',
-      properties: { name: { type: 'string', description: '应用名或 bundle id，如 "Safari" / "com.apple.Safari"' } },
+      properties: { name: { type: 'string', description: '应用名或 bundle id，如 "Safari" / "Google Chrome" / "com.apple.Safari"' } },
       required: ['name'],
     },
   },

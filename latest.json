@@ -1,12 +1,12 @@
 {
-  "version": "0.10.15",
+  "version": "0.10.16",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-18",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.15/AI.Copilot-0.10.15-arm64.dmg",
-  "dmgSha256": "f9dcbe569f4814fbf281fe2995e9732f59ff2f5442a821723251011f33c96880",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.15/AI.Copilot-0.10.15.zip",
-  "patchSha256": "0f2e7888bf2587dfde82d04e7d4290a27b9ff499153f599440dd2397d50f8e9d",
-  "notes": "### 1. computer-use.js 以桌面版为准替换（不合并其它版本）\n\n- `mcp-servers/computer-use.js` 整体替换为桌面源 `~/Desktop/computer-use.js` 版本，以其为准继续完善。\n- 不动授权逻辑（辅助功能 / 屏幕录制权限错误提示保留）、不改 main.js、不改浏览器专用逻辑。\n\n### 2. 左键点击：CGEvent 改为主路径，System Events 仅一次备用\n\n- 左键点击主路径改为 CoreGraphics 真实鼠标事件：**鼠标移动 → 左键按下 → 等待约 50ms → 左键抬起**（光标真实移动、落点可靠）。\n- System Events 辅助功能点击（`click at` 坐标入口）仅保留一次作为备用：只在 CGEvent 主路径失败时兜底尝试，不重复连续点击同一坐标。\n- 右键 / 中键 / 双击 / 拖拽仍走 CGEvent，行为不变。\n\n### 3. 地址栏 ⌘L 后 AX 返回空 role/value 不再直接报错\n\n- `focus_address_bar` 发送 ⌘L 后，即使 AX 返回空 role/value（未检测到可编辑焦点），也不再直接报错——继续执行一次**剪贴板 + ⌘V 输入**，让内容仍有机会落进地址栏。\n- 剪贴板 ⌘V 也失败时才会如实报失败（绝不假报成功），保留连续失败计数。\n\n### 4. 其他\n\n- ComputerUse MCP `SERVER_VERSION` 1.6.0 → 1.6.1。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.16/AI.Copilot-0.10.16-arm64.dmg",
+  "dmgSha256": "d2d81541c45f29a49b322e00d5d9e8aed7bc4102261ff384a9bb297b4cc8426b",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.16/AI.Copilot-0.10.16.zip",
+  "patchSha256": "a55d75f121902899fe788f02ffa8d1b5d97bd150e4433f05d3d9de55fac968ee",
+  "notes": "### 1. 修复 focus_app：必须确认「真的成为前台且窗口稳定」才成功\n\n- 主路径改用 `open -a <应用名/中文名>` / `open -b <bundle id>` 真正把目标应用切到前台，不再把「应用已启动」当成「已激活」。\n- 支持中文应用名与 bundle id；前台化后轮询 25×200ms ≈ 5s，要求**前台名匹配 且 目标应用拥有可操作窗口**，**连续 2 次稳定**才返回成功。\n\n### 2. 目标未成为前台 → 立即失败并禁止继续点击/输入\n\n- `focus_app` 未能在 5 秒内确认前台时：**立即失败并置位会话停止**（不记录目标应用、清空旧坐标），本轮后续任何截图/点击/输入一律拒绝，直到新一轮指令重置。\n- 每步操作前的焦点漂移检测：自动重新聚焦后仍失败同样立即中止本轮，绝不在目标未在前台时用旧坐标继续操作。\n\n### 3. 焦点切换后旧截图坐标一律作废\n\n- focus_app 成功后清空 `_lastPos` / `_lastCg`，要求**先重新 screenshot 再基于新截图坐标点击/输入**，绝不复用旧坐标。\n\n### 4. AX 为空时不再阻止一次剪贴板输入\n\n- `typeViaClipboard`：AX 返回空 role/value 时不再直接报错，继续执行一次剪贴板 ⌘V，由粘贴后回读验证兜底判定（绝不假报成功）。\n\n### 5. 其他\n\n- 左键点击仍走 CGEvent（鼠标移动 → 按下 → 约 50ms → 抬起），System Events 仅一次备用。\n- ComputerUse MCP `SERVER_VERSION` 1.6.1 → 1.6.2。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -72,6 +72,11 @@
       "from": "0.10.14",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.15/AI.Copilot-0.10.15.zip",
       "sha256": "0f2e7888bf2587dfde82d04e7d4290a27b9ff499153f599440dd2397d50f8e9d"
+    },
+    {
+      "from": "0.10.15",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.16/AI.Copilot-0.10.16.zip",
+      "sha256": "a55d75f121902899fe788f02ffa8d1b5d97bd150e4433f05d3d9de55fac968ee"
     }
   ]
 }
