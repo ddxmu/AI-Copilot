@@ -1,3 +1,20 @@
+## v0.10.18 — 2026-08-18
+
+### 1. focus_app 改为精确比较前台 bundle id
+
+- `focusAppByName` 激活（open -b）后，用 **NSWorkspace 读取当前前台应用的 bundle id**（`getFrontAppBundleId`），与目标 bundle id **精确相等比较**（小写归一），不再匹配应用名。
+- NSWorkspace 读取前台 bundle id **不需要辅助功能权限**（比 System Events 读前台名更可靠）；不做窗口树 / AX / 复杂重试等任何额外校验（保持简化，最多 3 次 × 600ms ≈ 2s 确认）。
+- focus_app 成功/失败提示均显示当前前台 bundle id，方便核对。
+
+### 2. 统一 Info.plist 与 package.json 版本号
+
+- 本版 v0.10.18：打包基线与安装包的 Info.plist（CFBundleShortVersionString / CFBundleVersion）与 package.json 统一为 0.10.18，杜绝「关于本机」与应用内版本不一致。
+
+### 3. 其他
+
+- 鼠标点击保持 CGEvent（移动 → 按下 → 50ms → 抬起），System Events 仅一次备用；坐标换算与 Y 轴不动。
+- ComputerUse MCP `SERVER_VERSION` 1.6.3 → 1.6.4。
+
 ## v0.10.17 — 2026-08-18
 
 ### 1. computer-use 整体简化（删除复杂校验，提高可靠性）

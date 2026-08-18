@@ -1,12 +1,12 @@
 {
-  "version": "0.10.17",
+  "version": "0.10.18",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-18",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.17/AI.Copilot-0.10.17-arm64.dmg",
-  "dmgSha256": "ecc5d8b7746be21a65383a021c07c5d1e044159810d2cfc63d6cfcc4f6448f1d",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.17/AI.Copilot-0.10.17.zip",
-  "patchSha256": "8077a3d4e3e9494df4eccbc2afcdb491bc03a893baaca6141f1ce15a1f6a187c",
-  "notes": "### 1. computer-use 整体简化（删除复杂校验，提高可靠性）\n\n- **focus_app 只按 bundle id 激活**：`open -b <bundle id>` 激活目标应用，随后简单确认一次前台（约 2s 内，前台名匹配 bundle id 即成功）；传应用名（非 bundle id）会提示正确用法。删除窗口稳定轮询、辅助功能树/焦点检测、连续稳定判定等复杂校验。\n- **删除自动重聚焦**：每步操作前的焦点漂移自动重新聚焦校验（guard）已移除，逻辑更简单直接。\n- **地址栏只发送 ⌘L**：focus_address_bar 不再做 AX 焦点检测、也不再自动剪贴板 ⌘V——只发 ⌘L，网址统一由 type 用剪贴板 + ⌘V 输入（type 同样移除 AX 焦点校验，粘贴后由回读验证兜底判定）。\n- **鼠标点击保持 CGEvent**：移动 → 左键按下 → 等待约 50ms → 左键抬起（System Events 仅一次备用），行为不变。\n- **不修改 Y 轴与坐标换算**：坐标体系原样保留。\n- ComputerUse MCP `SERVER_VERSION` 1.6.2 → 1.6.3。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.18/AI.Copilot-0.10.18-arm64.dmg",
+  "dmgSha256": "2b866c2c56d202bdf56a4ae651c787354285b237d5452d8fed41c5260c5be8cf",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.18/AI.Copilot-0.10.18.zip",
+  "patchSha256": "fb9e01e334500d14e21c6313e757dcc1c99bc5443cc42b277d7926409ee23faf",
+  "notes": "### 1. focus_app 改为精确比较前台 bundle id\n\n- focusAppByName 激活（open -b）后，用 NSWorkspace 读取当前前台应用的 bundle id，与目标 bundle id 精确比较（小写归一），不再匹配应用名。\n- NSWorkspace 读取前台 bundle id 不需要辅助功能权限（比 System Events 更可靠）；不做窗口树 / AX / 复杂重试等校验（保持简化，约 2s 内确认）。\n\n### 2. 统一 Info.plist 与 package.json 版本号\n\n- 本版 v0.10.18：Info.plist（CFBundleShortVersionString / CFBundleVersion）与 package.json 统一为 0.10.18，杜绝「关于本机」与应用内版本不一致。\n\n### 3. 其他\n\n- 鼠标点击保持 CGEvent（移动 → 按下 → 50ms → 抬起），System Events 仅一次备用；坐标换算与 Y 轴不动。\n- ComputerUse MCP `SERVER_VERSION` 1.6.3 → 1.6.4。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -82,6 +82,11 @@
       "from": "0.10.16",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.17/AI.Copilot-0.10.17.zip",
       "sha256": "8077a3d4e3e9494df4eccbc2afcdb491bc03a893baaca6141f1ce15a1f6a187c"
+    },
+    {
+      "from": "0.10.17",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.18/AI.Copilot-0.10.18.zip",
+      "sha256": "fb9e01e334500d14e21c6313e757dcc1c99bc5443cc42b277d7926409ee23faf"
     }
   ]
 }

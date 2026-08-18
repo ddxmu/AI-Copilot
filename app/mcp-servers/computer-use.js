@@ -24,7 +24,7 @@ const zlib = require('zlib');
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'ComputerUse';
-const SERVER_VERSION = '1.6.3';
+const SERVER_VERSION = '1.6.4';
 
 const TMP = path.join(os.tmpdir(), 'ai-copilot-computer-use');
 try { fs.mkdirSync(TMP, { recursive: true }); } catch (e) { /* ignore */ }
@@ -312,6 +312,23 @@ async function getFrontAppName() {
   }
 }
 
+// 读取当前前台应用的 bundle id（NSWorkspace，无需辅助功能权限，比 System Events 更可靠）
+async function getFrontAppBundleId() {
+  try {
+    const out = await runJxa(
+      `ObjC.import('Cocoa');\n` +
+      `var ws = $.NSWorkspace.sharedWorkspace;\n` +
+      `var app = ws.frontmostApplication;\n` +
+      `var bid = '';\n` +
+      `if (app && app.bundleIdentifier) { bid = app.bundleIdentifier.js; }\n` +
+      `bid;`
+    );
+    return String(out || '').trim();
+  } catch (e) {
+    return '';
+  }
+}
+
 // 前台应用名与目标名的宽松匹配（兼容 bundle id、"Google Chrome" vs "Chrome" 等）
 function frontMatches(front, target) {
   const a = String(front || '').trim().toLowerCase();
@@ -325,11 +342,11 @@ function frontMatches(front, target) {
 }
 
 // 聚焦/启动应用（简化版）：只按 bundle id 用 open -b 激活，再简单确认一次前台。
-//   - 不做窗口稳定 / 辅助功能树 / 连续轮询等复杂校验：发 open -b 后短暂等待，
-//     前台应用名匹配 bundle id 即视为成功（最多尝试 3 次，约 2s 内确认）。
-//   - 未确认前台则返回 false：调用方（focus_app）立即失败并禁止后续点击/输入。
+//   - 前台确认 = 精确比较「当前前台 bundle id」与「目标 bundle id」（NSWorkspace 读取，
+//     不依赖辅助功能权限，也不做窗口树 / AX / 复杂重试等校验）。
+//   - 最多尝试 3 次（每次等 600ms，共 ~2s）确认，未确认则返回 false：调用方立即失败。
 async function focusAppByName(bundleId) {
-  const nm = String(bundleId || '').trim();
+  const nm = String(bundleId || '').trim().toLowerCase();
   if (!nm) return false;
   try {
     await runCmdCapture('open', ['-b', nm]);
@@ -337,11 +354,11 @@ async function focusAppByName(bundleId) {
     logErr('focusAppByName open -b 失败：' + e.message);
     return false;
   }
-  // 简单确认前台：最多 3 次（每次等 600ms，共 ~2s），前台名匹配 bundle id 即成功
+  // 简单确认前台：最多 3 次（每次等 600ms，共 ~2s），前台 bundle id 精确匹配目标即成功
   for (let i = 0; i < 3; i++) {
     await sleep(600);
-    const front = await getFrontAppName();
-    if (front && frontMatches(front, nm)) return true;
+    const frontBid = await getFrontAppBundleId();
+    if (frontBid && frontBid.toLowerCase() === nm) return true;
   }
   return false;
 }
@@ -1374,6 +1391,7 @@ const TOOLS = {
     const name = String(args.name || '').trim();
     if (!name) throw new Error('name 不能为空，请输入 bundle id，例如 "com.apple.Safari" / "com.google.Chrome"');
     const stable = await focusAppByName(name);
+    const frontBid = await getFrontAppBundleId();
     const frontApp = await getFrontAppName();
     if (!stable) {
       markFailure();
@@ -1381,10 +1399,10 @@ const TOOLS = {
       _lastPos = null;     // 旧坐标作废
       _sessionStopped = true; // 立即失败并中止本轮：禁止继续任何点击/输入，直到新一轮指令重置
       throw new Error(
-        `${stepStatus(frontApp, '聚焦应用', name, '未确认到前台')} ` +
-        `「${name}」未能在约 2 秒内确认为前台应用（当前前台：${frontApp || '未知'}）。` +
+        `${stepStatus(frontBid || frontApp, '聚焦应用', name, '未确认到前台')} ` +
+        `「${name}」未能在约 2 秒内确认为前台应用（当前前台 bundle id：${frontBid || '未知'}${frontApp ? '，应用名：' + frontApp : ''}）。` +
         `已中止本轮操作，禁止继续点击/输入。请确认 bundle id 是否正确` +
-        `（可用 get_front_app 查看真实前台名），或在「系统设置 › 隐私与安全性 › 辅助功能 / 自动化」` +
+        `（可用 get_front_app 查看真实前台），或在「系统设置 › 隐私与安全性 › 辅助功能 / 自动化」` +
         `中允许 AI Copilot 后重试。已累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次失败。`
       );
     }
@@ -1394,7 +1412,7 @@ const TOOLS = {
     _lastCg = { x: 0, y: 0 };
     markSuccess();
     return okText(
-      `${stepStatus(frontApp, '聚焦应用', name, '已确认在前台')} 「${name}」已在前台。` +
+      `${stepStatus(frontBid || frontApp, '聚焦应用', name, '已确认在前台')} 「${name}」已在前台（前台 bundle id 精确匹配）。` +
       `⚠️ 焦点已切换：旧截图坐标一律作废，请先重新 screenshot 获取最新画面，再基于新截图坐标点击/输入。`
     );
   },
@@ -1720,7 +1738,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'focus_app',
-    description: '将指定应用按 **bundle id** 激活到前台（open -b，如 "com.apple.Safari" / "com.google.Chrome"），随后简单确认一次前台；约 2 秒内确认失败则**立即失败并中止本轮**——禁止继续任何点击/输入。成功后该应用被记为「本轮目标应用」。⚠️ 成功后焦点已切换，**旧截图坐标一律作废**，必须先重新 screenshot 再基于新截图坐标点击/输入。开始任何一串操作前都应先调用本工具。',
+    description: '将指定应用按 **bundle id** 激活到前台（open -b，如 "com.apple.Safari" / "com.google.Chrome"），随后**精确比较前台 bundle id 与目标 bundle id**（NSWorkspace 读取，无需辅助功能权限）确认一次前台；约 2 秒内确认失败则**立即失败并中止本轮**——禁止继续任何点击/输入。成功后该应用被记为「本轮目标应用」。⚠️ 成功后焦点已切换，**旧截图坐标一律作废**，必须先重新 screenshot 再基于新截图坐标点击/输入。开始任何一串操作前都应先调用本工具。',
     inputSchema: {
       type: 'object',
       properties: { name: { type: 'string', description: '应用名或 bundle id，如 "Safari" / "Google Chrome" / "com.apple.Safari"' } },
