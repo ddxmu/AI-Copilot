@@ -1,3 +1,13 @@
+## v0.10.20 — 2026-08-18
+
+### 1. 修复「Mac 桌面控制」市场模板安装失败（MODULE_NOT_FOUND）
+
+- 问题：首次「添加并连接」时若 git clone / npm install 中途中断，会留下**只有 .git、没有工作文件的半成品**；旧脚本用 `|| true` 吞掉错误继续执行，最终 `node` 运行不存在的 `dist/cli.js` 报 MODULE_NOT_FOUND，且残留 .git 导致下次重装永远失败。
+- 修复：安装脚本改为健壮幂等版——
+  - 检测到目录存在但无 `package.json`（半成品）→ 自动删除重建；
+  - `git clone --depth 1` 加速克隆；克隆 / npm install / npm run build 任一失败 → **立即退出并如实报错**（不再吞错继续）；
+  - 已装好则跳过安装直接启动（幂等，可反复重连）。
+
 ## v0.10.19 — 2026-08-18
 
 ### 1. MCP 市场新增「Mac 桌面控制（Computer Use）」

@@ -1,12 +1,12 @@
 {
-  "version": "0.10.19",
+  "version": "0.10.20",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-18",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.19/AI.Copilot-0.10.19-arm64.dmg",
-  "dmgSha256": "ae9a119fc2405d05a0581aed3d9b075c0f00e94565c48101784de7e048b53749",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.19/AI.Copilot-0.10.19.zip",
-  "patchSha256": "1d43a5f79b6a9ff6870722cd1b58623b6ddd862f8c2d6b3e32dbc3a82c47b049",
-  "notes": "### MCP 市场新增「Mac 桌面控制（Computer Use）」\n\n- 「设置 › MCP 服务器 › 从市场添加」中新增 **🖥️ Mac 桌面控制（Computer Use）** 模板（开源 Zooeyii/macos-computer-use-mcp）。\n- 点击「配置并添加 → 添加并连接」即可：首次连接自动克隆源码并构建到 `~/.local/share/macos-computer-use-mcp`（约 1~2 分钟），构建完成后重新连接即可使用。\n- 提供能力：截图、鼠标点击/移动/滚动、键盘输入、打开/聚焦应用等 24 个工具。\n- 使用前需在「系统设置 › 隐私与安全性 › 辅助功能 / 屏幕录制」中允许 AI Copilot。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.20/AI.Copilot-0.10.20-arm64.dmg",
+  "dmgSha256": "4b6ef43a7574907387818ccaa47e39201a6708297b9aef18a2b7f91f94aa44a1",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.20/AI.Copilot-0.10.20.zip",
+  "patchSha256": "10cd8ca94ccfd8fbbbc38e124a3d7474307de0f468fe20f3b38f1ba261bd217e",
+  "notes": "### 修复「Mac 桌面控制」市场模板安装失败（MODULE_NOT_FOUND）\n\n- 问题：首次添加时若 clone/npm install 中途中断，会留下只有 .git 的半成品；旧脚本吞错继续执行，最终 node 运行不存在的 dist/cli.js 报 MODULE_NOT_FOUND，且残留 .git 导致重装永远失败。\n- 修复：安装脚本改为健壮幂等版——半成品自动删除重建；git clone --depth 1；clone / npm install / npm run build 任一失败立即退出并如实报错（不再吞错）；已装好则直接启动（可反复重连）。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -92,6 +92,11 @@
       "from": "0.10.18",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.19/AI.Copilot-0.10.19.zip",
       "sha256": "1d43a5f79b6a9ff6870722cd1b58623b6ddd862f8c2d6b3e32dbc3a82c47b049"
+    },
+    {
+      "from": "0.10.19",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.20/AI.Copilot-0.10.20.zip",
+      "sha256": "10cd8ca94ccfd8fbbbc38e124a3d7474307de0f468fe20f3b38f1ba261bd217e"
     }
   ]
 }
