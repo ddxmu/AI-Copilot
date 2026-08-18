@@ -1,12 +1,12 @@
 {
-  "version": "0.10.10",
+  "version": "0.10.11",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-18",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.10/AI.Copilot-0.10.10-arm64.dmg",
-  "dmgSha256": "ce5e3caf93a05f467864b7b8930b8c313585dba1904547bb2cf04491abc39dc6",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.10/AI.Copilot-0.10.10.zip",
-  "patchSha256": "3c880c7a64c00cf525bfaecea397a71508094c509288aece4aa6f2e27204600e",
-  "notes": "### 1. ComputerUse 左键点击改回 CGEvent 主路径（反转 v0.10.9 决定）\n- 左键主点击由 System Events 改回 CoreGraphics 真实事件（mouseClickJxa）：移动到目标 → 等 100ms → mouseDown → 50ms → mouseUp。\n- System Events 降为一次性备用方案，仅 CGEvent 抛错时回退一次，不连续重复点击同一坐标。\n- 保留现有坐标换算、鼠标平滑移动、光标遮罩与界面逻辑，未改动鼠标大小与坐标算法。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.11/AI.Copilot-0.10.11-arm64.dmg",
+  "dmgSha256": "50b16e9ccbecc2dc0c444b7ddb9084b44a6849346386d510e402cd6d26fe419a",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.11/AI.Copilot-0.10.11.zip",
+  "patchSha256": "75f61ad87a2261e7d2918e8e8fc6f966747238e06128288b9ca9b031a708cb25",
+  "notes": "### 1. ComputerUse 焦点漂移即停 + AX 真焦点探测（桌面改版回灌）\n\n- **焦点漂移直接停止**：focus_app 成功后记录目标应用，后续每步操作前校验仍在前台；漂移即失败并停止本轮操作。\n- 新增 readFrontWindowState：读取前台窗口通用状态，不依赖浏览器名称，避免误判。\n- 新增 requireActionContext：每步操作前统一校验前台应用 + 可操作窗口。\n- 新增 focusedElementSnapshot：通过 AXFocusedUIElement 读取真正获得焦点的 AX 元素，兼容中英文与不同 macOS 版本。\n- 新增 EDITABLE_AX_ROLES / isEditableRole / parseFocusedElement / normalizeAxRole：归一化 AX role，判定可编辑角色。\n- 新增 readSelectedText：读取 ⌘L 后选中内容，哨兵避免误读剪贴板，结束恢复。\n- 新增 isAddressBarEvidence + 地址栏能力重写：基于 AX 语义焦点判定地址栏，不依赖 Chrome/Safari 固定名。\n- type 只能继续向同一个真实焦点输入。\n\n### 2. UI：智能体工作中状态文字改灰色左→右流光\n\n- #chat-status .agent-working 渐变由黑色改为灰色系（#9aa3b2 → #5b626d → #9aa3b2），角度 90deg。\n- 保留 agentWorkingShimmer 流光动画与 prefers-reduced-motion 回退。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -47,6 +47,11 @@
       "from": "0.10.9",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.10/AI.Copilot-0.10.10.zip",
       "sha256": "3c880c7a64c00cf525bfaecea397a71508094c509288aece4aa6f2e27204600e"
+    },
+    {
+      "from": "0.10.10",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.11/AI.Copilot-0.10.11.zip",
+      "sha256": "75f61ad87a2261e7d2918e8e8fc6f966747238e06128288b9ca9b031a708cb25"
     }
   ]
 }
