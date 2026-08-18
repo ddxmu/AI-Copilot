@@ -1,12 +1,12 @@
 {
-  "version": "0.10.14",
+  "version": "0.10.15",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-18",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.14/AI.Copilot-0.10.14-arm64.dmg",
-  "dmgSha256": "117c9e92c5fcf8c2ea489c54a2c55151c808e93fc0044bec9acb2f487d90bde0",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.14/AI.Copilot-0.10.14.zip",
-  "patchSha256": "7dab7a774a102c1aa788f2b435775de76ee7698f78d58179d0487af371d5e7e3",
-  "notes": "### 1. 撤销启动权限自动检测（自动开系统设置 / 顶部红条）\n\n- 移除 v0.10.13 加入的「启动后自动检测三项 macOS 权限 + 自动打开系统设置 + 顶部红色权限横幅」逻辑。\n- 该自动检测在部分环境下容易误判（把「应用已启动」当作「已授权/已激活」），实际使用帮助不大，故回退。\n\n### 2. 保留：执行失败时的明确权限错误提示 + 设置页手动按钮\n\n- ComputerUse 执行（AppleScript / JXA）被拒时仍返回明确的 `-25211` / `-25201` 权限错误指引文案，**绝不假报成功**。\n- 设置页「打开权限设置」按钮（手动打开辅助功能 / 屏幕录制系统设置）保留。\n\n### 3. 修复 focus_app：真正前台化 + 窗口稳定判定\n\n- `focusAppByName` 改用 `open -a` / `open -b` 真正把目标应用切到前台（回退 JXA / AppleScript `activate`），不再把「应用已启动」当成「已激活」。\n- 前台化后轮询（25×200ms ≈ 5s）：要求前台应用名匹配 **且** 拥有可操作窗口（`readFrontWindowState().hasWindow`），**连续 2 次稳定**才返回成功，杜绝「已启动但窗口未激活 / 未稳定就返回成功」的盲区。\n- 点击、地址栏聚焦、输入与验证逻辑保持不变。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.15/AI.Copilot-0.10.15-arm64.dmg",
+  "dmgSha256": "f9dcbe569f4814fbf281fe2995e9732f59ff2f5442a821723251011f33c96880",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.15/AI.Copilot-0.10.15.zip",
+  "patchSha256": "0f2e7888bf2587dfde82d04e7d4290a27b9ff499153f599440dd2397d50f8e9d",
+  "notes": "### 1. computer-use.js 以桌面版为准替换（不合并其它版本）\n\n- `mcp-servers/computer-use.js` 整体替换为桌面源 `~/Desktop/computer-use.js` 版本，以其为准继续完善。\n- 不动授权逻辑（辅助功能 / 屏幕录制权限错误提示保留）、不改 main.js、不改浏览器专用逻辑。\n\n### 2. 左键点击：CGEvent 改为主路径，System Events 仅一次备用\n\n- 左键点击主路径改为 CoreGraphics 真实鼠标事件：**鼠标移动 → 左键按下 → 等待约 50ms → 左键抬起**（光标真实移动、落点可靠）。\n- System Events 辅助功能点击（`click at` 坐标入口）仅保留一次作为备用：只在 CGEvent 主路径失败时兜底尝试，不重复连续点击同一坐标。\n- 右键 / 中键 / 双击 / 拖拽仍走 CGEvent，行为不变。\n\n### 3. 地址栏 ⌘L 后 AX 返回空 role/value 不再直接报错\n\n- `focus_address_bar` 发送 ⌘L 后，即使 AX 返回空 role/value（未检测到可编辑焦点），也不再直接报错——继续执行一次**剪贴板 + ⌘V 输入**，让内容仍有机会落进地址栏。\n- 剪贴板 ⌘V 也失败时才会如实报失败（绝不假报成功），保留连续失败计数。\n\n### 4. 其他\n\n- ComputerUse MCP `SERVER_VERSION` 1.6.0 → 1.6.1。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -67,6 +67,11 @@
       "from": "0.10.13",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.14/AI.Copilot-0.10.14.zip",
       "sha256": "7dab7a774a102c1aa788f2b435775de76ee7698f78d58179d0487af371d5e7e3"
+    },
+    {
+      "from": "0.10.14",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.15/AI.Copilot-0.10.15.zip",
+      "sha256": "0f2e7888bf2587dfde82d04e7d4290a27b9ff499153f599440dd2397d50f8e9d"
     }
   ]
 }
