@@ -2599,13 +2599,13 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   color: var(--text-light);
 }
 
-/* 「智能体工作中…」黑色流光特效 */
+/* 「智能体工作中…」灰色流光特效（左→右渐变 + 流动） */
 #chat-status .agent-working {
   display: inline-block;
   font-weight: 600;
   font-size: 12.5px;
   letter-spacing: 0.02em;
-  background: linear-gradient(100deg, #000000 0%, #000000 35%, #3a3a3a 50%, #000000 65%, #000000 100%);
+  background: linear-gradient(90deg, #9aa3b2 0%, #5b626d 50%, #9aa3b2 100%);
   background-size: 220% 100%;
   -webkit-background-clip: text;
   background-clip: text;

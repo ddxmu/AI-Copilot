@@ -1,3 +1,21 @@
+## v0.10.11 — 2026-08-18
+
+### 1. ComputerUse 焦点漂移即停 + AX 真焦点探测（桌面改版回灌）
+
+- **焦点漂移直接停止**：`focus_app` 成功后记录目标应用，后续每步操作前校验其仍在前台；一旦漂移就立即失败并停止本轮操作，禁止盲目切回其它应用。
+- 新增 `readFrontWindowState`：读取当前前台窗口的通用状态，不依赖浏览器名称，避免把「应用在前台」误当成「有可操作窗口」。
+- 新增 `requireActionContext`：每步操作前统一校验前台应用 + 可操作窗口，作为后续动作的前置哨兵。
+- 新增 `focusedElementSnapshot`：通过 `AXFocusedUIElement` 属性读取当前真正获得焦点的 AX 元素，兼容中英文系统和不同 macOS 版本（System Events AppleScript 无可移植的 focused UI element 语法）。
+- 新增 `EDITABLE_AX_ROLES` / `isEditableRole` / `parseFocusedElement` / `normalizeAxRole`：归一化 AX role（中英文、别名），判定可编辑角色（text field / text area / text view / combo box / search field）。
+- 新增 `readSelectedText`：读取 ⌘L 后的选中内容，用哨兵避免误读用户原剪贴板，结束后恢复原内容。
+- 新增 `isAddressBarEvidence` + 地址栏能力重写：基于 AX 语义焦点判定地址栏，不依赖 Chrome/Safari 等固定应用名；复制出的选中内容是 URL/主机名时跨浏览器确认地址栏。
+- `type` 只能继续向**同一个真实焦点**输入（记录最近一次确认的可编辑目标）。
+
+### 2. UI：智能体工作中状态文字改灰色左→右流光
+
+- `#chat-status .agent-working` 渐变由黑色改为**灰色系**（`#9aa3b2 → #5b626d → #9aa3b2`），角度调 **90deg**（纯左→右）。
+- 保留 `agentWorkingShimmer` 流光动画与 `prefers-reduced-motion` 回退。
+
 ## v0.10.10 — 2026-08-18
 
 ### 1. ComputerUse 左键点击改回 CGEvent 主路径（反转 v0.10.9 决定）

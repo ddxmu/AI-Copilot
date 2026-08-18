@@ -305,11 +305,13 @@ function abortCurrent() {
 
 /* ---------------- 会话状态与健壮性基础设施（v1.5.0） ---------------- */
 
-// 目标应用：focus_app 成功后记录；后续每步操作前校验它仍在前台，焦点漂移则自动重新聚焦。
+// 目标应用：focus_app 成功后记录；后续每步操作前校验它仍在前台，焦点漂移就停止本轮操作。
 let _targetApp = null;
 // 连续失败计数：定位/点击/输入连续失败达阈值即停止并报告原因，避免盲目循环。
 let _consecutiveFailures = 0;
 const MAX_CONSECUTIVE_FAILURES = 2;
+// 最近一次确认过的可编辑目标；type 只能继续向同一个真实焦点输入。
+let _inputTarget = null;
 // 会话级硬停止：用户点「停止」后置位，任何后续工具调用立即拒绝，直到主进程下发 __reset。
 let _sessionStopped = false;
 // 内部截图文件（仅用于变化验证，不回传模型），限制数量避免堆积占盘。
@@ -322,6 +324,7 @@ function resetSession() {
   _consecutiveFailures = 0;
   _aborted = false;
   _abortKill = false;
+  _inputTarget = null;
   pruneShotHistory(0);
 }
 
@@ -346,7 +349,7 @@ function markFailure() { _consecutiveFailures += 1; }
 // 每个工具执行前的统一守卫：
 //   ① 会话已被用户停止 → 立即拒绝（硬停止）
 //   ② 连续失败已达阈值 → 停止并报告原因（不盲目循环）
-//   ③ 目标应用焦点漂移 → 自动重新聚焦（best-effort）
+//   ③ 目标应用焦点漂移 → 立即失败并停止，禁止盲目切回其它应用
 async function guard(opts) {
   const o = opts || {};
   if (_sessionStopped) {
@@ -360,13 +363,11 @@ async function guard(opts) {
     );
   }
   if (o.checkFront !== false && _targetApp) {
-    try {
-      const front = await getFrontAppName();
-      if (front && !frontMatches(front, _targetApp)) {
-        logErr(`焦点漂移：前台「${front}」≠ 目标「${_targetApp}」，自动重新聚焦`);
-        await focusAppByName(_targetApp);
-      }
-    } catch (e) { /* 读前台失败不阻断，交由后续验证兜底 */ }
+    const front = await getFrontAppName();
+    if (!front) throw new Error('操作停止：无法确认当前前台应用，禁止继续发送鼠标/键盘事件。');
+    if (!frontMatches(front, _targetApp)) {
+      throw new Error(`操作停止：前台应用「${front}」已偏离目标「${_targetApp}」，请重新调用 focus_app 后再操作。`);
+    }
   }
 }
 
@@ -377,6 +378,170 @@ async function getFrontAppName() {
     return (out || '').trim();
   } catch (e) {
     return '';
+  }
+}
+
+// 读取当前前台窗口的通用状态。不依赖浏览器名称，也不把「应用在前台」误当成「有可操作窗口」。
+async function readFrontWindowState() {
+  const out = await runAppleScript(
+    'on safeText(v)\n' +
+    '  try\n' +
+    '    if v is missing value then return ""\n' +
+    '    return v as text\n' +
+    '  on error\n' +
+    '    return ""\n' +
+    '  end try\n' +
+    'end safeText\n' +
+    'tell application "System Events"\n' +
+    '  set p to first process whose frontmost is true\n' +
+    '  set appName to my safeText(name of p)\n' +
+    '  set ws to windows of p\n' +
+    '  if (count of ws) is 0 then return appName & (ASCII character 9) & "0"\n' +
+    '  set w to front window of p\n' +
+    '  return appName & (ASCII character 9) & "1" & (ASCII character 9) & ' +
+    'my safeText(name of w) & (ASCII character 9) & my safeText(role of w) & (ASCII character 9) & my safeText(subrole of w)\n' +
+    'end tell'
+  );
+  const p = String(out || '').trim().split('\t');
+  return {
+    app: p[0] || '',
+    hasWindow: p[1] === '1',
+    title: p[2] || '',
+    role: p[3] || '',
+    subrole: p[4] || '',
+  };
+}
+
+async function requireActionContext(action) {
+  const front = await getFrontAppName();
+  if (!front) throw new Error(`${action}失败：无法确认当前前台应用，请先重新聚焦目标应用。`);
+  if (_targetApp && !frontMatches(front, _targetApp)) {
+    throw new Error(`${action}失败：前台应用「${front}」已偏离目标「${_targetApp}」，请先重新定位目标。`);
+  }
+  const window = await readFrontWindowState();
+  if (!window.hasWindow) {
+    throw new Error(`${action}失败：当前前台应用没有可操作窗口，请先打开正常窗口。`);
+  }
+  return { front, window };
+}
+
+function normalizeAxRole(role) {
+  const raw = String(role || '').trim().toLowerCase().replace(/^ax/, '').replace(/[\s_-]+/g, '');
+  const aliases = {
+    button: 'button',
+    link: 'link',
+    menuitem: 'menu item',
+    checkbox: 'checkbox',
+    radiobutton: 'radio button',
+    popupbutton: 'pop up button',
+    menubutton: 'menu button',
+    combobox: 'combo box',
+    textfield: 'text field',
+    textarea: 'text area',
+    textview: 'text view',
+    searchfield: 'search field',
+    tabgroup: 'tab group',
+    slider: 'slider',
+    incrementor: 'incrementor',
+    statictext: 'static text',
+  };
+  return aliases[raw] || raw;
+}
+
+const EDITABLE_AX_ROLES = new Set(['text field', 'text area', 'text view', 'combo box', 'search field']);
+
+function isEditableRole(role) {
+  return EDITABLE_AX_ROLES.has(normalizeAxRole(role));
+}
+
+function parseFocusedElement(raw) {
+  const p = String(raw || '').trim().split('\t');
+  return {
+    app: p[0] || '',
+    role: p[1] || '',
+    subrole: p[2] || '',
+    title: p[3] || '',
+    description: p[4] || '',
+    value: p.slice(5).join('\t') || '',
+  };
+}
+
+// 读取当前真正获得焦点的 AX 元素。System Events AppleScript 没有可移植的
+// focused UI element 语法，改用 AXFocusedUIElement 属性，兼容中英文系统和不同 macOS 版本。
+async function focusedElementSnapshot() {
+  try {
+    const out = await runJxa(
+      'var se = Application("System Events");\n' +
+      'function attrValue(el, name) {\n' +
+      '  try {\n' +
+      '    if (!el || !el.attributes) return null;\n' +
+      '    var attr = el.attributes.byName(name)();\n' +
+      '    return attr && typeof attr.value === "function" ? attr.value() : null;\n' +
+      '  } catch (e) { return null; }\n' +
+      '}\n' +
+      'function text(v) {\n' +
+      '  try { return v == null ? "" : String(v).replace(/[\\t\\n\\r]/g, " "); }\n' +
+      '  catch (e) { return ""; }\n' +
+      '}\n' +
+      'var ps = se.processes.whose({frontmost: true})();\n' +
+      'if (!ps.length) { ""; } else {\n' +
+      '  var p = ps[0];\n' +
+      '  var fe = attrValue(p, "AXFocusedUIElement");\n' +
+      '  var appName = "";\n' +
+      '  try { appName = text(p.name()); } catch (e) {}\n' +
+      '  var roleName = text(attrValue(fe, "AXRole"));\n' +
+      '  var subroleName = text(attrValue(fe, "AXSubrole"));\n' +
+      '  var titleText = text(attrValue(fe, "AXTitle"));\n' +
+      '  var descText = text(attrValue(fe, "AXDescription"));\n' +
+      '  var valueText = text(attrValue(fe, "AXValue"));\n' +
+      '  [appName, roleName, subroleName, titleText, descText, valueText].join("\\t");\n' +
+      '}'
+    );
+    return parseFocusedElement(out);
+  } catch (e) {
+    return null;
+  }
+}
+
+function focusTargetKey(snapshot) {
+  if (!snapshot) return '';
+  return [snapshot.app, snapshot.role, snapshot.subrole, snapshot.title, snapshot.description]
+    .map((v) => String(v || '').trim())
+    .join('\u001f');
+}
+
+function isUrlLike(value) {
+  const s = String(value || '').trim();
+  return /^(?:[a-z][a-z0-9+.-]*:\/\/|(?:localhost|[\w.-]+\.[a-z]{2,})(?::\d+)?(?:[/?#]|$))/i.test(s);
+}
+
+function isAddressBarEvidence(snapshot, selectedText, windowState) {
+  if (!snapshot || !isEditableRole(snapshot.role) || !windowState || !windowState.hasWindow) return false;
+  const meta = [snapshot.role, snapshot.subrole, snapshot.title, snapshot.description].join(' ');
+  if (/(address|location|url|omnibox|address bar|地址|网址|地址栏|位置栏|导航栏|搜索和地址|地址与搜索)/i.test(meta)) return true;
+  // 地址栏在不同浏览器里通常暴露为 combo box；⌘L 后再确认其确实获得焦点。
+  if (normalizeAxRole(snapshot.role) === 'combo box') return true;
+  // 复制出的选中内容是 URL/主机名时，可跨浏览器确认地址栏，不依赖应用名称或界面语言。
+  return isUrlLike(selectedText);
+}
+
+// 读取 ⌘L 后的选中内容，使用哨兵避免误读用户原剪贴板；结束后恢复原内容。
+async function readSelectedText() {
+  let saved = null;
+  const marker = `__ai_copilot_focus_probe_${Date.now()}__`;
+  try { saved = await runCmdCapture('pbpaste', []); } catch (e) { /* ignore */ }
+  try {
+    await runCmdCapture('pbcopy', [], marker);
+    await runJxa(buildKeyScript(CHAR_KEYCODES['c'], []));
+    await sleep(60);
+    const copied = await runCmdCapture('pbpaste', []);
+    return copied === marker ? null : copied;
+  } catch (e) {
+    return null;
+  } finally {
+    if (saved != null) {
+      try { await runCmdCapture('pbcopy', [], saved); } catch (e) { /* ignore */ }
+    }
   }
 }
 
@@ -424,11 +589,29 @@ async function focusAppByName(name) {
   return false;
 }
 
-// 浏览器地址栏优先 ⌘L（比按截图坐标点地址栏可靠得多），返回是否拿到可编辑焦点
+// 地址栏能力使用当前前台应用的语义焦点，不依赖 Chrome/Safari 等固定名称。
 async function focusAddressBar() {
-  await runJxa(buildKeyScript(CHAR_KEYCODES['l'], ['command']));
-  await sleep(180);
-  try { return await hasEditableFocus(); } catch (e) { return false; }
+  const context = await requireActionContext('聚焦地址栏');
+  if (_targetApp && !frontMatches(context.front, _targetApp)) return false;
+  _inputTarget = null;
+  try {
+    await runJxa(buildKeyScript(CHAR_KEYCODES['l'], ['command']));
+  } catch (e) {
+    return false;
+  }
+  const deadline = Date.now() + 1500;
+  while (Date.now() < deadline) {
+    const focused = await focusedElementSnapshot();
+    if (focused && isEditableRole(focused.role)) {
+      const selected = await readSelectedText();
+      if (isAddressBarEvidence(focused, selected, context.window)) {
+        _inputTarget = { kind: 'address-bar', signature: focusTargetKey(focused) };
+        return true;
+      }
+    }
+    await sleep(120);
+  }
+  return false;
 }
 
 // 变化判定网格：截图统一重采样到 SIG_GRID × SIG_GRID 灰度格，比较各格灰度差。
@@ -542,7 +725,7 @@ function unfilterPngLine(type, line, prev, bpp) {
   return false; // 未知滤波类型
 }
 
-// 读取 32×32 灰度指纹（失败返回 null → 判定为 unknown，保守放行而非误杀）
+// 读取 32×32 灰度指纹（失败返回 null → 点击验证只能返回 unknown，禁止假报成功）
 function imageSignature(file) {
   try {
     const res = decodePngGray(fs.readFileSync(file));
@@ -568,102 +751,58 @@ function signaturesDiffer(a, b) {
 // 读取「当前焦点」描述串（前台应用 + 焦点控件角色/说明/取值）。
 // 用于像素几乎无变化、但焦点确实转移了的场景（例如点进一个输入框），避免误判为点击失败。
 async function focusDescriptor() {
+  const focused = await focusedElementSnapshot();
+  if (!focused) return '';
+  return [focused.app, focused.role, focused.subrole, focused.title, focused.description, focused.value].join('|');
+}
+
+// 通用窗口状态：不依赖浏览器名称或浏览器专用脚本接口。
+async function readWindowState() {
   try {
-    const out = await runAppleScript(
-      'tell application "System Events"\n' +
-      '  set p to first process whose frontmost is true\n' +
-      '  set d to (name of p)\n' +
-      '  try\n' +
-      '    set fe to focused UI element of p\n' +
-      '    set d to d & "|" & (role of fe)\n' +
-      '    try\n' +
-      '      set d to d & "|" & (description of fe)\n' +
-      '    end try\n' +
-      '    try\n' +
-      '      set d to d & "|" & (value of fe as text)\n' +
-      '    end try\n' +
-      '  end try\n' +
-      '  return d\n' +
-      'end tell'
-    );
-    return (out || '').trim();
+    const state = await readFrontWindowState();
+    if (!state.app || !state.hasWindow) return null;
+    return { app: state.app, title: state.title, role: state.role, subrole: state.subrole };
   } catch (e) {
-    return '';
+    return null;
   }
 }
 
-// 读取浏览器当前前台窗口的活动标签 URL 与标题（best-effort）。
-// 用于点击后「以真实 URL/标题变化」作为成功证据，而非仅凭「按键已发出」就报告完成（需求 #6）。
-// 读不到（非浏览器 / 未授权 AppleScript / 个人资料选择等无标签窗口）时返回 null → 不参与判定。
-async function readBrowserState() {
-  const front = await getFrontAppName();
-  if (!front) return null;
-  if (!/chrome|chromium|edge|brave|safari|firefox|arc|opera|qqbrowser|360/i.test(front)) return null;
-  try {
-    const out = await runAppleScript(
-      `tell application "${asStrLiteral(front)}"\n` +
-      `  if (count of windows) is 0 then return "NOTITLE|NOURL"\n` +
-      `  try\n` +
-      `    set t to title of active tab of front window\n` +
-      `  on error\n` +
-      `    set t to ""\n` +
-      `  end try\n` +
-      `  try\n` +
-      `    set u to URL of active tab of front window\n` +
-      `  on error\n` +
-      `    set u to ""\n` +
-      `  end try\n` +
-      `  return t & "|" & u\n` +
-      `end tell`
-    );
-    const s = (out || '').trim();
-    if (!s) return null;
-    const idx = s.lastIndexOf('|');
-    const title = idx >= 0 ? s.slice(0, idx) : s;
-    const url = idx >= 0 ? s.slice(idx + 1) : '';
-    return { app: front, title: title, url: url };
-  } catch (e) {
-    return null; // 读不到就保守退出，不阻断主流程
-  }
-}
-
-// 判断浏览器状态是否相对点击前发生了变化（URL 或标题任一不同即视为导航/加载生效）。
-// before 为 null（之前读不到）而 after 读到了 → 视为变化（保守放行，因很可能正从个人资料页跳走）。
-function browserStateChanged(before, after) {
+// 判断前台应用/窗口标题是否发生了真实变化。
+function windowStateChanged(before, after) {
   if (!after) return false;
   if (!before) return true;
-  if (before.url && after.url && before.url !== after.url) return true;
+  if (before.app && after.app && before.app !== after.app) return true;
   if (before.title && after.title && before.title !== after.title) return true;
   return false;
 }
 
-// 抓取操作前的状态基线（截图指纹 + 焦点描述 + 真实浏览器 URL/标题）
+// 抓取操作前的状态基线（截图指纹 + 焦点描述 + 通用窗口状态）
 async function captureState(display) {
-  const st = { sig: null, focus: '', browser: null };
+  const st = { sig: null, focus: '', window: null };
   try {
     const f = await captureShotFile(display);
     st.sig = imageSignature(f);
   } catch (e) { /* 抓不到基线 → 后续判为 unknown */ }
   st.focus = await focusDescriptor();
-  try { st.browser = await readBrowserState(); } catch (e) { st.browser = null; }
+  try { st.window = await readWindowState(); } catch (e) { st.window = null; }
   return st;
 }
 
 // 点击后验证（需求 #1/#2/#5/#6 强化）：
 //   ① 点击后不立即判定：先等待约 220ms，给页面反应时间；
-//   ② 重新截图比对像素 + 读焦点描述 + 读真实浏览器 URL/标题；
+//   ② 重新截图比对像素 + 读焦点描述 + 读前台应用/窗口状态；
 //   ③ 若页面仍在加载（暂时无变化），继续轮询最多 3 秒，不把「暂时无变化」当失败；
 //   ④ 只有「完整重试（含 3 秒轮询）后」仍无任何真实证据变化，才返回 nochange；
-//   ⑤ 成功必须由真实证据支撑：像素变化 / 焦点转移 / 浏览器 URL 或标题变化
+//   ⑤ 成功必须由真实证据支撑：像素变化 / 焦点转移 / 前台应用或窗口状态变化
 //      （需求 #6，绝不只凭「按键已发出」就报告完成）。
-// 返回 { result: 'ok'|'nochange'|'unknown', reason, browser? }
+// 返回 { result: 'ok'|'nochange'|'unknown', reason, window? }
 async function verifyClick(display, before) {
   if (!before) return { result: 'unknown', reason: 'nobaseline' };
   // ① 先给控件一个短暂反应时间，再以较短间隔轮询，减少点击后的无谓停顿。
   await sleep(220);
   const deadline = Date.now() + 3000; // ② 最多再轮询 3 秒
   let lastD = null;
-  let lastBrowser = null;
+  let lastWindow = null;
   while (true) {
     // 重新截图比对像素
     let afterSig = null;
@@ -675,21 +814,21 @@ async function verifyClick(display, before) {
     lastD = d;
     // 读焦点变化（聚焦输入框这类视觉变化极小但确实生效）
     const afterFocus = await focusDescriptor();
-    // 读真实浏览器 URL/标题（最强证据）
-    let afterBrowser = null;
-    try { afterBrowser = await readBrowserState(); } catch (e) { afterBrowser = null; }
-    lastBrowser = afterBrowser;
+    // 读通用前台应用/窗口标题变化
+    let afterWindow = null;
+    try { afterWindow = await readWindowState(); } catch (e) { afterWindow = null; }
+    lastWindow = afterWindow;
     // ⑤ 真实证据之一即判成功
     if (d && d.differ) return { result: 'ok', reason: 'pixel' };
     if (before.focus && afterFocus && before.focus !== afterFocus) return { result: 'ok', reason: 'focus' };
-    if (browserStateChanged(before.browser, afterBrowser)) return { result: 'ok', reason: 'browser', browser: afterBrowser };
+    if (windowStateChanged(before.window, afterWindow)) return { result: 'ok', reason: 'window', window: afterWindow };
     // ③ 仍在加载/暂时无变化：若还有时间则继续轮询，不把「暂时无变化」当失败
     if (Date.now() >= deadline) break;
     await sleep(220);
   }
   // ④ 完整重试（含 3 秒轮询）后仍无变化
   if (!lastD) return { result: 'unknown', reason: 'noread' };
-  return { result: 'nochange', reason: 'none', browser: lastBrowser };
+  return { result: 'nochange', reason: 'none', window: lastWindow };
 }
 
 // 每一步的状态行：当前应用 / 当前动作 / 目标位置 / 验证结果（需求：为每一步显示这四项）
@@ -917,11 +1056,21 @@ function resolveMainCode(main) {
 //      解决 Chrome/Electron 把 ⌘V 误判为裸 v、只落一个字符的问题；CoreGraphics 失败时
 //      回退 System Events `keystroke "v" using command down`（同一环境变量下更稳）
 //   ⑤ 按文本长度充分等待，避免 finally 还原剪贴板截断正在进行的粘贴
-//   ⑥ 尽力回读目标字段内容（⌘A+⌘C 读出），确认确实进入窗口（verifyPasteLanded）；
-//      若明确为空则抛错（失败不假报成功），读不到则保守放行（不误杀）
+//   ⑥ 回读目标字段内容（⌘A+⌘C 读出），确认确实进入正确控件（verifyPasteLanded）；
+//      明确不匹配或无法读取都抛错，不能用「无法确认」冒充成功
 //   任何一步失败都抛出；调用方不再用 keystroke 重输整段（那会丢中文/长文本/换行且假报成功）。
 async function typeViaClipboard(text) {
   let saved = null;
+  const focusedBefore = await focusedElementSnapshot();
+  if (!focusedBefore || !isEditableRole(focusedBefore.role)) {
+    throw new Error('当前焦点不在可编辑输入框，输入已停止。');
+  }
+  const expectedTarget = _inputTarget && _inputTarget.signature
+    ? _inputTarget.signature
+    : focusTargetKey(focusedBefore);
+  if (_inputTarget && _inputTarget.signature && expectedTarget !== focusTargetKey(focusedBefore)) {
+    throw new Error('输入目标焦点已变化，拒绝向未知输入框粘贴。');
+  }
   try { saved = await runCmdCapture('pbpaste', []); } catch (e) { /* 读不到就算了 */ }
 
   try {
@@ -948,9 +1097,11 @@ async function typeViaClipboard(text) {
     await sleep(Math.min(2000, 120 + text.length * 6));
 
     // ⑥ 回读目标字段，确认内容确实进入窗口
-    const verdict = await verifyPasteLanded(text);
-    if (verdict === 'fail') {
-      throw new Error('粘贴后目标输入框未出现预期内容（焦点丢失或被拦截），输入未生效。');
+    const verdict = await verifyPasteLanded(text, expectedTarget);
+    if (verdict !== 'ok') {
+      throw new Error(verdict === 'fail'
+        ? '粘贴后目标输入框未出现预期内容（焦点丢失或被拦截），输入未生效。'
+        : '粘贴后无法确认目标输入框内容，拒绝报告输入成功。');
     }
   } finally {
     if (saved != null) {
@@ -967,35 +1118,29 @@ function pasteAppleScript() {
 
 // 检查前台进程是否有「可编辑、聚焦」的文本控件（AX role 为文本类）。
 // 用于粘贴前确认目标能接收输入，避免把内容粘贴到无处 → 假报成功。
-// 读取失败（如无辅助功能/自动化授权）时保守返回 true：仍尝试粘贴，由后续回读验证兜底。
+// 读取失败（如无辅助功能/自动化授权）也返回 false，阻止把文字发到未知目标。
 async function hasEditableFocus() {
-  try {
-    const out = await runAppleScript(
-      'tell application "System Events"\n' +
-      '  set p to first process whose frontmost is true\n' +
-      '  set fe to focused UI element of p\n' +
-      '  return role of fe\n' +
-      'end tell'
-    );
-    const role = (out || '').trim();
-    // 只接受真正的可编辑文本角色，排除 AXStaticText 等只读文本
-    return /text field|text area|text view|combo box|search field|AXTextField|AXTextArea|AXTextView|AXComboBox|AXSearchField/i.test(role);
-  } catch (e) {
-    return true;
-  }
+  const focused = await focusedElementSnapshot();
+  return !!focused && isEditableRole(focused.role);
 }
 
-// 回读目标字段内容，确认粘贴生效（best-effort）：
+// 回读目标字段内容，确认粘贴生效：
 //   通过 ⌘A（全选）+ ⌘C（复制）读出字段内容，与待粘贴文本比较。
-//   返回 'ok'（字段含待粘贴文本）/ 'fail'（字段为空）/ 'unknown'（无法读取，不判定）。
+//   返回 'ok'（字段含待粘贴文本）/ 'fail'（字段为空或内容不符）/ 'unknown'（无法读取）。
 // 注：⌘A/⌘C 均在字段内，不改变已粘贴结果；字段内容随后由 finally 还原剪贴板覆盖。
-async function verifyPasteLanded(text) {
+async function verifyPasteLanded(text, expectedTarget) {
   try {
+    const before = await focusedElementSnapshot();
+    if (!before || !isEditableRole(before.role)) return 'fail';
+    if (expectedTarget && focusTargetKey(before) !== expectedTarget) return 'fail';
     await runJxa(buildKeyScript(CHAR_KEYCODES['a'], ['command'])); // ⌘A 全选
     await sleep(40);
     await runJxa(buildKeyScript(CHAR_KEYCODES['c'], ['command'])); // ⌘C 复制字段内容
     await sleep(60);
     const field = await runCmdCapture('pbpaste', []);
+    const after = await focusedElementSnapshot();
+    if (!after || !isEditableRole(after.role)) return 'fail';
+    if (expectedTarget && focusTargetKey(after) !== expectedTarget) return 'fail';
     return pasteVerificationResult(field, text);
   } catch (e) {
     return 'unknown';
@@ -1004,7 +1149,7 @@ async function verifyPasteLanded(text) {
 
 // 纯函数：根据回读到的字段内容对待粘贴文本做判定（可单测，无需 macOS）。
 // 规则（严格、不假报成功）：
-//   - fieldContent 为 null（确实读不到字段内容）→ 'unknown'，交由上层保守处理；
+//   - fieldContent 为 null（确实读不到字段内容）→ 'unknown'，由上层按失败处理；
 //   - 字段含待粘贴文本 → 'ok'；
 //   - 只要能读到字段、但内容不含待粘贴文本（含空字段、只落了 'v' 等）→ 'fail'。
 function pasteVerificationResult(fieldContent, pasted) {
@@ -1054,7 +1199,14 @@ if (!procs.length) {
       for (var i = 0; i < kids.length && out.length < CAP; i++) {
         var k = kids[i];
         var role = safe(function(){ return k.role(); }) || '';
-        var rl = String(role).toLowerCase().replace(/^ax/, '');
+        var compactRole = String(role).toLowerCase().replace(/^ax/, '').replace(/[\\s_-]+/g, '');
+        var ROLE_ALIASES = {
+          menuitem: 'menu item', radiobutton: 'radio button', popupbutton: 'pop up button',
+          menubutton: 'menu button', combobox: 'combo box', textfield: 'text field',
+          textarea: 'text area', textview: 'text view', searchfield: 'search field',
+          tabgroup: 'tab group', statictext: 'static text'
+        };
+        var rl = ROLE_ALIASES[compactRole] || compactRole;
         if (WANTED[rl]) {
           var pos = safe(function(){ return k.position(); });
           var sz = safe(function(){ return k.size(); });
@@ -1097,10 +1249,47 @@ result;`;
     items.push({
       role: p[0], name: p[1],
       cx: Math.round(cx), cy: Math.round(cy),
+      x: Math.round((gx - d.originX) / shot.coordScale),
+      y: Math.round((gy - d.originY) / shot.coordScale),
+      width: Math.max(1, Math.round(w / shot.coordScale)),
+      height: Math.max(1, Math.round(h / shot.coordScale)),
       enabled: p[6] === '1', focused: p[7] === '1',
     });
   }
   return { status: 'OK', appName, items };
+}
+
+const CLICKABLE_ROLE_PRIORITY = {
+  button: 0, link: 0, 'menu item': 0, checkbox: 0, 'radio button': 0,
+  'pop up button': 1, 'menu button': 1, 'combo box': 1,
+  'text field': 2, 'text area': 2, 'search field': 2,
+};
+
+// 优先把截图坐标吸附到辅助功能树中真正的控件中心；网页正文读不到 AX 时保留截图坐标兜底。
+async function resolveClickTarget(modelX, modelY, display) {
+  const raw = await modelToTarget(modelX, modelY, display);
+  try {
+    const ui = await queryUiElements(display);
+    const candidates = (ui.items || []).filter((item) => {
+      if (item.enabled === false || !isFinite(item.x) || !isFinite(item.y)) return false;
+      return modelX >= item.x && modelX <= item.x + item.width &&
+        modelY >= item.y && modelY <= item.y + item.height;
+    });
+    if (candidates.length) {
+      candidates.sort((a, b) => {
+        const pa = CLICKABLE_ROLE_PRIORITY[a.role] == null ? 9 : CLICKABLE_ROLE_PRIORITY[a.role];
+        const pb = CLICKABLE_ROLE_PRIORITY[b.role] == null ? 9 : CLICKABLE_ROLE_PRIORITY[b.role];
+        if (pa !== pb) return pa - pb;
+        return (a.width * a.height) - (b.width * b.height);
+      });
+      const item = candidates[0];
+      const adjusted = await modelToTarget(item.cx, item.cy, display);
+      return { ...adjusted, modelX: item.cx, modelY: item.cy, source: 'accessibility', element: item };
+    }
+  } catch (e) {
+    logErr('辅助功能控件定位失败，回退截图坐标：' + e.message);
+  }
+  return { ...raw, modelX, modelY, source: 'screenshot' };
 }
 
 // 在截图上绘制红色点击环（best-effort，失败不影响主流程）
@@ -1227,17 +1416,18 @@ const TOOLS = {
   },
 
   // 点击流程（v1.6.0 强化，对接需求 #1/#2/#5/#6/#7）：
-  //   guard() 校验停止标记 / 连续失败 / 目标应用是否仍在前台（漂移则自动重新聚焦）
-  //   → 抓操作前基线（像素指纹 + 焦点 + 真实浏览器 URL/标题）
-  //   → 平滑移到目标并建立基线 → 点击 → verifyClick：先等约 220ms 再重截 + 读 URL/标题，页面加载则轮询最多 3 秒，
+  //   guard() 校验停止标记 / 连续失败 / 目标应用是否仍在前台（漂移立即停止）
+  //   → 抓操作前基线（像素指纹 + 焦点 + 前台应用/窗口状态）
+  //   → 平滑移到目标并建立基线 → 点击 → verifyClick：先等约 220ms 再重截 + 读窗口状态，页面加载则轮询最多 3 秒，
   //     不把「暂时无变化」当失败；只有完整重试后仍无真实证据变化才计入连续失败（需求 #5）。
-  //   成功必须由真实证据支撑（像素/焦点/URL/标题），绝不只凭「按键已发出」（需求 #6）。
+  //   成功必须由真实证据支撑（像素/焦点/窗口状态），绝不只凭「按键已发出」（需求 #6）。
   //   注（需求 #7）：AI 光标遮罩大小只影响显示，点击坐标一律用真实 CG 坐标 target.cg，
   //   绝不用光标尺寸去「修正」点击落点 —— 见下方 annotateScreenshotJxa 的圆心说明。
   async click(args) {
     await guard();
+    await requireActionContext('点击');
     const { x, y } = numPair(args, 'x', 'y');
-    const target = await modelToTarget(x, y, args.display);
+    const target = await resolveClickTarget(x, y, args.display);
     const from = _hasLastCg && isFinite(_lastCg.x) ? _lastCg : target.cg;
     rememberCg(target.cg);
     const button = String(args.button || 'left').toLowerCase();
@@ -1245,6 +1435,7 @@ const TOOLS = {
     // 先让真实鼠标到达目标，再建立基线，避免 hover 变化被误判成点击成功。
     await movePointerTo(from.x, from.y, target.cg.x, target.cg.y);
     await sleep(45);
+    await requireActionContext('点击');
     const before = await captureState(display);
     // 真正点击前隐藏覆盖层，避免透明窗口拦截命中测试
     sendCursor('hide');
@@ -1267,41 +1458,42 @@ const TOOLS = {
       sendCursor('show');
       throw new Error(`点击失败：${e.message}（已记为第 ${_consecutiveFailures} 次失败；禁止用同一坐标重试，请改用键盘快捷键或重新定位控件中心）`);
     }
-    setLastPos(x, y, display);
+    setLastPos(target.modelX, target.modelY, display);
     sendCursor('click', target.cg.x, target.cg.y);
     sendCursor('show');
     const v = await verifyClick(display, before);
-    let verify;
-    if (v.result === 'ok') {
-      const reasonText = v.reason === 'pixel' ? '像素已变化'
-        : v.reason === 'focus' ? '焦点已转移'
-        : '浏览器 URL/标题已变化';
-      verify = `已验证生效（${reasonText}${v.browser && v.browser.url ? '，当前 URL:' + v.browser.url : ''}）`;
-      markSuccess();
-    } else if (v.result === 'nochange') {
-      verify = '完整重试（含 3 秒加载轮询）后仍无任何真实变化（像素/焦点/URL/标题）→ 判定未生效';
-      markFailure();
-    } else {
-      verify = '无法验证（保守视为已执行）';
-      markSuccess();
-    }
+    const verify = v.result === 'ok'
+      ? `已验证生效（${v.reason === 'pixel' ? '像素已变化' : v.reason === 'focus' ? '焦点已转移' : '窗口状态已变化'}）`
+      : v.result === 'nochange'
+        ? '完整重试（含 3 秒加载轮询）后仍无真实变化（像素/焦点/窗口状态）'
+        : '无法读取点击后的验证状态';
     const frontApp = await getFrontAppName();
-    const status = stepStatus(frontApp, `${button}键点击`, `(${x}, ${y}) 显示器${display}`, verify);
-    const tip = v.result === 'nochange'
-      ? ` 本次点击在多次轮询后仍未产生真实变化，很可能落在控件边缘或目标不可点击。禁止用同一坐标重复点击：请改用键盘快捷键（浏览器地址栏用 focus_address_bar 即 ⌘L），或先 query_ui 读取控件中心坐标，或重新截图定位控件中心。已累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次失败，再失败一次将自动停止并需向用户报告原因。`
-      : '';
-    return okText(`${status} 已在图像坐标 (${x}, ${y}) 点击（${button}键，显示器 ${display}）。${tip}`);
+    const targetText = `(${target.modelX}, ${target.modelY}) 显示器${display}，定位=${target.source}`;
+    const status = stepStatus(frontApp, `${button}键点击`, targetText, verify);
+    if (v.result !== 'ok') {
+      markFailure();
+      throw new Error(`${status} 点击未确认生效。请重新截图或读取辅助功能控件中心，禁止盲目重复同一坐标。`);
+    }
+    markSuccess();
+    const focused = button === 'left' ? await focusedElementSnapshot() : null;
+    _inputTarget = focused && isEditableRole(focused.role)
+      ? { kind: 'focused-field', signature: focusTargetKey(focused) }
+      : null;
+    return okText(`${status} 已在图像坐标 (${target.modelX}, ${target.modelY}) 点击（${button}键，显示器 ${display}）。`);
   },
 
   async double_click(args) {
     await guard();
+    await requireActionContext('双击');
+    _inputTarget = null;
     const { x, y } = numPair(args, 'x', 'y');
-    const target = await modelToTarget(x, y, args.display);
+    const target = await resolveClickTarget(x, y, args.display);
     const from = _hasLastCg && isFinite(_lastCg.x) ? _lastCg : target.cg;
     rememberCg(target.cg);
     const display = target.display;
     await movePointerTo(from.x, from.y, target.cg.x, target.cg.y);
     await sleep(45);
+    await requireActionContext('双击');
     const before = await captureState(display);
     sendCursor('hide');
     await sleep(35);
@@ -1312,28 +1504,35 @@ const TOOLS = {
       sendCursor('show');
       throw new Error(`双击失败：${e.message}（已记为第 ${_consecutiveFailures} 次失败）`);
     }
-    setLastPos(x, y, display);
+    setLastPos(target.modelX, target.modelY, display);
     sendCursor('click', target.cg.x, target.cg.y);
     sendCursor('show');
     const v = await verifyClick(display, before);
-    let verify;
-    if (v.result === 'ok') { verify = '界面已变化，双击生效'; markSuccess(); }
-    else if (v.result === 'nochange') { verify = '完整重试后仍无真实变化 → 判定未生效'; markFailure(); }
-    else { verify = '无法验证（保守视为已执行）'; markSuccess(); }
+    const verify = v.result === 'ok' ? '界面已变化，双击生效'
+      : v.result === 'nochange' ? '完整重试后仍无真实变化'
+        : '无法读取双击后的验证状态';
     const frontApp = await getFrontAppName();
-    const status = stepStatus(frontApp, '双击', `(${x}, ${y}) 显示器${display}`, verify);
-    return okText(`${status} 已在图像坐标 (${x}, ${y}) 双击（显示器 ${display}）。`);
+    const status = stepStatus(frontApp, '双击', `(${target.modelX}, ${target.modelY}) 显示器${display}，定位=${target.source}`, verify);
+    if (v.result !== 'ok') {
+      markFailure();
+      throw new Error(`${status} 双击未确认生效。`);
+    }
+    markSuccess();
+    return okText(`${status} 已在图像坐标 (${target.modelX}, ${target.modelY}) 双击（显示器 ${display}）。`);
   },
 
   async right_click(args) {
     await guard();
+    await requireActionContext('右键点击');
+    _inputTarget = null;
     const { x, y } = numPair(args, 'x', 'y');
-    const target = await modelToTarget(x, y, args.display);
+    const target = await resolveClickTarget(x, y, args.display);
     const from = _hasLastCg && isFinite(_lastCg.x) ? _lastCg : target.cg;
     rememberCg(target.cg);
     const display = target.display;
     await movePointerTo(from.x, from.y, target.cg.x, target.cg.y);
     await sleep(45);
+    await requireActionContext('右键点击');
     const before = await captureState(display);
     sendCursor('hide');
     await sleep(35);
@@ -1344,17 +1543,21 @@ const TOOLS = {
       sendCursor('show');
       throw new Error(`右键点击失败：${e.message}（已记为第 ${_consecutiveFailures} 次失败）`);
     }
-    setLastPos(x, y, display);
+    setLastPos(target.modelX, target.modelY, display);
     sendCursor('click', target.cg.x, target.cg.y);
     sendCursor('show');
     const v = await verifyClick(display, before);
-    let verify;
-    if (v.result === 'ok') { verify = '右键菜单已出现'; markSuccess(); }
-    else if (v.result === 'nochange') { verify = '完整重试后仍无真实变化 → 判定未生效'; markFailure(); }
-    else { verify = '无法验证（保守视为已执行）'; markSuccess(); }
+    const verify = v.result === 'ok' ? '右键菜单已出现'
+      : v.result === 'nochange' ? '完整重试后仍无真实变化'
+        : '无法读取右键后的验证状态';
     const frontApp = await getFrontAppName();
-    const status = stepStatus(frontApp, '右键点击', `(${x}, ${y}) 显示器${display}`, verify);
-    return okText(`${status} 已在图像坐标 (${x}, ${y}) 右键点击（显示器 ${display}）。`);
+    const status = stepStatus(frontApp, '右键点击', `(${target.modelX}, ${target.modelY}) 显示器${display}，定位=${target.source}`, verify);
+    if (v.result !== 'ok') {
+      markFailure();
+      throw new Error(`${status} 右键点击未确认生效。`);
+    }
+    markSuccess();
+    return okText(`${status} 已在图像坐标 (${target.modelX}, ${target.modelY}) 右键点击（显示器 ${display}）。`);
   },
 
   async drag(args) {
@@ -1386,6 +1589,7 @@ const TOOLS = {
   //   两次都失败即计入连续失败并如实报错，要求改用快捷键或重新定位，绝不用同一坐标死循环。
   async type(args) {
     await guard();
+    await requireActionContext('输入');
     const text = String(args.text != null ? args.text : '');
     if (!text) return okText('（未输入任何文字）');
     if (_lastPos) sendCursor('move', _lastPos.x, _lastPos.y);
@@ -1405,10 +1609,19 @@ const TOOLS = {
     // ---- 唯一一次重试：必须换路径 ----
     try {
       if (isAscii) {
+        const focused = await focusedElementSnapshot();
+        const expectedTarget = _inputTarget && _inputTarget.signature
+          ? _inputTarget.signature
+          : focusTargetKey(focused);
+        if (!focused || !isEditableRole(focused.role) || (expectedTarget && focusTargetKey(focused) !== expectedTarget)) {
+          throw new Error('当前焦点已变化，拒绝逐字输入到未知控件');
+        }
         await typeAsciiKeystroke(text);
+        const verdict = await verifyPasteLanded(text, expectedTarget);
+        if (verdict !== 'ok') throw new Error('逐字输入后无法回读目标控件内容');
         markSuccess();
         const frontApp = await getFrontAppName();
-        return okText(`${stepStatus(frontApp, '输入文字(重试)', '当前焦点输入框', '剪贴板路径失败，已改用键盘逐字输入')} 已输入：${brief}`);
+        return okText(`${stepStatus(frontApp, '输入文字(重试)', '当前焦点输入框', '已回读确认逐字输入')} 已输入：${brief}`);
       }
       const focused = await hasEditableFocus();
       if (!focused) throw new Error('当前焦点仍不在可编辑输入框');
@@ -1448,6 +1661,11 @@ const TOOLS = {
       markFailure();
       throw new Error(`按键失败：${e.message}（已记为第 ${_consecutiveFailures} 次失败）`);
     }
+    // Tab/方向键/回车等可能改变真实焦点；不要让 type 沿用旧控件身份。
+    const focused = await focusedElementSnapshot();
+    _inputTarget = focused && isEditableRole(focused.role)
+      ? { kind: 'focused-field', signature: focusTargetKey(focused) }
+      : null;
     markSuccess();
     const frontApp = await getFrontAppName();
     const combo = `${mods.length ? mods.join('+') + '+' : ''}${key}`;
@@ -1475,6 +1693,10 @@ const TOOLS = {
       markFailure();
       throw new Error(`快捷键失败：${e.message}（已记为第 ${_consecutiveFailures} 次失败）`);
     }
+    const focused = await focusedElementSnapshot();
+    _inputTarget = focused && isEditableRole(focused.role)
+      ? { kind: 'focused-field', signature: focusTargetKey(focused) }
+      : null;
     markSuccess();
     const frontApp = await getFrontAppName();
     return okText(`${stepStatus(frontApp, '快捷键 ' + keys.join('+'), '当前焦点', '快捷键事件已发出')} 已触发快捷键 ${keys.join('+')}${danger ? '（已确认执行危险操作）' : ''}`);
@@ -1514,17 +1736,22 @@ const TOOLS = {
     const name = String(args.name || '').trim();
     if (!name) throw new Error('name 不能为空，例如 "Safari"、"Finder"，或 bundle id 如 "com.apple.Safari"');
     const stable = await focusAppByName(name);
-    _targetApp = name; // 后续每步操作前都会校验它仍在前台，漂移则自动重新聚焦
     const frontApp = await getFrontAppName();
-    if (!stable) {
+    let window = null;
+    if (stable) {
+      try { window = await readFrontWindowState(); } catch (e) { window = null; }
+    }
+    if (!stable || !window || !window.hasWindow) {
+      _targetApp = null;
       markFailure();
-      return okText(
+      throw new Error(
         `${stepStatus(frontApp, '聚焦应用', name, '未在 ~1.5s 内确认到前台 → 判定未稳定')} ` +
-        `已尝试将「${name}」切换/启动到前台，但轮询未确认其成为前台应用（当前前台：${frontApp || '未知'}）。` +
+        `已尝试将「${name}」切换/启动到前台，但未确认其成为前台且拥有正常窗口（当前前台：${frontApp || '未知'}）。` +
         `请确认应用名称是否正确（可用 get_front_app 查看真实名称），或在「系统设置 › 隐私与安全性 › 辅助功能 / 自动化」中允许 AI Copilot。` +
         `已累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次失败。`
       );
     }
+    _targetApp = name; // 后续每步操作前都会校验它仍在前台，漂移就停止
     markSuccess();
     return okText(`${stepStatus(frontApp, '聚焦应用', name, '已确认在前台且窗口已稳定')} 「${name}」已在前台，窗口已稳定，可以继续截图/操作。`);
   },
@@ -1534,7 +1761,7 @@ const TOOLS = {
     await guard({ checkFront: false });
     const frontApp = await getFrontAppName();
     if (!frontApp) return okText('无法读取前台应用名（可能未授权辅助功能）。');
-    const targetNote = _targetApp ? `（本轮目标应用：${_targetApp}${frontMatches(frontApp, _targetApp) ? '，焦点一致' : '，焦点已漂移，下一步操作会自动重新聚焦'}）` : '';
+    const targetNote = _targetApp ? `（本轮目标应用：${_targetApp}${frontMatches(frontApp, _targetApp) ? '，焦点一致' : '，焦点已漂移，后续操作会停止'}）` : '';
     return okText(`${stepStatus(frontApp, '读取前台应用', '-', '已读取')} 当前前台应用：${frontApp}${targetNote}`);
   },
 
@@ -1545,14 +1772,14 @@ const TOOLS = {
     const frontApp = await getFrontAppName();
     if (!ok) {
       markFailure();
-      return okText(
-        `${stepStatus(frontApp, '聚焦地址栏(⌘L)', '浏览器地址栏', '未检测到可编辑焦点')} ` +
-        `已发出 ⌘L，但未检测到可编辑输入焦点。请确认前台是浏览器（可用 get_front_app 确认，或先 focus_app 切到浏览器）再重试。` +
+      throw new Error(
+        `${stepStatus(frontApp, '聚焦地址栏(⌘L)', '当前前台应用地址栏', '未确认真实地址栏焦点')} ` +
+        `已停止输入：当前应用没有被确认的地址栏焦点。请先打开正常浏览器窗口，再重新定位。` +
         `已累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次失败。`
       );
     }
     markSuccess();
-    return okText(`${stepStatus(frontApp, '聚焦地址栏(⌘L)', '浏览器地址栏', '已确认取得可编辑焦点')} 地址栏已聚焦并全选，可直接调用 type 输入网址，再用 key(return) 回车。`);
+    return okText(`${stepStatus(frontApp, '聚焦地址栏(⌘L)', '当前前台应用地址栏', '已确认真实地址栏焦点')} 地址栏已聚焦并全选，可直接调用 type 输入文字，再用 key(return) 回车。`);
   },
 
   // 读取辅助功能元素（优先于截图坐标）：返回控件角色/名称/中心坐标（已换算为图像坐标系）/状态
@@ -1753,7 +1980,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'click',
-    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。坐标必须是控件的几何中心，不能是边缘（可先用 query_ui 拿到精确中心）。点击前会先让真实鼠标平滑移动到目标并校验目标应用仍在前台（焦点漂移则自动重新聚焦），点击后会快速验证：先等待约 220ms 再重新截图比对像素，并读取真实浏览器 URL/标题与焦点状态；若页面仍在加载（暂时无变化）会继续轮询最多 3 秒，不会把「暂时无变化」误判为点击失败；只有「完整重试后仍无任何真实变化」才判定本次点击「未生效」并计入连续失败——此时禁止用同一坐标重试，应改用键盘快捷键或重新定位；连续 2 次失败会自动停止并要求你向用户报告原因。成功一律以真实证据（像素/焦点/URL/标题变化）为准，不会只因「按键已发出」就报完成。左键主点击走 CoreGraphics 真实事件（CGEvent：移动到目标→等100ms→mouseDown→50ms→mouseUp），失败时回退 System Events 辅助功能点击（一次性，不连续重复同一坐标）。多显示器时传 display（1=主屏）。',
+    description: '在指定图像坐标 (x, y) 点击鼠标。button 可选 left/right/middle，默认 left。坐标必须是控件的几何中心，不能是边缘（可先用 query_ui 拿到精确中心）。点击前会先让真实鼠标平滑移动到目标，并校验当前前台应用与窗口仍可操作；点击后会快速验证：先等待约 220ms 再重新截图比对像素，并读取前台应用/窗口状态与真实焦点；若页面仍在加载（暂时无变化）会继续轮询最多 3 秒，不会把「暂时无变化」误判为点击失败；只有「完整重试后仍无任何真实变化」才判定本次点击「未生效」并计入连续失败——此时禁止用同一坐标重试，应改用键盘快捷键或重新定位；连续 2 次失败会自动停止并要求你向用户报告原因。成功一律以真实证据（像素/焦点/窗口状态变化）为准，不会只因「按键已发出」就报完成。左键主点击走 CoreGraphics 真实事件（CGEvent：移动到目标→等100ms→mouseDown→50ms→mouseUp），失败时回退 System Events 辅助功能点击（一次性，不连续重复同一坐标）。多显示器时传 display（1=主屏）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1857,7 +2084,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'focus_app',
-    description: '将指定应用切换/启动到前台，并轮询等待其真正成为前台、窗口稳定后才返回（因此 focus_app 之后可以直接截图/操作，无需自己 sleep）。name 可为应用名（如 "Safari"、"Finder"、"Google Chrome"）或 bundle id（如 "com.apple.Safari"）。调用成功后该应用会被记为「本轮目标应用」：之后每一步鼠标/键盘操作前都会校验它仍在前台，若焦点漂移到别的应用会自动重新聚焦再操作。开始任何一串操作前都应先调用本工具。',
+    description: '将指定应用切换/启动到前台，并轮询确认其真正成为前台且拥有正常窗口后才返回（因此 focus_app 之后可以直接截图/操作，无需自己 sleep）。name 可为应用名（如 "Safari"、"Finder"、"Google Chrome"）或 bundle id（如 "com.apple.Safari"）。调用成功后该应用会被记为「本轮目标应用」：之后每一步鼠标/键盘操作前都会校验它仍在前台；若焦点漂移到别的应用会立即停止并提示重新 focus_app，禁止盲目切回。开始任何一串操作前都应先调用本工具。',
     inputSchema: {
       type: 'object',
       properties: { name: { type: 'string', description: '应用名或 bundle id，如 "Safari" / "com.apple.Safari"' } },
@@ -1871,7 +2098,7 @@ const TOOL_DEFS = [
   },
   {
     name: 'focus_address_bar',
-    description: '聚焦浏览器地址栏（发送 ⌘L 并校验确实拿到可编辑焦点）。操作 Chrome/Safari/Edge 地址栏时必须用本工具，禁止用截图坐标去点地址栏。成功后地址栏内容已全选，可直接 type 输入网址，再 key(return) 回车。',
+    description: '聚焦当前前台浏览器的地址栏（发送 ⌘L 后校验真实可编辑焦点、窗口状态与地址栏语义/选中内容）。不依赖 Chrome/Safari/Edge 名称，也禁止用截图坐标去点地址栏。成功后地址栏内容已全选，可直接 type 输入网址，再 key(return) 回车；无法确认地址栏时直接失败，不继续输入。',
     inputSchema: { type: 'object', properties: {} },
   },
   {
@@ -1985,6 +2212,12 @@ module.exports = {
   KEY_CODES, CHAR_KEYCODES,
   // v1.5.0 健壮性相关（纯函数，便于单测）
   signaturesDiffer, frontMatches, stepStatus, MAX_CONSECUTIVE_FAILURES, TOOL_DEFS,
+  // v1.6.0 目标确认相关（纯函数，便于回归测试）
+  normalizeAxRole, isEditableRole, focusTargetKey, isUrlLike, isAddressBarEvidence, windowStateChanged,
+  // 只读运行时探针，便于在发版前确认 AppleScript/辅助功能链路可用
+  readFrontWindowState, focusedElementSnapshot,
+  // 发版前定位回归问题用的只读坐标探针
+  queryUiElements, resolveClickTarget,
 };
 
 // 直接以 `node computer-use.js` 运行时自启动（Electron 子进程由 main.js 早退分支调用 start()，不会触发此分支）
