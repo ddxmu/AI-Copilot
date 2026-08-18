@@ -1,12 +1,12 @@
 {
-  "version": "0.10.18",
+  "version": "0.10.19",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-18",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.18/AI.Copilot-0.10.18-arm64.dmg",
-  "dmgSha256": "2b866c2c56d202bdf56a4ae651c787354285b237d5452d8fed41c5260c5be8cf",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.18/AI.Copilot-0.10.18.zip",
-  "patchSha256": "fb9e01e334500d14e21c6313e757dcc1c99bc5443cc42b277d7926409ee23faf",
-  "notes": "### 1. focus_app 改为精确比较前台 bundle id\n\n- focusAppByName 激活（open -b）后，用 NSWorkspace 读取当前前台应用的 bundle id，与目标 bundle id 精确比较（小写归一），不再匹配应用名。\n- NSWorkspace 读取前台 bundle id 不需要辅助功能权限（比 System Events 更可靠）；不做窗口树 / AX / 复杂重试等校验（保持简化，约 2s 内确认）。\n\n### 2. 统一 Info.plist 与 package.json 版本号\n\n- 本版 v0.10.18：Info.plist（CFBundleShortVersionString / CFBundleVersion）与 package.json 统一为 0.10.18，杜绝「关于本机」与应用内版本不一致。\n\n### 3. 其他\n\n- 鼠标点击保持 CGEvent（移动 → 按下 → 50ms → 抬起），System Events 仅一次备用；坐标换算与 Y 轴不动。\n- ComputerUse MCP `SERVER_VERSION` 1.6.3 → 1.6.4。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.19/AI.Copilot-0.10.19-arm64.dmg",
+  "dmgSha256": "ae9a119fc2405d05a0581aed3d9b075c0f00e94565c48101784de7e048b53749",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.19/AI.Copilot-0.10.19.zip",
+  "patchSha256": "1d43a5f79b6a9ff6870722cd1b58623b6ddd862f8c2d6b3e32dbc3a82c47b049",
+  "notes": "### MCP 市场新增「Mac 桌面控制（Computer Use）」\n\n- 「设置 › MCP 服务器 › 从市场添加」中新增 **🖥️ Mac 桌面控制（Computer Use）** 模板（开源 Zooeyii/macos-computer-use-mcp）。\n- 点击「配置并添加 → 添加并连接」即可：首次连接自动克隆源码并构建到 `~/.local/share/macos-computer-use-mcp`（约 1~2 分钟），构建完成后重新连接即可使用。\n- 提供能力：截图、鼠标点击/移动/滚动、键盘输入、打开/聚焦应用等 24 个工具。\n- 使用前需在「系统设置 › 隐私与安全性 › 辅助功能 / 屏幕录制」中允许 AI Copilot。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -87,6 +87,11 @@
       "from": "0.10.17",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.18/AI.Copilot-0.10.18.zip",
       "sha256": "fb9e01e334500d14e21c6313e757dcc1c99bc5443cc42b277d7926409ee23faf"
+    },
+    {
+      "from": "0.10.18",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.19/AI.Copilot-0.10.19.zip",
+      "sha256": "1d43a5f79b6a9ff6870722cd1b58623b6ddd862f8c2d6b3e32dbc3a82c47b049"
     }
   ]
 }

@@ -1,3 +1,12 @@
+## v0.10.19 — 2026-08-18
+
+### 1. MCP 市场新增「Mac 桌面控制（Computer Use）」
+
+- 「设置 › MCP 服务器 › 从市场添加」中新增 **🖥️ Mac 桌面控制（Computer Use）** 模板（开源 Zooeyii/macos-computer-use-mcp）。
+- 点击「配置并添加 → 添加并连接」即可：首次连接自动克隆源码并构建到 `~/.local/share/macos-computer-use-mcp`（约 1~2 分钟），构建完成后重新连接即可使用。
+- 提供能力：截图、鼠标点击/移动/滚动、键盘输入、打开/聚焦应用等 24 个工具（对应 Zooeyii 官方工具集）。
+- 使用前需在「系统设置 › 隐私与安全性 › 辅助功能 / 屏幕录制」中允许 AI Copilot。
+
 ## v0.10.18 — 2026-08-18
 
 ### 1. focus_app 改为精确比较前台 bundle id

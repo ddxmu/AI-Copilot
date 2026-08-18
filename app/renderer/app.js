@@ -1405,6 +1405,17 @@ const MCP_MARKET_TEMPLATES = [
     params: [
       { key: 'DASHSCOPE_API_KEY', label: 'DashScope API Key', placeholder: 'sk-...', required: true, type: 'password' }
     ]
+  },
+  {
+    id: 'macos-computer-use',
+    name: 'Mac 桌面控制（Computer Use）',
+    category: '开发',
+    icon: '🖥️',
+    desc: '让 AI 助手控制你的 Mac 桌面：截图、鼠标点击、键盘输入、打开/聚焦应用（开源 Zooeyii/macos-computer-use-mcp）。首次「添加并连接」会自动克隆并构建到 ~/.local/share/macos-computer-use-mcp（约 1~2 分钟），构建完成后重新连接即可使用。需在「系统设置 › 隐私与安全性 › 辅助功能 / 屏幕录制」中允许 AI Copilot。',
+    command: 'bash',
+    args: ['-c', 'DIR="$HOME/.local/share/macos-computer-use-mcp"; if [ ! -f "$DIR/dist/cli.js" ]; then mkdir -p "$DIR"; git clone https://github.com/Zooeyii/macos-computer-use-mcp.git "$DIR" >/dev/null 2>&1 || true; fi; cd "$DIR" && npm install --no-audit --no-fund >/dev/null 2>&1; npm run build >/dev/null 2>&1; exec node "$DIR/dist/cli.js"'],
+    env: {},
+    params: []
   }
 ];
 
