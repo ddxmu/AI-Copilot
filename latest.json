@@ -1,12 +1,12 @@
 {
-  "version": "0.10.12",
+  "version": "0.10.13",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-18",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.12/AI.Copilot-0.10.12-arm64.dmg",
-  "dmgSha256": "1b9e29e2e95b9ccbe3ad61885b5c5bc72746f57fa9b2a967cf95c1d7024bbfc8",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.12/AI.Copilot-0.10.12.zip",
-  "patchSha256": "3236f6f8c9f9aaf80276dd6d33a3418903707deef70eb85b36e2ace750371064",
-  "notes": "### 1. 六大模块非 AI 处理新增实时进度条\n\n- 「文件内容替换」「文件名修改」「文件格式转换」「PDF 去水印」「文件自动化」「PPT 写手（手动保存）」六个模块的**本地（非 AI）处理路径**，在开始按钮所在行的**最左侧**新增进度条，实时显示 1%–100%。\n- 主进程新增 emitModuleProgress，六个处理函数逐文件回传进度（module-progress IPC）。\n- preload.js 暴露 onModuleProgress 订阅接口；渲染进程在各模块 .wizard-nav 首位插入进度条元素，与六个入口按钮联动，含填充条与百分比数字，支持深色模式。\n- AI 路径（走技能 / 智能体的分支）不显示该进度条，保持原有状态提示。\n\n### 2. 文件格式转换默认改为本地引擎\n\n- 「转换方式（技能）」下拉默认值由 AI 技能改为 **「本地引擎（快速，不依赖 AI）」**，打开即离线快速转换，无需等待 AI。\n- 面板提示文案同步更新。\n\n### 3. 修复：文件名修改出错时不再漏记结果\n\n- rename-files 处理函数补回 catch 分支：单个文件重命名失败时正确写入 error 结果，进度计数不再跳号。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.13/AI.Copilot-0.10.13-arm64.dmg",
+  "dmgSha256": "19413c0396f9dc5864cbbc4c351b9dc110b1448bf2501003287b5100d84ebe39",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.13/AI.Copilot-0.10.13.zip",
+  "patchSha256": "dad5c899f2e78e4564b5de9a290388819105b9d520da0abbae62b5b280954c5b",
+  "notes": "### 1. 修正安装包 Info.plist 版本号\n\n- 安装包 `Contents/Info.plist` 的 `CFBundleShortVersionString` 与 `CFBundleVersion` 长期停留在 0.7.2，现已统一改为实际版本号（本次 0.10.13），保持 `CFBundleIdentifier=com.app.aifilereplacer` 不变。\n- 「关于本机 / 系统报告」与应用内显示版本现已一致。\n\n### 2. 启动时权限预检（辅助功能 / 屏幕录制 / 自动化）\n\n- 启动后自动检测三项 macOS 权限：辅助功能、屏幕录制、自动化（控制 Google Chrome）。\n- 检测全部依赖原生 `osascript` / `screencapture`，不引入任何第三方库。\n- 任一权限缺失时：自动打开对应「系统设置 › 隐私与安全性」页面，并在顶部显示明确红条横幅列出缺失项（各自带「打开设置」按钮），**绝不假报已就绪**。\n- 自动化仅在 Google Chrome 已运行时检测，避免启动即拉起 Chrome；Chrome 未运行时跳过该项（不误报）。\n\n### 3. 合入 Computer Use 权限错误提示\n\n- `computer-use.js` 的 `runAppleScript` / `runJxa` 已纳入对 `-25211` / `-25201`（辅助功能 / 自动化被拒）的识别，返回更明确的授权指引文案。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -57,6 +57,11 @@
       "from": "0.10.11",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.12/AI.Copilot-0.10.12.zip",
       "sha256": "3236f6f8c9f9aaf80276dd6d33a3418903707deef70eb85b36e2ace750371064"
+    },
+    {
+      "from": "0.10.12",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.13/AI.Copilot-0.10.13.zip",
+      "sha256": "dad5c899f2e78e4564b5de9a290388819105b9d520da0abbae62b5b280954c5b"
     }
   ]
 }

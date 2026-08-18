@@ -1,3 +1,21 @@
+## v0.10.13 — 2026-08-18
+
+### 1. 修正安装包 Info.plist 版本号
+
+- 安装包 `Contents/Info.plist` 的 `CFBundleShortVersionString` 与 `CFBundleVersion` 长期停留在 0.7.2，现已统一改为实际版本号（本次 0.10.13），保持 `CFBundleIdentifier=com.app.aifilereplacer` 不变。
+- 「关于本机 / 系统报告」与应用内显示版本现已一致。
+
+### 2. 启动时权限预检（辅助功能 / 屏幕录制 / 自动化）
+
+- 启动后自动检测三项 macOS 权限：辅助功能、屏幕录制、自动化（控制 Google Chrome）。
+- 检测全部依赖原生 `osascript` / `screencapture`，不引入任何第三方库。
+- 任一权限缺失时：自动打开对应「系统设置 › 隐私与安全性」页面，并在顶部显示明确红条横幅列出缺失项（各自带「打开设置」按钮），**绝不假报已就绪**。
+- 自动化仅在 Google Chrome 已运行时检测，避免启动即拉起 Chrome；Chrome 未运行时跳过该项（不误报）。
+
+### 3. 合入 Computer Use 权限错误提示
+
+- `computer-use.js` 的 `runAppleScript` / `runJxa` 已纳入对 `-25211` / `-25201`（辅助功能 / 自动化被拒）的识别，返回更明确的授权指引文案。
+
 ## v0.10.12 — 2026-08-18
 
 ### 1. 六大模块非 AI 处理新增实时进度条

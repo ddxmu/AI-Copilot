@@ -82,6 +82,9 @@ contextBridge.exposeInMainWorld('api', {
   setMcpServer: (name) => ipcRenderer.invoke('set-mcp-server', name),
   setComputerUse: (enabled) => ipcRenderer.invoke('set-computer-use', enabled),
   openComputerUsePerms: () => ipcRenderer.invoke('open-computer-use-perms'),
+  // 启动权限预检：打开指定系统设置隐私页 + 接收缺失权限警告
+  openPermissionPane: (pane) => ipcRenderer.invoke('open-permission-pane', pane),
+  onPermissionWarning: (cb) => ipcRenderer.on('permission-warning', (_e, info) => cb(info)),
   // 中断 Computer Use 当前在途操作（Esc / 停止按钮）
   computerUseAbort: () => ipcRenderer.invoke('computer-use-abort'),
   onComputerUseAborted: (cb) => ipcRenderer.on('computer-use-aborted', () => cb()),

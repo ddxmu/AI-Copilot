@@ -132,8 +132,8 @@ function runAppleScript(script) {
       if (code !== 0) {
         if (_abortKill) { _abortKill = false; return reject(new Error('操作已被用户中断（Esc / 停止按钮）')); }
         const detail = (err || '').trim() || '未知错误';
-        if (/not allowed|not authorized|accessibility|Automation|权限违例|-10004/i.test(detail)) {
-          return reject(new Error('操作被系统拒绝：请到「系统设置 › 隐私与安全性 › 辅助功能」中允许 AI Copilot，并重试。'));
+        if (/not allowed|not authorized|accessibility|Automation|权限违例|-10004|-25211|-25201/i.test(detail)) {
+          return reject(new Error('macOS 拒绝辅助功能：当前实际执行的是 /usr/bin/osascript。请在「系统设置 › 隐私与安全性 › 辅助功能」中允许当前 AI Copilot；若仍提示 osascript 不允许辅助访问，请将 /usr/bin/osascript 也加入辅助功能，并在「自动化」中允许 AI Copilot 控制 Google Chrome，完成后彻底重启 AI Copilot。'));
         }
         return reject(new Error('AppleScript 执行失败：' + detail));
       }
@@ -156,7 +156,11 @@ function runJxa(script) {
       clearCurrentChild(p);
       if (code !== 0) {
         if (_abortKill) { _abortKill = false; return reject(new Error('操作已被用户中断（Esc / 停止按钮）')); }
-        return reject(new Error('JXA 执行失败：' + ((err || '').trim() || '未知错误')));
+        const detail = (err || '').trim() || '未知错误';
+        if (/not allowed|not authorized|accessibility|Automation|权限违例|-10004|-25211|-25201/i.test(detail)) {
+          return reject(new Error('macOS 拒绝辅助功能：当前实际执行的是 /usr/bin/osascript。请在「系统设置 › 隐私与安全性 › 辅助功能」中允许当前 AI Copilot；若仍提示 osascript 不允许辅助访问，请将 /usr/bin/osascript 也加入辅助功能，并在「自动化」中允许 AI Copilot 控制 Google Chrome，完成后彻底重启 AI Copilot。'));
+        }
+        return reject(new Error('JXA 执行失败：' + detail));
       }
       resolve(out);
     });

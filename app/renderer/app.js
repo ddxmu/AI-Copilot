@@ -3064,6 +3064,44 @@ function initComputerUseSettings() {
       if (window.api.openComputerUsePerms) window.api.openComputerUsePerms();
     });
   }
+  // 接收主进程启动权限预检结果，缺失时显示明确横幅（不假报成功）
+  if (window.api.onPermissionWarning) {
+    window.api.onPermissionWarning((info) => {
+      if (info && Array.isArray(info.missing) && info.missing.length) showPermissionWarning(info.missing);
+    });
+  }
+}
+
+// 顶部权限缺失横幅：列出缺失项并各自提供「打开设置」按钮
+function showPermissionWarning(missing) {
+  const banner = document.getElementById('permission-banner');
+  if (!banner) return;
+  const LABELS = {
+    accessibility: '辅助功能',
+    screen: '屏幕录制',
+    automation: '自动化（控制 Google Chrome）',
+  };
+  const listHtml = missing.map((m) => `<li>${LABELS[m] || m}</li>`).join('');
+  const btnHtml = missing
+    .map((m) => `<button class="btn small" data-pane="${m}">打开${LABELS[m] || m}设置</button>`)
+    .join('');
+  banner.innerHTML = `
+    <div class="perm-banner-inner">
+      <div class="perm-banner-text">
+        <strong>⚠️ 缺少必要系统权限，Computer Use（电脑操控）可能无法正常工作：</strong>
+        <ul>${listHtml}</ul>
+        <span class="perm-banner-sub">请在「系统设置 › 隐私与安全性」中授予后，彻底重启 AI Copilot 生效。</span>
+      </div>
+      <div class="perm-banner-actions">${btnHtml}<button class="btn ghost small" id="perm-banner-close">知道了</button></div>
+    </div>`;
+  banner.hidden = false;
+  banner.querySelectorAll('[data-pane]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (window.api.openPermissionPane) window.api.openPermissionPane(btn.getAttribute('data-pane'));
+    });
+  });
+  const close = banner.querySelector('#perm-banner-close');
+  if (close) close.addEventListener('click', () => { banner.hidden = true; });
 }
 
 // 当内置 ComputerUse 服务器出现在下拉（已连接就绪）时，自动选中它
