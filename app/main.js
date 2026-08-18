@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const net = require('net');
-const { execFile, execFileSync } = require('child_process');
+const { execFile } = require('child_process');
 const { ALL_EXTS, PLAIN_TEXT_SAFE, ZIP_BASED_OFFICE } = require('./filetypes');
 const { processOfficeFile, readZipEntries, LEGACY_OFFICE, replaceInLegacyFile } = require('./office-replace');
 const { BUILTIN_SKILLS, RECOMMENDED_SKILLS, parseSkillMd } = require('./agent');
@@ -219,8 +219,6 @@ app.whenReady().then(() => {
   migrateLegacyUserData();
   detectPdfEngines();
   createWindow();
-  // 启动权限预检（辅助功能 / 屏幕录制 / 自动化），缺失则打开系统设置并提示（不假报成功）
-  setTimeout(() => { try { checkStartupPermissions(); } catch (e) { /* ignore */ } }, 1200);
   // 启动静默检查更新（仅在有新版本时通知渲染进程，不自动下载）
   checkUpdatesInBackground(true);
   // 空闲定时检查更新（每 10 分钟自动查询一次 GitHub）
@@ -1720,85 +1718,6 @@ ipcMain.handle('open-computer-use-perms', async () => {
   try { shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'); } catch (e) { /* ignore */ }
   return true;
 });
-
-// 打开 macOS 系统设置指定隐私页（辅助功能 / 屏幕录制 / 自动化）
-const PERM_ANCHORS = {
-  accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
-  screen: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
-  automation: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Automation',
-};
-ipcMain.handle('open-permission-pane', async (_e, pane) => {
-  const anchor = PERM_ANCHORS[pane] || PERM_ANCHORS.accessibility;
-  try { shell.openExternal(anchor); } catch (err) { /* ignore */ }
-  return true;
-});
-
-// 启动权限预检：依赖原生 osascript / screencapture，无任何第三方库。
-// 三项权限（辅助功能 / 屏幕录制 / 自动化-控制 Chrome）缺失时，打开系统设置
-// 并明确提示渲染进程，绝不假报「已就绪」。
-function detectAccessibility() {
-  try {
-    execFileSync('osascript', ['-e', 'tell application "System Events" to return name of first process'], { timeout: 5000 });
-    return true;
-  } catch (e) {
-    // 任何异常（权限违例 / 超时 / 进程错误）都按未授权处理，避免假报成功
-    return false;
-  }
-}
-
-function detectScreenRecording() {
-  const tmp = path.join(app.getPath('temp'), '_cu_sr_check.png');
-  try { fs.unlinkSync(tmp); } catch (e) { /* ignore */ }
-  try {
-    execFileSync('screencapture', ['-x', '-t', 'png', tmp], { timeout: 5000 });
-  } catch (e) {
-    return false; // 截图失败即视为未授权
-  }
-  try {
-    const st = fs.statSync(tmp);
-    // 屏幕录制被拒时截图几乎为纯色（黑屏），PNG 体积极小；真实桌面通常 > 8KB
-    return st.size >= 8000;
-  } catch (e) {
-    return false;
-  }
-}
-
-// 仅在 Chrome 已运行时检测「自动化」授权（避免启动即拉起 Chrome）。
-// 返回 true=已授权 / false=未授权 / 'skip'=无法检测（Chrome 未运行）
-function detectChromeAutomation() {
-  try {
-    execFileSync('pgrep', ['-f', 'Google Chrome'], { timeout: 3000 });
-  } catch (e) {
-    return 'skip';
-  }
-  try {
-    execFileSync('osascript', ['-e', 'tell application "Google Chrome" to return 1'], { timeout: 5000 });
-    return true;
-  } catch (e) {
-    const msg = (e.stderr || e.stdout || e.message || '').toString();
-    if (/not authorized|not allowed|Automation|权限违例|-25211|-25201|-1743/i.test(msg)) return false;
-    return 'skip';
-  }
-}
-
-function checkStartupPermissions() {
-  if (process.platform !== 'darwin') return;
-  const missing = [];
-  if (!detectAccessibility()) missing.push('accessibility');
-  if (!detectScreenRecording()) missing.push('screen');
-  const auto = detectChromeAutomation();
-  if (auto === false) missing.push('automation');
-  if (missing.length === 0) return; // 全部具备，不提示（不假报）
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    try { mainWindow.webContents.send('permission-warning', { missing }); } catch (e) { /* ignore */ }
-  }
-  // 打开系统设置到第一个缺失项对应页面
-  const first = missing[0];
-  const anchor = first === 'screen' ? PERM_ANCHORS.screen
-    : first === 'automation' ? PERM_ANCHORS.automation
-    : PERM_ANCHORS.accessibility;
-  try { shell.openExternal(anchor); } catch (e) { /* ignore */ }
-}
 
 // 中断 Computer Use 当前在途操作（Esc / 停止按钮触发）：杀掉在途 osascript、
 // 同时请求 Agent 主循环立即停止（取消在途模型请求、不再执行后续工具与轮次）、

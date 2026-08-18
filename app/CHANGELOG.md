@@ -1,3 +1,22 @@
+## v0.10.14 — 2026-08-18
+
+### 1. 撤销启动权限自动检测（自动开系统设置 / 顶部红条）
+
+- 移除 v0.10.13 加入的「启动后自动检测三项 macOS 权限 + 自动打开系统设置 + 顶部红色权限横幅」逻辑。
+- 该自动检测在部分环境下容易误判（把「应用已启动」当作「已授权/已激活」），实际使用帮助不大，故回退。
+- 主进程 `checkStartupPermissions` / `detectAccessibility` / `detectScreenRecording` / `detectChromeAutomation`、`open-permission-pane` handler、preload 的 `onPermissionWarning` / `openPermissionPane`、渲染进程顶部 `permission-banner` 横幅与 `showPermissionWarning` 全部移除。
+
+### 2. 保留：执行失败时的明确权限错误提示 + 设置页手动按钮
+
+- ComputerUse 执行（AppleScript / JXA）被拒时仍返回明确的 `-25211` / `-25201` 权限错误指引文案，**绝不假报成功**。
+- 设置页「打开权限设置」按钮（手动打开辅助功能 / 屏幕录制系统设置）保留。
+
+### 3. 修复 focus_app：真正前台化 + 窗口稳定判定
+
+- `focusAppByName` 改用 `open -a` / `open -b` 真正把目标应用切到前台（回退 JXA / AppleScript `activate`），不再把「应用已启动」当成「已激活」。
+- 前台化后轮询（25×200ms ≈ 5s）：要求前台应用名匹配 **且** 拥有可操作窗口（`readFrontWindowState().hasWindow`），**连续 2 次稳定**才返回成功，杜绝「已启动但窗口未激活 / 未稳定就返回成功」的盲区。
+- 点击、地址栏聚焦、输入与验证逻辑保持不变。
+
 ## v0.10.13 — 2026-08-18
 
 ### 1. 修正安装包 Info.plist 版本号

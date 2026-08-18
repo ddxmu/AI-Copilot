@@ -561,33 +561,63 @@ function frontMatches(front, target) {
   return false;
 }
 
-// 聚焦/启动应用，并轮询等待窗口稳定后再返回（需求：focus_app 后等窗口稳定再截图操作）
+// 聚焦/启动应用，并轮询等待「真正前台 + 窗口稳定」后再返回。
+// 关键：不能把「应用已启动」当成「已激活」。launchApplication / open 即便成功，
+// 也只保证 LaunchServices 启动或定位到 App，已运行但未置前的 App 仍可能停在后台。
+// 因此必须真正用 `open -a/-b` 把窗口切到前台，并轮询验证「前台名匹配且有可操作窗口」
+// 连续成立，才算聚焦成功，避免拍到旧画面或动画中间态。
 async function focusAppByName(name) {
   const nm = String(name || '').trim();
   if (!nm) return false;
-  let launched = false;
+
+  // `open -a/-b` 是首选激活路径：对已运行的 App 能可靠地把现有窗口置前，
+  // 对未运行的 App 会先启动再置前。绝不用「启动成功」冒充「聚焦成功」。
+  let requested = false;
   try {
-    const out = await runJxa(
-      `ObjC.import('Cocoa');\n` +
-      `var ws = $.NSWorkspace.sharedWorkspace;\n` +
-      `var ok = ws.launchApplication($(${JSON.stringify(nm)}));\n` +
-      `ok ? '1' : '0';`
-    );
-    launched = String(out || '').trim() === '1';
+    const isBundleId = /^[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)+$/.test(nm);
+    await runCmdCapture('/usr/bin/open', isBundleId ? ['-b', nm] : ['-a', nm]);
+    requested = true;
   } catch (e) {
-    logErr('focusAppByName launchApplication failed: ' + e.message);
+    logErr('focusAppByName open activation failed: ' + e.message);
   }
-  if (!launched) {
-    // 回退：AppleScript activate（需要「自动化」授权）
-    try { await runAppleScript(`tell application "${asStrLiteral(nm)}" to activate`); } catch (e) { /* 交给轮询判定 */ }
+
+  if (!requested) {
+    // 回退：LaunchServices/JXA 启动；它仍可能只启动不激活，后面继续校验。
+    try {
+      await runJxa(
+        `ObjC.import('Cocoa');\n` +
+        `var ws = $.NSWorkspace.sharedWorkspace;\n` +
+        `ws.launchApplication($(${JSON.stringify(nm)}));\n`
+      );
+      requested = true;
+    } catch (e) {
+      logErr('focusAppByName launchApplication fallback failed: ' + e.message);
+    }
   }
-  // 轮询前台应用名，命中后再多等一拍让窗口/动画稳定
-  for (let i = 0; i < 8; i++) {
-    await sleep(180);
+
+  // `open -a` 通常会激活现有窗口。对仅通过 AppleScript 暴露激活能力的 App，
+  // 再补一次 activate 作为 best-effort；失败则交给下面的轮询判定。
+  try { await runAppleScript(`tell application "${asStrLiteral(nm)}" to activate`); } catch (e) { /* 交给轮询判定 */ }
+
+  // 轮询等待「真正前台 + 窗口稳定」：
+  // 仅「应用在前台」还不够——可能只是刚启动、窗口还在动画/切换中，或根本没有
+  // 可操作窗口。要求「前台名匹配且有窗口」连续 2 次成立才算稳定，杜绝
+  // 「已启动但未激活 / 窗口未稳定就返回成功」。约 25×200ms = 5s 上限。
+  let stableCount = 0;
+  for (let i = 0; i < 25; i++) {
+    await sleep(200);
     const front = await getFrontAppName();
-    if (front && frontMatches(front, nm)) {
-      await sleep(150);
-      return true;
+    if (!front || !frontMatches(front, nm)) { stableCount = 0; continue; }
+    let hasWindow = false;
+    try {
+      const st = await readFrontWindowState();
+      hasWindow = !!st.hasWindow;
+    } catch (e) { hasWindow = false; }
+    if (hasWindow) {
+      stableCount += 1;
+      if (stableCount >= 2) { await sleep(150); return true; }
+    } else {
+      stableCount = 0;
     }
   }
   return false;
@@ -1749,7 +1779,7 @@ const TOOLS = {
       _targetApp = null;
       markFailure();
       throw new Error(
-        `${stepStatus(frontApp, '聚焦应用', name, '未在 ~1.5s 内确认到前台 → 判定未稳定')} ` +
+        `${stepStatus(frontApp, '聚焦应用', name, '未在 ~5s 内确认到前台且窗口稳定 → 判定未稳定')} ` +
         `已尝试将「${name}」切换/启动到前台，但未确认其成为前台且拥有正常窗口（当前前台：${frontApp || '未知'}）。` +
         `请确认应用名称是否正确（可用 get_front_app 查看真实名称），或在「系统设置 › 隐私与安全性 › 辅助功能 / 自动化」中允许 AI Copilot。` +
         `已累计 ${_consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES} 次失败。`
