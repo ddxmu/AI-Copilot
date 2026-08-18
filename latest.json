@@ -1,12 +1,12 @@
 {
-  "version": "0.10.16",
+  "version": "0.10.17",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-18",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.16/AI.Copilot-0.10.16-arm64.dmg",
-  "dmgSha256": "d2d81541c45f29a49b322e00d5d9e8aed7bc4102261ff384a9bb297b4cc8426b",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.16/AI.Copilot-0.10.16.zip",
-  "patchSha256": "a55d75f121902899fe788f02ffa8d1b5d97bd150e4433f05d3d9de55fac968ee",
-  "notes": "### 1. 修复 focus_app：必须确认「真的成为前台且窗口稳定」才成功\n\n- 主路径改用 `open -a <应用名/中文名>` / `open -b <bundle id>` 真正把目标应用切到前台，不再把「应用已启动」当成「已激活」。\n- 支持中文应用名与 bundle id；前台化后轮询 25×200ms ≈ 5s，要求**前台名匹配 且 目标应用拥有可操作窗口**，**连续 2 次稳定**才返回成功。\n\n### 2. 目标未成为前台 → 立即失败并禁止继续点击/输入\n\n- `focus_app` 未能在 5 秒内确认前台时：**立即失败并置位会话停止**（不记录目标应用、清空旧坐标），本轮后续任何截图/点击/输入一律拒绝，直到新一轮指令重置。\n- 每步操作前的焦点漂移检测：自动重新聚焦后仍失败同样立即中止本轮，绝不在目标未在前台时用旧坐标继续操作。\n\n### 3. 焦点切换后旧截图坐标一律作废\n\n- focus_app 成功后清空 `_lastPos` / `_lastCg`，要求**先重新 screenshot 再基于新截图坐标点击/输入**，绝不复用旧坐标。\n\n### 4. AX 为空时不再阻止一次剪贴板输入\n\n- `typeViaClipboard`：AX 返回空 role/value 时不再直接报错，继续执行一次剪贴板 ⌘V，由粘贴后回读验证兜底判定（绝不假报成功）。\n\n### 5. 其他\n\n- 左键点击仍走 CGEvent（鼠标移动 → 按下 → 约 50ms → 抬起），System Events 仅一次备用。\n- ComputerUse MCP `SERVER_VERSION` 1.6.1 → 1.6.2。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.17/AI.Copilot-0.10.17-arm64.dmg",
+  "dmgSha256": "ecc5d8b7746be21a65383a021c07c5d1e044159810d2cfc63d6cfcc4f6448f1d",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.17/AI.Copilot-0.10.17.zip",
+  "patchSha256": "8077a3d4e3e9494df4eccbc2afcdb491bc03a893baaca6141f1ce15a1f6a187c",
+  "notes": "### 1. computer-use 整体简化（删除复杂校验，提高可靠性）\n\n- **focus_app 只按 bundle id 激活**：`open -b <bundle id>` 激活目标应用，随后简单确认一次前台（约 2s 内，前台名匹配 bundle id 即成功）；传应用名（非 bundle id）会提示正确用法。删除窗口稳定轮询、辅助功能树/焦点检测、连续稳定判定等复杂校验。\n- **删除自动重聚焦**：每步操作前的焦点漂移自动重新聚焦校验（guard）已移除，逻辑更简单直接。\n- **地址栏只发送 ⌘L**：focus_address_bar 不再做 AX 焦点检测、也不再自动剪贴板 ⌘V——只发 ⌘L，网址统一由 type 用剪贴板 + ⌘V 输入（type 同样移除 AX 焦点校验，粘贴后由回读验证兜底判定）。\n- **鼠标点击保持 CGEvent**：移动 → 左键按下 → 等待约 50ms → 左键抬起（System Events 仅一次备用），行为不变。\n- **不修改 Y 轴与坐标换算**：坐标体系原样保留。\n- ComputerUse MCP `SERVER_VERSION` 1.6.2 → 1.6.3。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -77,6 +77,11 @@
       "from": "0.10.15",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.16/AI.Copilot-0.10.16.zip",
       "sha256": "a55d75f121902899fe788f02ffa8d1b5d97bd150e4433f05d3d9de55fac968ee"
+    },
+    {
+      "from": "0.10.16",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.17/AI.Copilot-0.10.17.zip",
+      "sha256": "8077a3d4e3e9494df4eccbc2afcdb491bc03a893baaca6141f1ce15a1f6a187c"
     }
   ]
 }

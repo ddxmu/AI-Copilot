@@ -1,3 +1,14 @@
+## v0.10.17 — 2026-08-18
+
+### 1. computer-use 整体简化（删除复杂校验，提高可靠性）
+
+- **focus_app 只按 bundle id 激活**：`open -b <bundle id>` 激活目标应用，随后简单确认一次前台（约 2s 内，前台名匹配 bundle id 即成功）；传应用名（非 bundle id）会提示正确用法。删除窗口稳定轮询（readFrontWindowState）、辅助功能树/焦点检测（hasEditableFocus）、连续稳定判定等复杂校验。
+- **删除自动重聚焦**：每步操作前的焦点漂移自动重新聚焦校验（guard）已移除，逻辑更简单直接。
+- **地址栏只发送 ⌘L**：`focus_address_bar` 不再做 AX 焦点检测、也不再自动剪贴板 ⌘V——只发 ⌘L，网址统一由 `type` 用剪贴板 + ⌘V 输入（type 同样移除 AX 焦点校验，粘贴后由回读验证兜底判定）。
+- **鼠标点击保持 CGEvent**：移动 → 左键按下 → 等待约 50ms → 左键抬起（System Events 仅一次备用），行为不变。
+- **不修改 Y 轴与坐标换算**：坐标体系原样保留。
+- ComputerUse MCP `SERVER_VERSION` 1.6.2 → 1.6.3。
+
 ## v0.10.16 — 2026-08-18
 
 ### 1. 修复 focus_app：必须确认「真的成为前台且窗口稳定」才成功
