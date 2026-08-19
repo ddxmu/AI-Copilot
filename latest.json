@@ -1,12 +1,12 @@
 {
-  "version": "0.10.23",
+  "version": "0.10.24",
   "minimumVersion": "0.8.25",
-  "releaseDate": "2026-08-18",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.23/AI.Copilot-0.10.23-arm64.dmg",
-  "dmgSha256": "678d345d4cd26948c16c75e8fccbc4ebb87c02151039e3a0f52b0cd521eca596",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.23/AI.Copilot-0.10.23.zip",
-  "patchSha256": "b8eb7525b29cece119dd476a5c137ab6199815f01f3428e613e14eb2390dddd8",
-  "notes": "### 推荐技能新增「draw.io 流程图」\n\n- 推荐技能新增 draw.io 流程图（分类：绘图），一键安装。\n- 基于 draw.io 官方（jgraph/drawio-mcp）skill 适配：双画法（有 draw.io Desktop 用 Mermaid 自动排版；无 CLI 用 XML 直写 .drawio 零依赖兜底）；输出 .drawio / PNG·SVG·PDF 导出（嵌入 XML 可再编辑）/ 浏览器 URL（app.diagrams.net，Node zlib 生成）。\n- 用法：对话里说「画一个 xx 流程图 / 架构图 / ER 图…」即可。",
+  "releaseDate": "2026-08-19",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.24/AI.Copilot-0.10.24-arm64.dmg",
+  "dmgSha256": "efd2636d33d79378ebf9efd18bfe69206f64b9d8855f3249f5faf144ca733f33",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.24/AI.Copilot-0.10.24.zip",
+  "patchSha256": "b107a659bea984bf41927e3e0c0891ac9906c0780cc059fe47c6a110344244eb",
+  "notes": "### MCP 市场新增三个文件类服务器\n\n- MCP 市场（设置 › MCP 服务器 › 从市场添加）新增三个文件处理类模板：\n  - **🖥️ Desktop Commander**：本地文件整理与编写全能工具——终端命令、文件读写/搜索/移动、外科手术式代码编辑（精确替换）、ripgrep 内容搜索，原生支持 Excel/PDF/DOCX 读写。建议首次使用后限制 allowedDirectories 到指定目录。\n  - **📊 Excel 表格**：让 AI 创建、读取、修改、格式化 Excel（.xlsx），支持公式、图表、数据校验，无需安装 Microsoft Excel。\n  - **📝 Markdownify 文档转换**：将 PDF、Office 文档（Word/PPT/Excel）、图片、音频、网页等转换为 Markdown，方便 AI 阅读和后续编写，无需 API Key。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -112,6 +112,11 @@
       "from": "0.10.22",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.23/AI.Copilot-0.10.23.zip",
       "sha256": "b8eb7525b29cece119dd476a5c137ab6199815f01f3428e613e14eb2390dddd8"
+    },
+    {
+      "from": "0.10.23",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.24/AI.Copilot-0.10.24.zip",
+      "sha256": "b107a659bea984bf41927e3e0c0891ac9906c0780cc059fe47c6a110344244eb"
     }
   ]
 }

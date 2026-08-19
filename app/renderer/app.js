@@ -1405,6 +1405,39 @@ const MCP_MARKET_TEMPLATES = [
     params: [
       { key: 'DASHSCOPE_API_KEY', label: 'DashScope API Key', placeholder: 'sk-...', required: true, type: 'password' }
     ]
+  },
+  {
+    id: 'desktop-commander',
+    name: 'Desktop Commander',
+    category: '文件处理',
+    icon: '🖥️',
+    desc: '本地文件整理与编写全能工具：终端命令、文件读写/搜索/移动、外科手术式代码编辑（精确替换）、ripgrep 内容搜索，并原生支持 Excel/PDF/DOCX 读写。建议首次使用后在配置中限制 allowedDirectories 到指定目录。',
+    command: 'npx',
+    args: ['-y', '@wonderwhy-er/desktop-commander'],
+    env: {},
+    params: []
+  },
+  {
+    id: 'excel',
+    name: 'Excel 表格',
+    category: '文件处理',
+    icon: '📊',
+    desc: '让 AI 助手创建、读取、修改和格式化 Excel 表格（.xlsx），支持公式、图表、数据校验，无需安装 Microsoft Excel。',
+    command: 'npx',
+    args: ['-y', 'excel-mcp-server'],
+    env: {},
+    params: []
+  },
+  {
+    id: 'markdownify',
+    name: 'Markdownify 文档转换',
+    category: '文件处理',
+    icon: '📝',
+    desc: '将 PDF、Office 文档（Word/PPT/Excel）、图片、音频、网页等内容转换为 Markdown，方便 AI 阅读和后续编写。无需 API Key。',
+    command: 'npx',
+    args: ['-y', 'mcp-markdownify-server'],
+    env: {},
+    params: []
   }
 ];
 

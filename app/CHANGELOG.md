@@ -1,3 +1,12 @@
+## v0.10.24 — 2026-08-19
+
+### 1. MCP 市场新增三个文件类服务器
+
+- MCP 市场（设置 › MCP 服务器 › 从市场添加）新增三个文件处理类模板：
+  - **🖥️ Desktop Commander**：本地文件整理与编写全能工具——终端命令、文件读写/搜索/移动、外科手术式代码编辑（精确替换）、ripgrep 内容搜索，原生支持 Excel/PDF/DOCX 读写。建议首次使用后限制 allowedDirectories 到指定目录。
+  - **📊 Excel 表格**：让 AI 创建、读取、修改、格式化 Excel（.xlsx），支持公式、图表、数据校验，无需安装 Microsoft Excel。
+  - **📝 Markdownify 文档转换**：将 PDF、Office 文档（Word/PPT/Excel）、图片、音频、网页等转换为 Markdown，方便 AI 阅读和后续编写，无需 API Key。
+
 ## v0.10.23 — 2026-08-19
 
 ### 1. 推荐技能新增「draw.io 流程图」
