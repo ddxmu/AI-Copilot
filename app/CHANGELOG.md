@@ -1,3 +1,14 @@
+## v0.10.23 — 2026-08-19
+
+### 1. 推荐技能新增「draw.io 流程图」
+
+- 推荐技能（设置 › 技能 › 推荐技能）新增 **draw.io 流程图**（分类：绘图），一键安装。
+- 基于 draw.io 官方（jgraph/drawio-mcp）的 drawio skill 适配 AI Copilot：
+  - **双画法**：有 draw.io Desktop → 优先 Mermaid（CLI 自动排版）；无 CLI → XML 直写 .drawio（零依赖兜底）。
+  - **输出全支持**：.drawio 文件 / PNG·SVG·PDF 导出（-e 嵌入 XML 可再编辑）/ 浏览器 URL（app.diagrams.net，Node zlib 生成，无需安装 draw.io）。
+  - 内置 ELK 自动布局、macOS CLI 定位、XML 良构铁律、常见问题表。
+- 用法：对话里说「画一个 xx 流程图 / 架构图 / ER 图…」即可，AI 自动加载技能生成图。
+
 ## v0.10.22 — 2026-08-19
 
 ### 1. 技能「Mac 桌面控制」改为一键安装 + 一键配置 + 删除 CLI
