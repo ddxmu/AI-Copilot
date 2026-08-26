@@ -2615,6 +2615,7 @@ const btnAttach = document.getElementById('btn-attach');
 const btnVoice = document.getElementById('btn-voice');
 const modelInfoEl = document.getElementById('model-info');
 const modelNameEl = document.getElementById('model-name');
+const modelIcoImgEl = modelInfoEl.querySelector('.model-ico-img');
 const sendIconEl = document.getElementById('send-icon');
 
 // 发送按钮：空闲=箭头图标；AI 运行中（等待）=「运行」图标 + 脉冲光圈
@@ -3119,11 +3120,13 @@ function updateModelInfo() {
   const p = aiState.profiles.find((x) => x.id === aiState.activeId);
   if (p && p.model) {
     modelNameEl.textContent = p.model;
+    if (modelIcoImgEl) modelIcoImgEl.src = getModelLogo(p) || 'assets/ai-agent.png';
     modelInfoEl.title = `模型：${p.model}\n提供商：${p.providerName}\n点击切换模型`;
     modelInfoEl.dataset.tip = `${p.model}`;
     modelInfoEl.classList.remove('warn');
   } else {
     modelNameEl.textContent = '未配置模型';
+    if (modelIcoImgEl) modelIcoImgEl.src = 'assets/ai-agent.png';
     modelInfoEl.title = '请到「AI 设置」配置并启用模型';
     modelInfoEl.dataset.tip = '未配置模型';
     modelInfoEl.classList.add('warn');
@@ -3135,15 +3138,98 @@ const modelWrap = document.querySelector('.model-wrap');
 const modelMenu = document.getElementById('model-menu');
 const modelMenuList = document.getElementById('model-menu-list');
 
-// 根据 provider 取图标样式
+// 根据 provider 取图标样式（兜底用首字母）
 function modelIconClass(provider) {
   const map = { anthropic: 'a', openai: 'o', deepseek: 'd', minimax: 'm', moonshot: 'k', zhipu: 'z', qwen: 'q', doubao: 'db' };
   return map[provider] || 'x';
 }
-// 图标首字母
+// 图标首字母（兜底）
 function modelIconChar(p) {
   const m = { anthropic: 'A', openai: 'O', deepseek: 'D', minimax: 'M', moonshot: 'K', zhipu: 'Z', qwen: 'Q', doubao: 'B' };
   return m[p.provider] || (p.providerName || '?')[0].toUpperCase();
+}
+
+// 模型 logo 自动适配：返回 assets/models/*.svg 路径，未命中返回 null（交回首字母兜底）
+function getModelLogo(p) {
+  if (!p) return null;
+  const base = (p.baseUrl || '').toLowerCase();
+  const model = (p.model || '').toLowerCase();
+  const prov = (p.provider || '').toLowerCase();
+
+  // 1) 自定义接口：按 baseUrl 关键词匹配（ollama / 硅基流动 / 百炼 / 智谱 / 火山 等）
+  if (prov === 'custom' || !prov) {
+    const customMap = [
+      ['ollama', 'ollama'],
+      ['siliconflow', 'siliconflow'],
+      ['dashscope', 'dashscope'],
+      ['aliyun', 'dashscope'],
+      ['bailian', 'dashscope'],
+      ['bigmodel', 'zhipu'],
+      ['zhipuai', 'zhipu'],
+      ['volcengine', 'volcengine'],
+      ['ark', 'volcengine'],
+      ['minimax', 'minimax'],
+      ['moonshot', 'kimi'],
+      ['kimi', 'kimi'],
+      ['deepseek', 'deepseek'],
+      ['openai', 'openai'],
+      ['anthropic', 'anthropic'],
+      ['google', 'google'],
+      ['gemini', 'google'],
+      ['meta', 'meta'],
+      ['llama', 'meta'],
+      ['mistral', 'mistral'],
+      ['qwen', 'qwen'],
+    ];
+    for (const [kw, file] of customMap) {
+      if (base.includes(kw)) return `assets/models/${file}.svg`;
+    }
+  }
+
+  // 2) 默认 provider：按 provider id 直接映射
+  const provMap = {
+    anthropic: 'anthropic',
+    openai: 'openai',
+    deepseek: 'deepseek',
+    minimax: 'minimax',
+    moonshot: 'kimi',
+    zhipu: 'zhipu',
+    qwen: 'qwen',
+    doubao: 'doubao',
+  };
+  if (provMap[prov]) return `assets/models/${provMap[prov]}.svg`;
+
+  // 3) 兜底：按模型名关键词（覆盖自定义未命中 baseUrl 的情况，如自定义里填 gpt-4o）
+  const modelMap = [
+    ['glm', 'zhipu'],
+    ['qwen', 'qwen'],
+    ['deepseek', 'deepseek'],
+    ['kimi', 'kimi'],
+    ['moonshot', 'kimi'],
+    ['claude', 'anthropic'],
+    ['gpt', 'openai'],
+    ['o1', 'openai'], ['o3', 'openai'], ['o4', 'openai'],
+    ['llama', 'meta'],
+    ['gemini', 'google'],
+    ['doubao', 'doubao'],
+    ['minimax', 'minimax'],
+    ['abab', 'minimax'],
+    ['spark', 'zhipu'],
+  ];
+  for (const [kw, file] of modelMap) {
+    if (model.includes(kw)) return `assets/models/${file}.svg`;
+  }
+
+  return null;
+}
+
+// 渲染模型图标：命中 logo 用 <img>，未命中回退首字母圆形
+function modelIconHtml(p) {
+  const logo = getModelLogo(p);
+  if (logo) {
+    return `<img class="model-item-ico-img" src="${logo}" alt="">`;
+  }
+  return `<div class="model-item-ico ${modelIconClass(p.provider)}">${modelIconChar(p)}</div>`;
 }
 
 function renderModelMenu() {
@@ -3173,7 +3259,7 @@ function renderModelMenu() {
       item.className = 'model-item' + (p.id === aiState.activeId ? ' active' : '');
       const isActive = p.id === aiState.activeId;
       item.innerHTML = `
-        <div class="model-item-ico ${modelIconClass(p.provider)}">${modelIconChar(p)}</div>
+        ${modelIconHtml(p)}
         <div class="model-item-text">
           <div class="model-item-name">${p.model || '（未选模型）'}</div>
           <div class="model-item-desc">${p.providerName} · ${p.type === 'anthropic' ? 'Anthropic' : 'OpenAI'}</div>

@@ -2490,6 +2490,16 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
 .model-item-ico.db { background: #ec4899; } /* doubao */
 .model-item-ico.x { background: #64748b; } /* 自定义 */
 
+/* 模型菜单里的 logo 图片（自动适配） */
+.model-item-ico-img {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  object-fit: contain;
+  flex-shrink: 0;
+  background: #fff;
+}
+
 .model-item-text { flex: 1; min-width: 0; }
 .model-item-name {
   font-size: 13px;
