@@ -1,3 +1,12 @@
+## v0.10.25 — 2026-08-26
+
+### 1. 模型 logo 自动适配
+
+- 模型菜单与当前模型信息区按 provider / baseUrl 关键词自动匹配真实品牌 logo：
+  - OpenAI、Anthropic、Ollama、Google、Meta、Mistral、Qwen、Deepseek 用 simple-icons 真实单色 logo 注入品牌色；
+  - 火山引擎、月之暗面(Kimi)、智谱、豆包、MiniMax、硅基流动、百炼用品牌色字母徽章兜底。
+- 未命中时回退首字母圆形图标，保证不空白、不报错。
+
 ## v0.10.24 — 2026-08-19
 
 ### 1. MCP 市场新增三个文件类服务器

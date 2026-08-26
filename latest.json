@@ -1,12 +1,12 @@
 {
-  "version": "0.10.24",
+  "version": "0.10.25",
   "minimumVersion": "0.8.25",
-  "releaseDate": "2026-08-19",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.24/AI.Copilot-0.10.24-arm64.dmg",
-  "dmgSha256": "efd2636d33d79378ebf9efd18bfe69206f64b9d8855f3249f5faf144ca733f33",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.24/AI.Copilot-0.10.24.zip",
-  "patchSha256": "b107a659bea984bf41927e3e0c0891ac9906c0780cc059fe47c6a110344244eb",
-  "notes": "### MCP 市场新增三个文件类服务器\n\n- MCP 市场（设置 › MCP 服务器 › 从市场添加）新增三个文件处理类模板：\n  - **🖥️ Desktop Commander**：本地文件整理与编写全能工具——终端命令、文件读写/搜索/移动、外科手术式代码编辑（精确替换）、ripgrep 内容搜索，原生支持 Excel/PDF/DOCX 读写。建议首次使用后限制 allowedDirectories 到指定目录。\n  - **📊 Excel 表格**：让 AI 创建、读取、修改、格式化 Excel（.xlsx），支持公式、图表、数据校验，无需安装 Microsoft Excel。\n  - **📝 Markdownify 文档转换**：将 PDF、Office 文档（Word/PPT/Excel）、图片、音频、网页等转换为 Markdown，方便 AI 阅读和后续编写，无需 API Key。",
+  "releaseDate": "2026-08-26",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.25/AI.Copilot-0.10.25-arm64.dmg",
+  "dmgSha256": "964e6fe8974912489134ff1faeaa2d5fb4f01f47f245af9e55a2c3dbeef616ea",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.25/AI.Copilot-0.10.25.zip",
+  "patchSha256": "e91320dcd85ec1adbb3a7fd8c3540562699eb5788bf25fa984adbdaa89a52f42",
+  "notes": "### 模型 logo 自动适配\n\n- 模型菜单与当前模型信息区按 provider / baseUrl 关键词自动匹配真实品牌 logo：\n  - OpenAI、Anthropic、Ollama、Google、Meta、Mistral、Qwen、Deepseek 用 simple-icons 真实单色 logo 注入品牌色；\n  - 火山引擎、月之暗面(Kimi)、智谱、豆包、MiniMax、硅基流动、百炼用品牌色字母徽章兜底。\n- 未命中时回退首字母圆形图标，保证不空白、不报错。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -117,6 +117,11 @@
       "from": "0.10.23",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.24/AI.Copilot-0.10.24.zip",
       "sha256": "b107a659bea984bf41927e3e0c0891ac9906c0780cc059fe47c6a110344244eb"
+    },
+    {
+      "from": "0.10.24",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.25/AI.Copilot-0.10.25.zip",
+      "sha256": "e91320dcd85ec1adbb3a7fd8c3540562699eb5788bf25fa984adbdaa89a52f42"
     }
   ]
 }
