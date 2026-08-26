@@ -1,12 +1,12 @@
 {
-  "version": "0.10.25",
+  "version": "0.10.26",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-26",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.25/AI.Copilot-0.10.25-arm64.dmg",
-  "dmgSha256": "964e6fe8974912489134ff1faeaa2d5fb4f01f47f245af9e55a2c3dbeef616ea",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.25/AI.Copilot-0.10.25.zip",
-  "patchSha256": "e91320dcd85ec1adbb3a7fd8c3540562699eb5788bf25fa984adbdaa89a52f42",
-  "notes": "### 模型 logo 自动适配\n\n- 模型菜单与当前模型信息区按 provider / baseUrl 关键词自动匹配真实品牌 logo：\n  - OpenAI、Anthropic、Ollama、Google、Meta、Mistral、Qwen、Deepseek 用 simple-icons 真实单色 logo 注入品牌色；\n  - 火山引擎、月之暗面(Kimi)、智谱、豆包、MiniMax、硅基流动、百炼用品牌色字母徽章兜底。\n- 未命中时回退首字母圆形图标，保证不空白、不报错。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.26/AI.Copilot-0.10.26-arm64.dmg",
+  "dmgSha256": "23e1d51afd2199360d0d2d7b0ffdfb652bf6858bc2d2af2a6f7539a3650ee94c",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.26/AI.Copilot-0.10.26.zip",
+  "patchSha256": "761de358c483e93166057937f8e664e421f96db6f6cb53d7f2d54274551d981d",
+  "notes": "### 智能体技能「自动更新」开关\n\n- 设置 › 智能体技能 新增「技能自动更新」开关：开启后自动将已安装的 GitHub 来源技能更新为最新版本。\n- 保护机制：不会更新你在 AI Copilot 中编辑过的技能（安装时记录 SKILL.md 内容指纹，自动更新前比对，不一致则跳过）。\n- 触发：启动 12 秒后及每 24 小时静默检查一次（受开关控制），有更新时右下角通知提示。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -122,6 +122,11 @@
       "from": "0.10.24",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.25/AI.Copilot-0.10.25.zip",
       "sha256": "e91320dcd85ec1adbb3a7fd8c3540562699eb5788bf25fa984adbdaa89a52f42"
+    },
+    {
+      "from": "0.10.25",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.26/AI.Copilot-0.10.26.zip",
+      "sha256": "761de358c483e93166057937f8e664e421f96db6f6cb53d7f2d54274551d981d"
     }
   ]
 }

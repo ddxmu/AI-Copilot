@@ -1211,8 +1211,15 @@
                 <!-- 智能体技能 -->
                 <div class="settings-section" id="settings-skills">
                   <div class="card">
-                    <h2>智能体技能 <span id="skill-count" class="count">0</span></h2>
-                    <p class="hint" style="margin-bottom:14px">技能是智能体的专项能力包。安装后 AI 助手会自动调用对应技能（格式转换 / 看图 / 终端命令等）。</p>
+                    <div class="card-title-row">
+                      <h2>智能体技能 <span id="skill-count" class="count">0</span></h2>
+                      <label class="switch" id="skill-auto-update-switch-wrap">
+                        <input type="checkbox" id="skill-auto-update-toggle" />
+                        <span class="slider"></span>
+                      </label>
+                    </div>
+                    <p class="hint" style="margin: 4px 0 10px">技能是智能体的专项能力包。安装后 AI 助手会自动调用对应技能（格式转换 / 看图 / 终端命令等）。</p>
+                    <p class="hint" style="margin: 0 0 14px">开启「技能自动更新」后，将自动更新已安装的技能为最新版本（仅限 GitHub 来源），不会更新你在 AI Copilot 中编辑过的技能。</p>
 
                     <div class="skill-section-title">已安装技能</div>
                     <ul id="skill-list" class="skill-list"></ul>

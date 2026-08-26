@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('api', {
   skillsRunConfig: (name) => ipcRenderer.invoke('skills-run-config', name),
   skillsUninstallCli: (name) => ipcRenderer.invoke('skills-uninstall-cli', name),
   onSkillInstallProgress: (cb) => ipcRenderer.on('skill-install-progress', (_e, info) => cb(info)),
+  onSkillsUpdated: (cb) => ipcRenderer.on('skills-updated', () => cb()),
   pdfAnalyzeWatermark: (files) => ipcRenderer.invoke('pdf-analyze-watermark', files),
   pdfRemoveWatermark: (files, watermarks, outputDir) =>
     ipcRenderer.invoke('pdf-remove-watermark', { files, watermarks, outputDir }),
@@ -85,6 +86,9 @@ contextBridge.exposeInMainWorld('api', {
   setMcpServer: (name) => ipcRenderer.invoke('set-mcp-server', name),
   setComputerUse: (enabled) => ipcRenderer.invoke('set-computer-use', enabled),
   openComputerUsePerms: () => ipcRenderer.invoke('open-computer-use-perms'),
+  // 已安装技能自动更新（GitHub 来源）开关
+  aiGetSkillAutoUpdate: () => ipcRenderer.invoke('skill-auto-update-get'),
+  aiSetSkillAutoUpdate: (enabled) => ipcRenderer.invoke('skill-auto-update-set', enabled),
   // 中断 Computer Use 当前在途操作（Esc / 停止按钮）
   computerUseAbort: () => ipcRenderer.invoke('computer-use-abort'),
   onComputerUseAborted: (cb) => ipcRenderer.on('computer-use-aborted', () => cb()),

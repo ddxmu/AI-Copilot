@@ -10,6 +10,7 @@ const { BUILTIN_SKILLS, RECOMMENDED_SKILLS, parseSkillMd } = require('./agent');
 const updater = require('./updater');
 const memory = require('./memory');
 const https = require('https');
+const crypto = require('crypto');
 const pdfwm = require('./pdf-watermark');
 
 // 内置 Computer Use MCP 子进程：本进程以 --run-computer-use 启动时，不创建窗口，
@@ -223,6 +224,10 @@ app.whenReady().then(() => {
   checkUpdatesInBackground(true);
   // 空闲定时检查更新（每 10 分钟自动查询一次 GitHub）
   setInterval(() => checkUpdatesInBackground(true), 10 * 60 * 1000);
+  // 已安装技能自动更新：启动约 12 秒后跑一次（等用户数据就绪、避开启动高峰），
+  // 之后每 24 小时静默检查一次（受开关控制，只在开启时执行）。
+  setTimeout(() => { autoUpdateInstalledSkills(); }, 12 * 1000);
+  setInterval(() => { autoUpdateInstalledSkills(); }, 24 * 60 * 60 * 1000);
   // 先启 Computer Use 光标 socket（MCP 子进程需要连接它）
   startCursorServer();
   // 按配置连接 MCP 服务器（后台异步）
@@ -1108,22 +1113,43 @@ function httpsDownload(urlStr, redirects = 5, onProgress) {
   });
 }
 
+// 取仓库某分支最新 commit sha（无 token，限流 60 次/小时）。失败返回 null。
+async function fetchLatestCommitSha(fullName, branch) {
+  try {
+    const data = await httpsGetJson(`https://api.github.com/repos/${fullName}/commits/${branch || 'main'}`);
+    return (data && data.sha) ? data.sha : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function sha256Hex(str) {
+  return crypto.createHash('sha256').update(str, 'utf8').digest('hex');
+}
+
 // 从 GitHub 仓库下载并安装技能：找仓库内的 SKILL.md
 async function installSkillFromGithub(fullName, defaultBranch, progressName) {
-  const zipUrl = `https://codeload.github.com/${fullName}/zip/refs/heads/${defaultBranch || 'main'}`;
-  let buf;
+  // 先确定实际分支（优先传入分支，回退 main → master）
+  const candidates = [defaultBranch || 'main', 'main', 'master'].filter((b, i, a) => b && a.indexOf(b) === i);
+  let buf = null;
+  let usedBranch = null;
   const sendProgress = (bytes) => {
     if (!progressName || !mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send('skill-install-progress', { name: progressName, bytes });
   };
-  try {
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('skill-install-progress', { name: progressName, bytes: 0 });
-    buf = await httpsDownload(zipUrl, 5, sendProgress);
+  for (const b of candidates) {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('skill-install-progress', { name: progressName, bytes: 0 });
+      buf = await httpsDownload(`https://codeload.github.com/${fullName}/zip/refs/heads/${b}`, 5, sendProgress);
+      usedBranch = b;
+      break;
+    } catch (e) {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('skill-install-progress', { name: progressName, bytes: 0, retry: true });
+    }
   }
-  catch (e) { // 有些仓库默认分支是 master
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('skill-install-progress', { name: progressName, bytes: 0, retry: true });
-    buf = await httpsDownload(`https://codeload.github.com/${fullName}/zip/refs/heads/master`, 5, sendProgress);
-  }
+  if (!buf) return { ok: false, error: '下载技能仓库失败（分支可能不存在或网络异常）' };
+  // 记录安装时的快照：来源仓库 + 分支 + 安装 commit sha（自动更新时比对此值）
+  const installedSha = await fetchLatestCommitSha(fullName, usedBranch);
   const entries = readZipEntries(buf);
   // 找 SKILL.md（优先根目录 / skills 目录下）
   const skillFiles = entries.filter((en) => /(^|\/)SKILL\.md$/i.test(en.name));
@@ -1149,6 +1175,18 @@ async function installSkillFromGithub(fullName, defaultBranch, progressName) {
         fs.writeFileSync(target, en.data);
       }
     }
+    // 写入技能来源元信息（供自动更新检测 + 跳过用户编辑过的技能）
+    try {
+      const meta = {
+        source: 'github',
+        repo: fullName,
+        branch: usedBranch,
+        installedSha: installedSha || null,
+        contentSha: sha256Hex(content),
+        installedAt: new Date().toISOString(),
+      };
+      fs.writeFileSync(path.join(dir, '.meta.json'), JSON.stringify(meta, null, 2), 'utf8');
+    } catch (e) { /* meta 写入失败不阻断安装 */ }
     installed.push(parsed.name);
   }
   return { ok: true, installed, all: listInstalledSkills() };
@@ -1807,6 +1845,65 @@ ipcMain.handle('open-computer-use-perms', async () => {
   try { shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'); } catch (e) { /* ignore */ }
   return true;
 });
+
+// 已安装技能自动更新（GitHub 来源）开关：读 / 写配置
+ipcMain.handle('skill-auto-update-get', async () => {
+  try { return !!aiConfig.isSkillAutoUpdateEnabled(); } catch (e) { return false; }
+});
+ipcMain.handle('skill-auto-update-set', async (_e, enabled) => {
+  try { return !!aiConfig.setSkillAutoUpdate(enabled); } catch (e) { return false; }
+});
+
+/* ---------------- 已安装技能自动更新（GitHub 来源） ---------------- */
+// 防重入标志：自动更新为耗时网络操作，避免并发/周期重叠触发
+let skillAutoUpdateRunning = false;
+
+// 遍历已安装技能，对有 .meta.json（来源 github）的技能检测新版本并在未编辑时静默重装。
+// 规则：① 仅更新 meta.source==='github' 的技能；② 当前分支最新 commit == 安装时 commit 则跳过；
+//       ③ 当前 SKILL.md 内容 sha 与安装时记录不一致（用户在 AI Copilot 内编辑过）则跳过，保护用户改动；
+//       ④ 有更新且未编辑则重新安装（覆盖）并刷新 meta。
+async function autoUpdateInstalledSkills() {
+  if (skillAutoUpdateRunning) return { ok: true, skipped: true, reason: 'running' };
+  if (!aiConfig.isSkillAutoUpdateEnabled()) return { ok: true, skipped: true, reason: 'disabled' };
+  skillAutoUpdateRunning = true;
+  const updated = [];
+  const skippedEdited = [];
+  try {
+    const installed = listInstalledSkills();
+    for (const s of installed) {
+      const dir = path.join(SKILLS_DIR, s.dir);
+      const metaPath = path.join(dir, '.meta.json');
+      let meta;
+      try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch (e) { continue; }
+      if (!meta || meta.source !== 'github' || !meta.repo) continue;
+      try {
+        const latestSha = await fetchLatestCommitSha(meta.repo, meta.branch);
+        if (!latestSha || latestSha === meta.installedSha) continue; // 无更新
+        // 检查用户是否编辑过（内容 sha 不一致 = 用户改过，跳过保护）
+        let currentSha = null;
+        try { currentSha = sha256Hex(fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8')); } catch (e) {}
+        if (meta.contentSha && currentSha && currentSha !== meta.contentSha) {
+          skippedEdited.push(s.name);
+          continue;
+        }
+        const res = await installSkillFromGithub(meta.repo, meta.branch, s.name);
+        if (res && res.ok) updated.push(s.name);
+      } catch (e) {
+        // 单个技能失败不影响其它技能
+      }
+    }
+  } finally {
+    skillAutoUpdateRunning = false;
+  }
+  // 有技能被更新：通知渲染进程刷新列表
+  if (updated.length && mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow.webContents.send('skills-updated'); } catch (e) { /* ignore */ }
+    try {
+      new Notification({ title: '技能已自动更新', body: `已更新 ${updated.length} 个技能：${updated.join('、')}` }).show();
+    } catch (e) { /* ignore */ }
+  }
+  return { ok: true, updated, skippedEdited };
+}
 
 // 中断 Computer Use 当前在途操作（Esc / 停止按钮触发）：杀掉在途 osascript、
 // 同时请求 Agent 主循环立即停止（取消在途模型请求、不再执行后续工具与轮次）、

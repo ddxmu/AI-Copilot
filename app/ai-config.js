@@ -38,6 +38,7 @@ const DEFAULT_STATE = {
   memoryEnabled: true,
   mcpServers: [],
   computerUseEnabled: false, // 内置 Computer Use（鼠标/键盘模拟操作电脑）总开关
+  skillAutoUpdate: false, // 已安装技能自动更新（GitHub 来源）总开关
   voice: { ...DEFAULT_VOICE },
 };
 
@@ -66,6 +67,7 @@ function loadState() {
       memoryEnabled: data.memoryEnabled ?? true,
       mcpServers: Array.isArray(data.mcpServers) ? data.mcpServers : [],
       computerUseEnabled: data.computerUseEnabled ?? false,
+      skillAutoUpdate: data.skillAutoUpdate ?? false,
       voice,
     };
   } catch (e) {
@@ -152,6 +154,18 @@ function setComputerUseEnabled(enabled) {
   state.computerUseEnabled = !!enabled;
   saveState(state);
   return state.computerUseEnabled;
+}
+
+// 已安装技能自动更新（GitHub 来源）总开关
+function isSkillAutoUpdateEnabled() {
+  return loadState().skillAutoUpdate === true;
+}
+
+function setSkillAutoUpdate(enabled) {
+  const state = loadState();
+  state.skillAutoUpdate = !!enabled;
+  saveState(state);
+  return state.skillAutoUpdate;
 }
 
 /* ---------------- AI 语音配置（本地 / MiniMax / 自定义） ---------------- */
@@ -532,6 +546,8 @@ module.exports = {
   getMemoryEnabled,
   isComputerUseEnabled,
   setComputerUseEnabled,
+  isSkillAutoUpdateEnabled,
+  setSkillAutoUpdate,
   getMcpServers,
   upsertMcpServer,
   deleteMcpServer,

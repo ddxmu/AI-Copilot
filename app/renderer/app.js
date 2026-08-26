@@ -875,6 +875,7 @@ async function initAiSettings() {
   initVoiceSettings();
   initMcpSettings();
   initComputerUseSettings();
+  initSkillAutoUpdateSettings();
 }
 
 /* ================= 长期记忆设置 ================= */
@@ -3098,6 +3099,16 @@ function initComputerUseSettings() {
       if (window.api.openComputerUsePerms) window.api.openComputerUsePerms();
     });
   }
+}
+
+/* ================= 已安装技能自动更新设置 ================= */
+function initSkillAutoUpdateSettings() {
+  const toggle = document.getElementById('skill-auto-update-toggle');
+  if (!toggle) return;
+  window.api.aiGetSkillAutoUpdate().then((enabled) => { toggle.checked = !!enabled; });
+  toggle.addEventListener('change', async () => {
+    await window.api.aiSetSkillAutoUpdate(toggle.checked);
+  });
 }
 
 // 当内置 ComputerUse 服务器出现在下拉（已连接就绪）时，自动选中它
@@ -5647,6 +5658,9 @@ window.api.onSkillInstallProgress((info) => {
   const mb = (info.bytes / 1024 / 1024).toFixed(1);
   currentSkillInstallBtn.textContent = info.retry ? '重试中…' : `下载中 ${mb}MB…`;
 });
+
+// 主进程自动更新技能完成后，刷新「已安装技能」列表
+window.api.onSkillsUpdated ? window.api.onSkillsUpdated(() => { renderSkills(); }) : null;
 
 /* ---- 推荐技能（一键安装） ---- */
 const skillRecommendedListEl = document.getElementById('skill-recommended-list');
