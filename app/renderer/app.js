@@ -903,6 +903,15 @@ function initMemorySettings() {
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
   }
 
+  const clearBtn = document.getElementById('btn-clear-memory');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', async () => {
+      if (!confirm('确定要清空所有对话记忆吗？此操作不可撤销。')) return;
+      await window.api.memoryClear('user', null);
+      if (list) await renderMemoryList();
+    });
+  }
+
   async function renderMemoryList() {
     const entries = await window.api.memoryGet('user');
     if (!entries || !entries.length) {

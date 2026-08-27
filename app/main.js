@@ -2191,6 +2191,10 @@ ipcMain.handle('memory-delete', (_e, { scope, chatId, id }) => {
   try { memory.deleteMemoryEntry(scope, chatId, id); return { ok: true }; }
   catch (e) { return { ok: false, error: e.message }; }
 });
+ipcMain.handle('memory-clear', (_e, { scope, chatId }) => {
+  try { memory.clearMemory(scope, chatId); return { ok: true }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle('memory-enabled-get', () => aiConfig.getMemoryEnabled());
 ipcMain.handle('memory-enabled-set', (_e, enabled) => aiConfig.setMemoryEnabled(enabled));
 ipcMain.handle('ai-voice-config-get', () => aiConfig.getVoiceConfig());

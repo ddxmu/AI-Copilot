@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('api', {
   memoryGet: (scope, chatId) => ipcRenderer.invoke('memory-get', { scope, chatId }),
   memorySet: (scope, chatId, entries) => ipcRenderer.invoke('memory-set', { scope, chatId, entries }),
   memoryDelete: (scope, chatId, id) => ipcRenderer.invoke('memory-delete', { scope, chatId, id }),
+  memoryClear: (scope, chatId) => ipcRenderer.invoke('memory-clear', { scope, chatId }),
   aiFetchModels: (profile) => ipcRenderer.invoke('ai-fetch-models', profile),
   aiTestConnection: (profile) => ipcRenderer.invoke('ai-test-connection', profile),
   aiVoiceConfigGet: () => ipcRenderer.invoke('ai-voice-config-get'),

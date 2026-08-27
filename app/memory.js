@@ -99,6 +99,12 @@ function deleteMemoryEntry(scope, chatId, id) {
   return filtered;
 }
 
+function clearMemory(scope = 'user', chatId = null) {
+  const entries = loadMemory(scope, chatId);
+  if (entries.length) saveMemory(scope, chatId, []);
+  return true;
+}
+
 function formatMemory(scope = 'user', chatId = null, limit = 30) {
   const entries = loadMemory(scope, chatId);
   if (!entries.length) return '';
@@ -112,6 +118,7 @@ module.exports = {
   saveMemory,
   mergeMemory,
   deleteMemoryEntry,
+  clearMemory,
   formatMemory,
   userMemoryPath,
   chatMemoryPath,

@@ -1,12 +1,12 @@
 {
-  "version": "0.10.28",
+  "version": "0.10.29",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-27",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.28/AI.Copilot-0.10.28-arm64.dmg",
-  "dmgSha256": "0c3734a27f1b096a694c3f4ae86a6f2696aed9a1d42fc1ed62c576c7109ac7b4",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.28/AI.Copilot-0.10.28.zip",
-  "patchSha256": "e4ab7f9d23c1ce841aa035c1ab6c3c60662010f6d327a150c0f0833a29e81174",
-  "notes": "### DMG 安装背景「拉动」箭头改版\n\n- 安装引导图里「拖到应用程序」的灰色直箭头改为更可爱的蓝色拉动箭头：左端圆环抓手（示意「拖这里」）、右端圆角三角箭头、轻微 S 波浪曲线并点缀四角星，与主题色一致，且避开图标区域。\n\n### 对话框附件图标细化（Word / Excel 专用格式）\n\n- 附件按具体格式显示对应 logo：`.doc`→doc.png、`.docx`→DOCX.png、`.xls`→XLS.png、`.xlsx`→XLSX.png（图标取自桌面「图片」文件夹，已内置到应用资源）；`.dotx` 回退 Word 通用图标，`.csv`/`.xlsm` 回退 Excel 通用图标。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.29/AI.Copilot-0.10.29-arm64.dmg",
+  "dmgSha256": "69c73b630125a9bce500c094aeef0038ab71dd3d0de080f40934220d5a1e6415",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.29/AI.Copilot-0.10.29.zip",
+  "patchSha256": "ea1b2a9c438874763eb178d404968e64d495c2bfef8503a7e50897cd105245ae",
+  "notes": "### DMG 安装背景箭头修正\n\n- 安装引导图「拖到应用程序」的箭头，从之前错位的波浪箭头改为 AI Copilot.app 与 Applications 两个图标正中间的简洁灰色水平右箭头（按 `.DS_Store` 真实坐标定位，水平居中、不遮挡图标）。\n\n### AI 设置 › 记忆 新增「清空记忆」\n\n- 记忆卡片新增红色「清空记忆」按钮（带二次确认），可一键清空全部对话记忆；「查看记忆」弹窗内单条删除仍保留。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -137,6 +137,11 @@
       "from": "0.10.27",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.28/AI.Copilot-0.10.28.zip",
       "sha256": "e4ab7f9d23c1ce841aa035c1ab6c3c60662010f6d327a150c0f0833a29e81174"
+    },
+    {
+      "from": "0.10.28",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.29/AI.Copilot-0.10.29.zip",
+      "sha256": "ea1b2a9c438874763eb178d404968e64d495c2bfef8503a7e50897cd105245ae"
     }
   ]
 }
