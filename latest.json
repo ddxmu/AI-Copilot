@@ -1,12 +1,12 @@
 {
-  "version": "0.10.27",
+  "version": "0.10.28",
   "minimumVersion": "0.8.25",
   "releaseDate": "2026-08-27",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.27/AI.Copilot-0.10.27-arm64.dmg",
-  "dmgSha256": "6b089e14a6e3f7b230d08e159497c6fb6623c37a87f14559a6c59de9aca35dc3",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.27/AI.Copilot-0.10.27.zip",
-  "patchSha256": "dda9093ddfd5685eb6b246c4579d876aa1802c4e4d89d04211e3adb88f667c94",
-  "notes": "### 对话附件预览改版\n\n- 图片附件直接显示真实缩略图；无数据时异步读取本地文件生成缩略图，加载期间用对应格式图标占位（不再显示裂图）。\n- Word / Excel / PPT / PDF / TXT 等文档类型显示对应品牌 logo（图标取自桌面「图片」文件夹，已内置到应用资源）。\n- 文件图标样式统一为 28×28、透明背景、暗色气泡兼容。",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.28/AI.Copilot-0.10.28-arm64.dmg",
+  "dmgSha256": "0c3734a27f1b096a694c3f4ae86a6f2696aed9a1d42fc1ed62c576c7109ac7b4",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.28/AI.Copilot-0.10.28.zip",
+  "patchSha256": "e4ab7f9d23c1ce841aa035c1ab6c3c60662010f6d327a150c0f0833a29e81174",
+  "notes": "### DMG 安装背景「拉动」箭头改版\n\n- 安装引导图里「拖到应用程序」的灰色直箭头改为更可爱的蓝色拉动箭头：左端圆环抓手（示意「拖这里」）、右端圆角三角箭头、轻微 S 波浪曲线并点缀四角星，与主题色一致，且避开图标区域。\n\n### 对话框附件图标细化（Word / Excel 专用格式）\n\n- 附件按具体格式显示对应 logo：`.doc`→doc.png、`.docx`→DOCX.png、`.xls`→XLS.png、`.xlsx`→XLSX.png（图标取自桌面「图片」文件夹，已内置到应用资源）；`.dotx` 回退 Word 通用图标，`.csv`/`.xlsm` 回退 Excel 通用图标。",
   "deltas": [
     {
       "from": "0.10.2",
@@ -132,6 +132,11 @@
       "from": "0.10.26",
       "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.27/AI.Copilot-0.10.27.zip",
       "sha256": "dda9093ddfd5685eb6b246c4579d876aa1802c4e4d89d04211e3adb88f667c94"
+    },
+    {
+      "from": "0.10.27",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.28/AI.Copilot-0.10.28.zip",
+      "sha256": "e4ab7f9d23c1ce841aa035c1ab6c3c60662010f6d327a150c0f0833a29e81174"
     }
   ]
 }

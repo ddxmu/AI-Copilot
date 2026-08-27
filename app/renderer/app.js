@@ -3634,8 +3634,8 @@ function attachmentKindFromName(name) {
 
 // 文件类型 → 图标资源映射（对应 app/renderer/assets/file-icons/ 下的 PNG）
 const FILE_ICON_MAP = {
-  doc: 'word.png', docx: 'word.png', dotx: 'word.png',
-  xls: 'excel.png', xlsx: 'excel.png', xlsm: 'excel.png', csv: 'excel.png',
+  doc: 'doc.png', docx: 'DOCX.png', dotx: 'word.png',
+  xls: 'XLS.png', xlsx: 'XLSX.png', xlsm: 'excel.png', csv: 'excel.png',
   ppt: 'pptx.png', pptx: 'pptx.png', ppsx: 'pptx.png', pps: 'pptx.png',
   pdf: 'pdf.png',
   txt: 'txt.png', md: 'txt.png', rtf: 'txt.png', log: 'txt.png',
