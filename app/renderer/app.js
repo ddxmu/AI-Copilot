@@ -3631,11 +3631,100 @@ function attachmentKindFromName(name) {
   const ext = (name.split('.').pop() || '').toLowerCase();
   return IMG_EXTS.includes(ext) ? 'image' : 'file';
 }
+
+// 文件类型 → 图标资源映射（对应 app/renderer/assets/file-icons/ 下的 PNG）
+const FILE_ICON_MAP = {
+  doc: 'word.png', docx: 'word.png', dotx: 'word.png',
+  xls: 'excel.png', xlsx: 'excel.png', xlsm: 'excel.png', csv: 'excel.png',
+  ppt: 'pptx.png', pptx: 'pptx.png', ppsx: 'pptx.png', pps: 'pptx.png',
+  pdf: 'pdf.png',
+  txt: 'txt.png', md: 'txt.png', rtf: 'txt.png', log: 'txt.png',
+  jpg: 'jpg.png', jpeg: 'jpg.png',
+  png: 'png.png',
+  svg: 'svg.png',
+};
+function fileIconForName(name) {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  const icon = FILE_ICON_MAP[ext];
+  return icon ? `assets/file-icons/${icon}` : null;
+}
+function createAttFileIcon(iconPath) {
+  const el = document.createElement('div');
+  el.className = 'att-fileicon' + (iconPath ? ' has-img' : '');
+  if (iconPath) {
+    const img = document.createElement('img');
+    img.src = iconPath;
+    img.alt = '';
+    el.appendChild(img);
+  } else {
+    el.textContent = '📄';
+  }
+  return el;
+}
+
 function formatSize(n) {
   if (!n) return '';
   if (n < 1024) return n + ' B';
   if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
   return (n / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+// 构建单个附件 chip：图标 / 缩略图 + 名称 +（可选）大小 +（可选）移除按钮
+function buildAttChip(a, showThumb, showSize, onRemove) {
+  const kind = a.kind || attachmentKindFromName(a.name);
+  const isImage = kind === 'image';
+  const iconPath = fileIconForName(a.name);
+  const chip = document.createElement('div');
+  chip.className = 'att-chip' + (isImage ? ' att-img' : '');
+
+  // 图片优先显示真实缩略图；无 dataUrl 时异步读取本地文件，并用格式图标占位
+  if (isImage && showThumb && a.dataUrl) {
+    const img = document.createElement('img');
+    img.className = 'att-thumb';
+    img.src = a.dataUrl;
+    img.onerror = () => { img.replaceWith(createAttFileIcon(iconPath || 'assets/file-icons/png.png')); };
+    chip.appendChild(img);
+  } else if (isImage && showThumb && window.api.readImageThumb) {
+    const placeholder = createAttFileIcon(iconPath || 'assets/file-icons/png.png');
+    chip.appendChild(placeholder);
+    window.api.readImageThumb(a.path).then((dataUrl) => {
+      if (!dataUrl) return;
+      const img = document.createElement('img');
+      img.className = 'att-thumb';
+      img.src = dataUrl;
+      img.onerror = () => { img.replaceWith(createAttFileIcon(iconPath || 'assets/file-icons/png.png')); };
+      placeholder.replaceWith(img);
+    }).catch(() => {});
+  } else {
+    chip.appendChild(createAttFileIcon(iconPath));
+  }
+
+  const meta = document.createElement('div');
+  meta.className = 'att-meta';
+  const nm = document.createElement('div');
+  nm.className = 'att-name';
+  nm.textContent = a.name || '';
+  nm.title = a.name || '';
+  meta.appendChild(nm);
+  if (showSize && a.size) {
+    const sz = document.createElement('div');
+    sz.className = 'att-size';
+    sz.textContent = formatSize(a.size);
+    meta.appendChild(sz);
+  }
+  chip.appendChild(meta);
+
+  if (typeof onRemove === 'function') {
+    const rm = document.createElement('button');
+    rm.className = 'att-remove';
+    rm.type = 'button';
+    rm.textContent = '×';
+    rm.title = '移除附件';
+    rm.addEventListener('click', () => onRemove(a.id));
+    chip.appendChild(rm);
+  }
+
+  return chip;
 }
 
 // 把附件视图（缩略图 / 文件图标 + 名称）追加到容器
@@ -3644,22 +3733,8 @@ function appendAttachmentViews(container, attachments, showThumb) {
   const list = document.createElement('div');
   list.className = 'att-list';
   for (const a of attachments) {
-    const chip = document.createElement('div');
-    chip.className = 'att-chip' + (a.kind === 'image' ? ' att-img' : '');
-    if (a.kind === 'image' && showThumb && a.dataUrl) {
-      const img = document.createElement('img');
-      img.className = 'att-thumb'; img.src = a.dataUrl; chip.appendChild(img);
-    } else {
-      const ic = document.createElement('div');
-      ic.className = 'att-fileicon'; ic.textContent = '📄'; chip.appendChild(ic);
-    }
-    const meta = document.createElement('div');
-    meta.className = 'att-meta';
-    const nm = document.createElement('div');
-    nm.className = 'att-name'; nm.textContent = a.name || ''; nm.title = a.name || '';
-    meta.appendChild(nm);
-    chip.appendChild(meta);
-    list.appendChild(chip);
+    const chip = buildAttChip(a, showThumb, false, null);
+    if (chip) list.appendChild(chip);
   }
   container.appendChild(list);
 }
@@ -3731,27 +3806,8 @@ function renderAttachmentPreview() {
   if (!pendingAttachments.length) { box.classList.add('hidden'); return; }
   box.classList.remove('hidden');
   for (const a of pendingAttachments) {
-    const chip = document.createElement('div');
-    chip.className = 'att-chip' + (a.kind === 'image' ? ' att-img' : '');
-    if (a.kind === 'image' && a.dataUrl) {
-      const img = document.createElement('img');
-      img.className = 'att-thumb'; img.src = a.dataUrl; chip.appendChild(img);
-    } else {
-      const ic = document.createElement('div');
-      ic.className = 'att-fileicon'; ic.textContent = '📄'; chip.appendChild(ic);
-    }
-    const meta = document.createElement('div');
-    meta.className = 'att-meta';
-    const nm = document.createElement('div');
-    nm.className = 'att-name'; nm.textContent = a.name; nm.title = a.name;
-    const sz = document.createElement('div');
-    sz.className = 'att-size'; sz.textContent = formatSize(a.size);
-    meta.append(nm, sz);
-    const rm = document.createElement('button');
-    rm.className = 'att-remove'; rm.type = 'button'; rm.textContent = '×'; rm.title = '移除附件';
-    rm.addEventListener('click', () => removeAttachment(a.id));
-    chip.append(meta, rm);
-    box.appendChild(chip);
+    const chip = buildAttChip(a, true, true, (id) => removeAttachment(id));
+    if (chip) box.appendChild(chip);
   }
 }
 

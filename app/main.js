@@ -539,6 +539,18 @@ ipcMain.handle('pick-attachments', async () => {
   return out;
 });
 
+// 渲染端按需读取本地图片缩略图（dataUrl），用于拖拽/粘贴后没有缩略图的场景
+ipcMain.handle('read-image-thumb', async (_e, filePath) => {
+  try {
+    if (!filePath) return null;
+    const ext = fileExtOf(filePath);
+    if (!IMAGE_EXTS.has(ext)) return null;
+    const buf = fs.readFileSync(filePath);
+    if (!buf || buf.length === 0) return null;
+    return 'data:' + mimeForExt(ext) + ';base64,' + buf.toString('base64');
+  } catch (e) { return null; }
+});
+
 // 把剪贴板粘贴的图片保存到临时目录，返回可读取的路径（供主进程 readAttachmentForAi 读）
 ipcMain.handle('save-temp-file', async (_e, { base64, ext }) => {
   try {

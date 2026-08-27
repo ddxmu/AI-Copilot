@@ -2106,6 +2106,12 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   font-size: 19px;
   background: #eef1f6;
 }
+.att-fileicon.has-img { background: transparent; }
+.att-fileicon img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
 
 .att-meta {
   min-width: 0;
@@ -2160,6 +2166,7 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
 .att-list .att-name { color: #fff; }
 .att-list .att-size { color: rgba(255,255,255,0.8); }
 .att-list .att-fileicon { background: rgba(255,255,255,0.22); }
+.att-list .att-fileicon.has-img { background: transparent; }
 
 /* 权限下拉 */
 .perm {
