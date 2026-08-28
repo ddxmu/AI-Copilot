@@ -1,147 +1,16 @@
 {
-  "version": "0.10.29",
-  "minimumVersion": "0.8.25",
-  "releaseDate": "2026-08-27",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.29/AI.Copilot-0.10.29-arm64.dmg",
-  "dmgSha256": "69c73b630125a9bce500c094aeef0038ab71dd3d0de080f40934220d5a1e6415",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.29/AI.Copilot-0.10.29.zip",
-  "patchSha256": "ea1b2a9c438874763eb178d404968e64d495c2bfef8503a7e50897cd105245ae",
-  "notes": "### DMG 安装背景箭头修正\n\n- 安装引导图「拖到应用程序」的箭头，从之前错位的波浪箭头改为 AI Copilot.app 与 Applications 两个图标正中间的简洁灰色水平右箭头（按 `.DS_Store` 真实坐标定位，水平居中、不遮挡图标）。\n\n### AI 设置 › 记忆 新增「清空记忆」\n\n- 记忆卡片新增红色「清空记忆」按钮（带二次确认），可一键清空全部对话记忆；「查看记忆」弹窗内单条删除仍保留。",
+  "version": "0.11.0",
+  "notes": "### 1. 右侧「工作完成」面板增强：在线预览 + 文件信息 + 点击打开\n\n- 任务刚完成时，在右侧「工作完成」里内联显示「在线预览」：图片出缩略图、文本/代码/Markdown 出前几行片段、其它文件出类型图标。\n- App 重新打开后（记录持久化到本地），该条显示「文件信息」（文件名、大小、修改时间、完整路径）；文件若已移动/删除会标红提示。\n- 点击卡片或「打开」按钮用系统默认程序打开文件；另保留「在访达显示」定位入口。",
+  "pubDate": "2026-08-28T19:18:01+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.0/AI.Copilot-0.11.0-arm64.dmg",
+  "sha256": "4be0525abbf495a962f6ac6881bba384b717f74792ae63a7d6a5e151fca56a5f",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.0/AI.Copilot-0.11.0.zip",
+  "patchSha256": "870054839b1efe2da2f9c1e5087290eec946356ed7e8f8247fdd4d7eba13835c",
   "deltas": [
     {
-      "from": "0.10.2",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.3/AI.Copilot-0.10.3.zip",
-      "sha256": "3ccf2711a1fd29ad63ad3aee48fb095e9c3035936d8af3ff49c1e27adf3dcd2b"
-    },
-    {
-      "from": "0.10.3",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.4/AI.Copilot-0.10.4.zip",
-      "sha256": "8bede339fb69dfdf5c0a0e954d2594e18c16dd524b5f5d0b1a743b684e6e5db7"
-    },
-    {
-      "from": "0.10.4",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.5/AI.Copilot-0.10.5.zip",
-      "sha256": "7630d1880c06dd14e61fbaf8238d1e99696c2a3fa0c1d992dbea59cdb485067d"
-    },
-    {
-      "from": "0.10.5",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.6/AI.Copilot-0.10.6.zip",
-      "sha256": "2b94aca2a6e861fdbf16b81b1a03247e4099cfa591be31531c1d684bdcd9015e"
-    },
-    {
-      "from": "0.10.6",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.7/AI.Copilot-0.10.7.zip",
-      "sha256": "8869d024dd34250ffbc06d5cb495db7f710aff7aa4c0675690698a09372efc35"
-    },
-    {
-      "from": "0.10.7",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.8/AI.Copilot-0.10.8.zip",
-      "sha256": "1f78739f2c9d4b2212f7d43aa4d590c1f2b39c542e33f4668d9bc893d581248b"
-    },
-    {
-      "from": "0.10.8",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.9/AI.Copilot-0.10.9.zip",
-      "sha256": "13ee2f5b4420f66e657ec24020a63f6e0da00be681368373bdff7ea2330ca9ae"
-    },
-    {
-      "from": "0.10.9",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.10/AI.Copilot-0.10.10.zip",
-      "sha256": "3c880c7a64c00cf525bfaecea397a71508094c509288aece4aa6f2e27204600e"
-    },
-    {
-      "from": "0.10.10",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.11/AI.Copilot-0.10.11.zip",
-      "sha256": "75f61ad87a2261e7d2918e8e8fc6f966747238e06128288b9ca9b031a708cb25"
-    },
-    {
-      "from": "0.10.11",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.12/AI.Copilot-0.10.12.zip",
-      "sha256": "3236f6f8c9f9aaf80276dd6d33a3418903707deef70eb85b36e2ace750371064"
-    },
-    {
-      "from": "0.10.12",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.13/AI.Copilot-0.10.13.zip",
-      "sha256": "dad5c899f2e78e4564b5de9a290388819105b9d520da0abbae62b5b280954c5b"
-    },
-    {
-      "from": "0.10.13",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.14/AI.Copilot-0.10.14.zip",
-      "sha256": "7dab7a774a102c1aa788f2b435775de76ee7698f78d58179d0487af371d5e7e3"
-    },
-    {
-      "from": "0.10.14",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.15/AI.Copilot-0.10.15.zip",
-      "sha256": "0f2e7888bf2587dfde82d04e7d4290a27b9ff499153f599440dd2397d50f8e9d"
-    },
-    {
-      "from": "0.10.15",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.16/AI.Copilot-0.10.16.zip",
-      "sha256": "a55d75f121902899fe788f02ffa8d1b5d97bd150e4433f05d3d9de55fac968ee"
-    },
-    {
-      "from": "0.10.16",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.17/AI.Copilot-0.10.17.zip",
-      "sha256": "8077a3d4e3e9494df4eccbc2afcdb491bc03a893baaca6141f1ce15a1f6a187c"
-    },
-    {
-      "from": "0.10.17",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.18/AI.Copilot-0.10.18.zip",
-      "sha256": "fb9e01e334500d14e21c6313e757dcc1c99bc5443cc42b277d7926409ee23faf"
-    },
-    {
-      "from": "0.10.18",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.19/AI.Copilot-0.10.19.zip",
-      "sha256": "1d43a5f79b6a9ff6870722cd1b58623b6ddd862f8c2d6b3e32dbc3a82c47b049"
-    },
-    {
-      "from": "0.10.19",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.20/AI.Copilot-0.10.20.zip",
-      "sha256": "10cd8ca94ccfd8fbbbc38e124a3d7474307de0f468fe20f3b38f1ba261bd217e"
-    },
-    {
-      "from": "0.10.20",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.21/AI.Copilot-0.10.21.zip",
-      "sha256": "de40263a6ac77332d1296d6b22e5304f17c8d173ef4c223f036af864835e6bf6"
-    },
-    {
-      "from": "0.10.21",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.22/AI.Copilot-0.10.22.zip",
-      "sha256": "4ecd6e27f368d4b0bb9cc4ba82a0e340cab24614007dbd3698e513e417a23c02"
-    },
-    {
-      "from": "0.10.22",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.23/AI.Copilot-0.10.23.zip",
-      "sha256": "b8eb7525b29cece119dd476a5c137ab6199815f01f3428e613e14eb2390dddd8"
-    },
-    {
-      "from": "0.10.23",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.24/AI.Copilot-0.10.24.zip",
-      "sha256": "b107a659bea984bf41927e3e0c0891ac9906c0780cc059fe47c6a110344244eb"
-    },
-    {
-      "from": "0.10.24",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.25/AI.Copilot-0.10.25.zip",
-      "sha256": "e91320dcd85ec1adbb3a7fd8c3540562699eb5788bf25fa984adbdaa89a52f42"
-    },
-    {
-      "from": "0.10.25",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.26/AI.Copilot-0.10.26.zip",
-      "sha256": "761de358c483e93166057937f8e664e421f96db6f6cb53d7f2d54274551d981d"
-    },
-    {
-      "from": "0.10.26",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.27/AI.Copilot-0.10.27.zip",
-      "sha256": "dda9093ddfd5685eb6b246c4579d876aa1802c4e4d89d04211e3adb88f667c94"
-    },
-    {
-      "from": "0.10.27",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.28/AI.Copilot-0.10.28.zip",
-      "sha256": "e4ab7f9d23c1ce841aa035c1ab6c3c60662010f6d327a150c0f0833a29e81174"
-    },
-    {
-      "from": "0.10.28",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.10.29/AI.Copilot-0.10.29.zip",
-      "sha256": "ea1b2a9c438874763eb178d404968e64d495c2bfef8503a7e50897cd105245ae"
+      "from": "0.10.30",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.0/AI.Copilot-0.11.0.zip",
+      "sha256": "870054839b1efe2da2f9c1e5087290eec946356ed7e8f8247fdd4d7eba13835c"
     }
   ]
 }

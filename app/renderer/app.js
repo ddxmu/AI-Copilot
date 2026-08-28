@@ -3555,9 +3555,11 @@ function addWorkItem(item) {
     path: p,
     url: u,
     time: fmtHM(new Date()),
+    fresh: true, // 本会话刚完成 → 内联显示「在线预览」；重新打开后改为「文件信息」
   });
   if (workItems.length > 200) workItems.pop();
   renderWorkList();
+  saveWorkItems();
   // 自动展开右侧栏并切到「工作完成」标签，让用户立刻看到产出
   openRightSidebar();
   switchRightTab('work');
@@ -3584,9 +3586,9 @@ function renderWorkList() {
     return;
   }
   if (workEmptyEl) workEmptyEl.classList.add('hidden');
-  workItems.forEach((it) => {
+  workItems.forEach((it, idx) => {
     const div = document.createElement('div');
-    div.className = 'work-item';
+    div.className = 'work-item' + (it.fresh ? ' work-fresh' : '');
     div.dataset.type = it.type;
     if (it.path) div.dataset.path = it.path;
     if (it.url) div.dataset.url = it.url;
@@ -3610,13 +3612,134 @@ function renderWorkList() {
     tm.textContent = it.time;
 
     div.append(ico, meta, tm);
+
+    // 主体区：本会话刚完成显示「在线预览」；重新打开（历史）显示「文件信息」
+    const body = document.createElement('div');
+    body.className = 'work-body';
+    if (it.fresh) {
+      body.classList.add('work-preview');
+      renderWorkPreview(body, it);
+    } else {
+      body.classList.add('work-info');
+      renderWorkInfo(body, it);
+    }
+    div.appendChild(body);
+
+    // 操作区：打开（默认程序）/ 在访达显示
+    const actions = document.createElement('div');
+    actions.className = 'work-actions';
+    const openBtn = document.createElement('button');
+    openBtn.type = 'button';
+    openBtn.className = 'work-open-btn';
+    openBtn.textContent = it.type === 'web' ? '打开网页' : '打开';
+    openBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (it.type === 'web' && it.url) window.open(it.url, '_blank');
+      else if (it.path) window.api.openFile(it.path);
+    });
+    const revealBtn = document.createElement('button');
+    revealBtn.type = 'button';
+    revealBtn.className = 'work-reveal-btn';
+    revealBtn.textContent = '在访达显示';
+    revealBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (it.path) window.api.revealInFolder(it.path);
+    });
+    actions.append(openBtn, revealBtn);
+    div.appendChild(actions);
+
+    // 点击卡片（非按钮）即打开文件
     div.addEventListener('click', () => {
       if (it.type === 'web' && it.url) window.open(it.url, '_blank');
-      else if (it.path) window.api.revealInFolder(it.path);
+      else if (it.path) window.api.openFile(it.path);
     });
     workListEl.appendChild(div);
   });
   updateWorkBadge();
+}
+
+// 内联「在线预览」：图片显示缩略图，文本显示片段，其它显示文件类型图标
+function renderWorkPreview(container, it) {
+  const name = it.name || it.path || '';
+  const isImage = it.type === 'file' && attachmentKindFromName(name) === 'image';
+  if (isImage && it.path && window.api.readImageThumb) {
+    const ph = createAttFileIcon(fileIconForName(name) || 'assets/file-icons/png.png');
+    container.appendChild(ph);
+    window.api.readImageThumb(it.path).then((dataUrl) => {
+      if (!dataUrl) return;
+      const img = document.createElement('img');
+      img.className = 'work-preview-img';
+      img.src = dataUrl;
+      img.onerror = () => { img.replaceWith(createAttFileIcon(fileIconForName(name) || 'assets/file-icons/png.png')); };
+      ph.replaceWith(img);
+    }).catch(() => {});
+    return;
+  }
+  if (it.type === 'file' && it.path && window.api.getFilePreview) {
+    const ph = createAttFileIcon(fileIconForName(name));
+    container.appendChild(ph);
+    const tip = document.createElement('div');
+    tip.className = 'work-preview-tip';
+    tip.textContent = '点击「打开」查看内容';
+    container.appendChild(tip);
+    window.api.getFilePreview(it.path).then((r) => {
+      if (!r || !r.ok || r.kind !== 'text') return;
+      ph.replaceWith(createAttFileIcon(fileIconForName(name)));
+      const pre = document.createElement('pre');
+      pre.className = 'work-preview-text';
+      pre.textContent = r.text + (r.truncated ? '\n…' : '');
+      container.appendChild(pre);
+    }).catch(() => {});
+    return;
+  }
+  // web 或其它：图标 + 提示
+  container.appendChild(createAttFileIcon(null));
+}
+
+// 「文件信息」：大小 / 修改时间 / 路径（重新打开后展示）
+function renderWorkInfo(container, it) {
+  if (it.type === 'web' || !it.path) {
+    container.appendChild(createAttFileIcon(null));
+    return;
+  }
+  const iconWrap = createAttFileIcon(fileIconForName(it.name || it.path));
+  container.appendChild(iconWrap);
+  const info = document.createElement('div');
+  info.className = 'work-info-detail';
+  const pathLine = document.createElement('div');
+  pathLine.className = 'work-info-path';
+  pathLine.textContent = it.path;
+  pathLine.title = it.path;
+  info.appendChild(pathLine);
+  const dot = document.createElement('div');
+  dot.className = 'work-info-row';
+  dot.textContent = '读取中…';
+  info.appendChild(dot);
+  container.appendChild(info);
+  if (window.api.getFileInfo) {
+    window.api.getFileInfo(it.path).then((r) => {
+      if (!r || !r.ok) return;
+      if (!r.exists) { dot.textContent = '⚠️ 文件已不存在（可能已移动或删除）'; dot.classList.add('missing'); return; }
+      const size = formatSize(r.size);
+      const dt = r.mtime ? fmtDateTime(new Date(r.mtime)) : '';
+      dot.textContent = (size ? '大小 ' + size : '') + (dt ? '　·　修改 ' + dt : '');
+    }).catch(() => {});
+  }
+}
+
+function fmtDateTime(d) {
+  if (!d || isNaN(d.getTime())) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+function saveWorkItems() {
+  if (!window.api.saveWorkItems) return;
+  const payload = workItems.map((it) => ({
+    type: it.type, icon: it.icon, name: it.name,
+    path: it.path || null, url: it.url || null, time: it.time, fresh: false,
+  }));
+  try { window.api.saveWorkItems(payload); } catch (_) {}
 }
 
 function updateWorkBadge() {
@@ -3634,9 +3757,22 @@ function switchRightTab(tabId) {
   if (rightSidebarTitle) rightSidebarTitle.textContent = tab.dataset.title || tab.textContent || '最近消息';
 }
 
+// app 启动时恢复上次的「工作完成」记录（标记为非 fresh → 显示文件信息）
+function initWorkItems() {
+  if (!window.api.loadWorkItems) return;
+  window.api.loadWorkItems().then((saved) => {
+    if (Array.isArray(saved) && saved.length) {
+      workItems = saved.slice(0, 200).map((it) => ({ ...it, fresh: false }));
+      renderWorkList();
+    }
+  }).catch(() => {});
+}
+initWorkItems();
+
 if (btnClearWork) btnClearWork.addEventListener('click', () => {
   workItems = [];
   renderWorkList();
+  saveWorkItems();
 });
 
 const CONFIRM_ICONS = { 'write': '✍️', 'edit': '✏️', 'batch': '🔁', 'open-file': '📂', 'open-url': '🌐', 'mcp': '🔌', 'install_dependency': '📦' };

@@ -671,6 +671,7 @@ body {
 
 .work-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 9px;
   padding: 8px 10px;
@@ -680,6 +681,7 @@ body {
   cursor: pointer;
   transition: all 0.15s ease;
 }
+.work-item.work-fresh { border-color: var(--primary); }
 .work-item:hover {
   border-color: var(--primary);
   background: var(--primary-bg);
@@ -733,6 +735,86 @@ body {
   font-size: 12.5px;
   line-height: 1.7;
 }
+
+/* 内联「在线预览」区（本会话刚完成） */
+.work-body { flex-basis: 100%; min-width: 0; }
+.work-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-light);
+}
+.work-preview-img {
+  max-width: 100%;
+  max-height: 180px;
+  border-radius: 6px;
+  border: 1px solid var(--border-light);
+  object-fit: contain;
+  background: #fff;
+}
+.work-preview-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--sidebar-hover);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.work-preview-tip { font-size: 11px; color: var(--text-light); align-self: center; }
+
+/* 「文件信息」区（重新打开后） */
+.work-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-light);
+}
+.work-info-detail { min-width: 0; flex: 1; }
+.work-info-path {
+  font-size: 11px;
+  color: var(--text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-all;
+}
+.work-info-row { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.work-info-row.missing { color: #d97706; }
+
+/* 操作区：打开 / 在访达显示 */
+.work-actions {
+  flex-basis: 100%;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.work-open-btn,
+.work-reveal-btn {
+  border: 1px solid var(--border-light);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.work-open-btn { background: var(--primary); border-color: var(--primary); color: #fff; }
+.work-open-btn:hover { filter: brightness(1.05); }
+.work-reveal-btn:hover { border-color: var(--primary); color: var(--primary); }
 
 /* ========== 侧边栏收起状态 ========== */
 .sidebar.collapsed {

@@ -652,6 +652,58 @@ ipcMain.handle('reveal-in-folder', (_e, filePath) => {
   try { shell.showItemInFolder(filePath); return true; } catch (_) { return false; }
 });
 
+// 用系统默认程序打开文件（「工作完成」面板点「打开」）
+ipcMain.handle('open-file', async (_e, filePath) => {
+  try { await shell.openPath(filePath); return { ok: true }; } catch (e) { return { ok: false, error: e.message || String(e) }; }
+});
+
+// 读取文件信息（大小 / 是否存在），用于「工作完成」面板展示
+ipcMain.handle('get-file-info', (_e, filePath) => {
+  try {
+    const st = fs.statSync(filePath);
+    return { ok: true, exists: true, size: st.size, mtime: st.mtimeMs, isFile: st.isFile() };
+  } catch (_) { return { ok: true, exists: false }; }
+});
+
+// 取文件「在线预览」内容：图片返回 kind:'image'（渲染层用 readImageThumb 取缩略图），
+// 文本类返回前 4KB 文本片段（kind:'text'），其余返回 kind:'other'。仅用于「工作完成」面板内联预览。
+const WORK_PREVIEW_IMG = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'heic', 'ico']);
+const WORK_PREVIEW_TXT = new Set([
+  'txt', 'md', 'markdown', 'json', 'js', 'ts', 'tsx', 'jsx', 'html', 'htm',
+  'css', 'csv', 'log', 'xml', 'yml', 'yaml', 'py', 'java', 'c', 'cpp', 'h',
+  'hpp', 'sh', 'bat', 'go', 'rs', 'php', 'sql', 'rtf', 'toml', 'ini', 'env',
+]);
+ipcMain.handle('get-file-preview', (_e, filePath) => {
+  try {
+    const ext = (String(filePath).split('.').pop() || '').toLowerCase();
+    if (WORK_PREVIEW_IMG.has(ext)) return { ok: true, kind: 'image' };
+    if (WORK_PREVIEW_TXT.has(ext)) {
+      const st = fs.statSync(filePath);
+      if (st.size > 2 * 1024 * 1024) return { ok: true, kind: 'other' };
+      const text = fs.readFileSync(filePath).slice(0, 4000).toString('utf8');
+      return { ok: true, kind: 'text', text, truncated: st.size > 4000 };
+    }
+    return { ok: true, kind: 'other' };
+  } catch (e) { return { ok: false, error: e.message || String(e) }; }
+});
+
+// 「工作完成」面板记录持久化（app 关闭后再次打开仍可见文件信息）
+const workItemsPath = () => path.join(app.getPath('userData'), 'work-items.json');
+ipcMain.handle('load-work-items', () => {
+  try {
+    const raw = fs.readFileSync(workItemsPath(), 'utf8');
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch (_) { return []; }
+});
+ipcMain.handle('save-work-items', (_e, items) => {
+  try {
+    fs.mkdirSync(path.dirname(workItemsPath()), { recursive: true });
+    fs.writeFileSync(workItemsPath(), JSON.stringify(Array.isArray(items) ? items : [], null, 2), 'utf8');
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message || String(e) }; }
+});
+
 // 批量重命名：对文件名（含扩展名）按规则做字符串替换。saveMode: 'inplace'(原地改名) | 'copy'(复制到 outputDir)
 ipcMain.handle('rename-files', (_e, { files, rules, saveMode, outputDir }) => {
   const results = [];
