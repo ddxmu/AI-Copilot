@@ -2244,6 +2244,12 @@ async function readJsonResponse(resp) {
     try {
       data = JSON.parse(text);
     } catch (e) {
+      // 响应不是 JSON：多半是网关/服务器返回的 HTML 错误页（如 openresty 的 404）。
+      // 把整页 HTML 甩给用户没意义，改为可读提示并附带最可能的原因。
+      const isHtml = /^<!doctype html|<html[\s>]/i.test(text.trim());
+      if (isHtml) {
+        throw new Error('接口返回的不是 JSON（疑似服务器错误页，如 404）。请确认接口地址是否正确、且确实指向可用的服务（接口地址通常以 /v1 结尾，例如 https://api.openai.com/v1）');
+      }
       const snippet = text.length > 200 ? text.slice(0, 200) + '…' : text;
       throw new Error(`接口返回不是有效 JSON：${snippet}`);
     }

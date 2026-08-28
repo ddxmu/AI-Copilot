@@ -1219,6 +1219,7 @@ async function initVoiceSettings() {
   const sttApiKey = document.getElementById('voice-stt-apikey');
   const sttModelSelect = document.getElementById('voice-stt-model');
   const sttFetchModelsBtn = document.getElementById('btn-voice-stt-fetch-models');
+  const sttLangSelect = document.getElementById('voice-stt-lang');
 
   if (sttEnabledToggle) sttEnabledToggle.checked = !!voiceConfig.sttEnabled;
   let activeSttProvider = voiceConfig.sttProvider || 'openai';
@@ -1235,13 +1236,14 @@ async function initVoiceSettings() {
   if (sttApiKey) sttApiKey.value = voiceConfig.sttKey || '';
   setupApiKeyToggle('voice-stt-apikey', 'voice-stt-apikey-toggle');
   fillSelectOptions(sttModelSelect, [], voiceConfig.sttModel, '请选择模型');
+  if (sttLangSelect) sttLangSelect.value = voiceConfig.sttLang || 'zh-CN';
 
   const sttStatus = document.getElementById('voice-stt-status');
 
   if (sttFetchModelsBtn) {
     sttFetchModelsBtn.addEventListener('click', async () => {
       sttStatus.textContent = '';
-      if (activeSttProvider !== 'openai') { sttStatus.textContent = 'MiniMax 原生识别无需拉取模型'; return; }
+      if (activeSttProvider !== 'openai') { sttStatus.textContent = (activeSttProvider === 'local' ? '本地识别无需拉取模型' : 'MiniMax 原生识别无需拉取模型'); return; }
       const key = sttApiKey ? sttApiKey.value.trim() : '';
       const base = sttBaseUrl ? sttBaseUrl.value.trim() : '';
       if (!key) { sttStatus.textContent = '请先填写 API Key'; return; }
@@ -1286,6 +1288,7 @@ async function initVoiceSettings() {
         sttBaseUrl: sttBaseUrl ? sttBaseUrl.value.trim() : (voiceConfig.sttBaseUrl || ''),
         sttKey: sttApiKey ? sttApiKey.value.trim() : (voiceConfig.sttKey || ''),
         sttModel: sttModelSelect ? sttModelSelect.value : (voiceConfig.sttModel || ''),
+        sttLang: sttLangSelect ? sttLangSelect.value : (voiceConfig.sttLang || 'zh-CN'),
         voiceId: activeProvider === 'local'
           ? (localVoiceSelect ? localVoiceSelect.value : (voiceConfig.voiceId || ''))
           : (activeProvider === 'minimax'
@@ -2743,7 +2746,9 @@ micGrantBtn.addEventListener('click', async () => {
   micGrantBtn.textContent = '授权';
   if (ok) {
     closeMicModal();
-    startRecording();
+    const useLocalStt = voiceConfig.sttEnabled && voiceConfig.sttProvider === 'local';
+    if (useLocalStt) startLocalSTT();
+    else startRecording();
   }
 });
 
@@ -2854,11 +2859,13 @@ async function handleVoiceBlob(blob) {
       chatStatusEl.textContent = '未识别到语音，请重试';
       return;
     }
-    // 填入输入框，不自动发送（req #6）
+    // 语音聊天：识别后自动发送，并触发 AI 语音朗读回复
     chatInput.value = text.trim();
     autoGrow();
     chatInput.focus();
-    chatStatusEl.textContent = '已填入输入框（未自动发送）';
+    chatStatusEl.textContent = '已识别，自动发送中…';
+    voiceSendPending = true; // 标记来自语音 → 触发 TTS 回复
+    sendChat();
   } catch (e) {
     // 接口 / 网络错误：显示真实原因（与麦克风权限错误分开，req #7）
     chatStatusEl.textContent = '语音识别失败（接口错误）：' + (e && e.message ? e.message : String(e));
@@ -2879,6 +2886,92 @@ async function transcribeWithMinimax(blob) {
   });
   if (!resp || !resp.ok) throw new Error((resp && resp.error) || '语音识别失败');
   return resp.text || '';
+}
+
+// —— 本地语音识别（Web Speech API，无需第三方 API Key，不联网）——
+const LocalSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let localSttActive = false;
+let localRecognition = null;
+
+function isLocalSTTAvailable() { return !!LocalSpeechRecognition; }
+
+async function startLocalSTT() {
+  if (!LocalSpeechRecognition) {
+    chatStatusEl.textContent = '本地识别不可用：当前环境未启用浏览器语音识别（Web Speech API）。请改用远程识别，或联系开发者开启内置离线引擎。';
+    return;
+  }
+  if (localSttActive) { stopLocalSTT(); return; }
+  // 先确保麦克风采权限（SpeechRecognition 在部分环境需要）
+  let micOk = micGranted;
+  if (!micOk) {
+    try { micOk = await requestMicPermission(); } catch (e) { micOk = false; }
+  }
+  if (!micOk) { openMicModal(); return; }
+  try {
+    const rec = new LocalSpeechRecognition();
+    rec.lang = (voiceConfig.sttLang && voiceConfig.sttLang.trim()) || 'zh-CN';
+    rec.continuous = false;
+    rec.interimResults = true;
+    let finalText = '';
+    rec.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        if (res.isFinal) finalText += res[0].transcript;
+        else interim += res[0].transcript;
+      }
+      chatStatusEl.textContent = '正在聆听（本地识别）…' + (finalText || interim);
+    };
+    rec.onerror = (e) => {
+      const err = e && e.error ? e.error : 'unknown';
+      if (err === 'no-speech') { chatStatusEl.textContent = '未检测到语音，请重试'; }
+      else if (err === 'not-allowed' || err === 'service-not-allowed') {
+        chatStatusEl.textContent = '麦克风权限被拒绝，请在系统设置 › 隐私与安全性 › 麦克风 中允许「AI Copilot」。';
+      } else if (err === 'network') {
+        chatStatusEl.textContent = '本地识别需要系统语音服务支持；当前不可用（可能是系统未启用语音识别）。';
+      } else {
+        chatStatusEl.textContent = '本地识别出错：' + err;
+      }
+    };
+    rec.onend = () => {
+      localSttActive = false;
+      btnVoice.classList.remove('listening');
+      if (voiceWaveWrap) voiceWaveWrap.classList.add('hidden');
+      stopWaveformLoop();
+      const text = finalText.trim();
+      if (!text) {
+        const cur = chatStatusEl.textContent || '';
+        if (cur.indexOf('识别') === -1 && cur.indexOf('权限') === -1 && cur.indexOf('服务') === -1) {
+          chatStatusEl.textContent = '未识别到语音，请重试';
+        }
+        return;
+      }
+      chatInput.value = text;
+      autoGrow();
+      chatInput.focus();
+      chatStatusEl.textContent = '已识别，自动发送中…';
+      voiceSendPending = true; // 标记来自语音 → 触发 AI 语音朗读回复
+      sendChat();
+    };
+    localRecognition = rec;
+    localSttActive = true;
+    btnVoice.classList.add('listening');
+    chatStatusEl.textContent = '正在聆听（本地识别）…请说话，结束自动发送';
+    rec.start();
+  } catch (e) {
+    localSttActive = false;
+    btnVoice.classList.remove('listening');
+    chatStatusEl.textContent = '无法启动本地识别：' + (e && e.message ? e.message : String(e));
+  }
+}
+
+function stopLocalSTT() {
+  if (localRecognition) {
+    try { localRecognition.stop(); } catch (e) {}
+    localRecognition = null;
+  }
+  localSttActive = false;
+  btnVoice.classList.remove('listening');
 }
 
 // 将 Blob 解码并重采样为 16kHz WAV 后返回 base64
@@ -2944,6 +3037,14 @@ let voiceMouseHeld = false;
 const VOICE_HOLD_THRESHOLD = 180; // ms：超过即视为按住说话，松开即停
 
 function voiceStartOrToggle() {
+  // 本地 STT 模式：走浏览器内置识别，不经 MediaRecorder
+  const useLocalStt = voiceConfig.sttEnabled && voiceConfig.sttProvider === 'local';
+  if (useLocalStt) {
+    if (localSttActive) { stopLocalSTT(); return; }
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    startLocalSTT();
+    return;
+  }
   if (isRecording) { finalizeRecording(); return; }
   try { window.speechSynthesis.cancel(); } catch (e) {}
   if (micGranted) { startRecording(); }
