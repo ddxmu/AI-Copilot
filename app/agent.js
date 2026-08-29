@@ -1561,6 +1561,46 @@ function estimateInputTokens(system, messages, toolDefs) {
   return Math.ceil(chars / 2.5);
 }
 
+// 估算文本 token 数（中英混合的保守估计，宁可高估）
+function estimateTokens(s) {
+  return Math.ceil(String(s == null ? '' : s).length / 2.5);
+}
+
+// 发送前按上下文窗口裁剪历史：只保留最近若干条，确保「系统提示 + 工具定义 + 历史 + 输出预留」不超窗。
+// 为什么必须做：压缩依赖「累计 prompt token 超阈值」触发，而累计值每条新消息都从 0 开始、且本轮只允许压一次，
+// 于是首轮永远不压缩 —— 历史一旦膨胀（实测出现过约 15 万 token / 窗口仅 32768），请求会直接把窗口撑爆，
+// 服务端只能把 prefill 切成极小的块慢慢啃，表现为长时间无响应。
+// 返回「用于发送」的新数组；不改动传入的 messages（历史照常完整落库，不丢用户数据）。
+function trimMessagesToFit(messages, system, toolList, contextWindow, reserveOutput) {
+  const list = Array.isArray(messages) ? messages : [];
+  if (!list.length || !(contextWindow > 0)) return list;
+  let fixed = estimateTokens(system);
+  try {
+    fixed += estimateTokens(JSON.stringify(toolList.map((t) => ({ name: t.name, description: t.description, schema: t.schema }))));
+  } catch (e) { /* 序列化失败就忽略工具体积 */ }
+  const budget = Math.floor(contextWindow) - fixed - Math.floor(reserveOutput || 0);
+  if (budget <= 0) return list.slice(-1); // 窗口过小，至少保留最后一条（本轮用户消息）
+
+  const sizeOf = (m) => {
+    let c = m && m.content;
+    if (Array.isArray(c)) c = c.map((x) => (x && typeof x === 'object' ? (x.text || '') : String(x))).join(' ');
+    let n = estimateTokens(c);
+    if (m && m.tool_calls) { try { n += estimateTokens(JSON.stringify(m.tool_calls)); } catch (e) { /* ignore */ } }
+    return n;
+  };
+  const sizes = list.map(sizeOf);
+  let total = sizes.reduce((a, b) => a + b, 0);
+  if (total <= budget) return list;
+
+  // 从最旧的开始丢弃，始终保留最后一条（本轮用户消息）；tool/tool_calls 配对清洗交给 sanitizeMessages
+  let start = 0;
+  while (start < list.length - 1 && total > budget) {
+    total -= sizes[start];
+    start++;
+  }
+  return list.slice(start);
+}
+
 // SSE 流式请求（仅本地模型使用）。逐段解析 delta：文本走 onDelta 实时推送，
 // tool_calls 按 index 累积（arguments 是跨多个 chunk 拼出来的字符串）。
 function openaiStreamRequest(urlStr, headers, body, signal, onDelta, timeoutMs = 300000) {
@@ -1993,10 +2033,19 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
     }
 
     // 调用前清洗历史，确保 tool / tool_calls 配对（防压缩导致的 HTTP 400）
+    // 发送前按上下文窗口裁剪：只有显式配置了「上下文长度」才生效（即本地模型参数），未配置的一律走原逻辑。
+    // 注意只裁剪「发出去的这份」，messages 本身保持完整 —— 历史照常完整落库，不丢用户的对话记录。
+    const fitWindow = Number.isFinite(profile.contextLength) && profile.contextLength > 0 ? profile.contextLength : null;
+    const reserveOut = Number.isFinite(profile.maxTokens) && profile.maxTokens > 0
+      ? profile.maxTokens
+      : (profile.local === true ? 2048 : 4096);
+    const sendMessages = fitWindow
+      ? trimMessagesToFit(messages, system, toolList, fitWindow, reserveOut)
+      : messages;
     let r;
     let streamedText = ''; // 本轮流式已推送的文本（用于避免回退时重复显示）
     try {
-      r = await callApi(profile, apiType, system, sanitizeMessages(messages, apiType), toolList, ac.signal, (t) => {
+      r = await callApi(profile, apiType, system, sanitizeMessages(sendMessages, apiType), toolList, ac.signal, (t) => {
         streamedText += t;
         ctx.emit('text', t);
       });

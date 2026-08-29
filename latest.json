@@ -1,16 +1,16 @@
 {
-  "version": "0.11.2",
-  "notes": "### 1. 本地模型配置保留「API Key」输入框\n\n- 选择本地模型（Ollama / oMLX / LM Studio / llama.cpp）时，API Key 输入框重新显示，不再隐藏。\n- 部分本地推理服务同样启用了鉴权（例如 llama.cpp 的 `--api-key`、LM Studio 的鉴权设置、或在服务前加了反向代理），这类情况现在可以直接填写 Key。\n- Key 仍然**不是必填**：本地服务未启用鉴权时留空即可，保存与拉取模型都不会再提示「API Key 不能为空」；一旦填写，请求会正常带上鉴权信息。",
-  "pubDate": "2026-08-29T12:18:36+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.2/AI.Copilot-0.11.2-arm64.dmg",
-  "sha256": "62551af44f7d7acd4419d51101ac6e672e2f35da4ee0e91a97c3554028c1e387",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.2/AI.Copilot-0.11.2.zip",
-  "patchSha256": "25b906354a67ea603db6524e24d02936c29a75e7345de7f044d16cf1dd7a84ae",
+  "version": "0.11.3",
+  "notes": "### 1. 修复：本地模型在长对话下长时间无响应\n\n- 之前的自动压缩依赖「累计 token 超过阈值」才触发，而每轮新消息的累计值都从 0 开始，导致**第一条消息永远不会压缩**，会把整个对话历史原样发出去。历史一长（实测出现过约 15 万 token，而本地模型上下文窗口通常只有 32768），请求就把窗口撑爆，服务端只能把计算切成极小的块慢慢处理，界面上表现为一直转圈、迟迟不出回复。\n- 现在改为**发送前就按上下文窗口裁剪**：自动算出「系统提示 + 工具定义 + 输出预留」占用的空间，只把装得下的最近若干条发出去，并保证你本轮发的消息一定保留。\n- 只在配置了「上下文长度」时生效（即本地模型），云端配置行为不变。\n- 裁剪只影响本次发送给模型的内容，**你的对话历史仍然完整保存**，不会被删除。",
+  "pubDate": "2026-08-29T13:21:49+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.3/AI.Copilot-0.11.3-arm64.dmg",
+  "sha256": "de59a0c93d4695b4ecd9d8db799df1fe9e5f0e4be9b8e2301fa0a6406ac013fe",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.3/AI.Copilot-0.11.3.zip",
+  "patchSha256": "79cfc7df7328688ca4ad79528f102f859d64158665fc5efc2c636ad83e40d3ee",
   "deltas": [
     {
-      "from": "0.11.1",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.2/AI.Copilot-0.11.2.zip",
-      "sha256": "25b906354a67ea603db6524e24d02936c29a75e7345de7f044d16cf1dd7a84ae"
+      "from": "0.11.2",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.3/AI.Copilot-0.11.3.zip",
+      "sha256": "79cfc7df7328688ca4ad79528f102f859d64158665fc5efc2c636ad83e40d3ee"
     }
   ]
 }
