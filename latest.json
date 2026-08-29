@@ -1,16 +1,16 @@
 {
-  "version": "0.11.1",
-  "notes": "### 1. AI 配置新增「本地模型」提供商\n\n- 新增配置的下拉里支持 **Ollama / oMLX / LM Studio / llama.cpp** 四种本地推理服务，选中后自动填好默认地址（分别为 11434 / 8000 / 1234 / 8080 端口的 `/v1`），无需 API Key 即可保存与拉取模型。\n- 本地模型拥有**独立参数区**：上下文长度、最大输出 token、温度。其中上下文长度直接决定对话压缩时机，解决了本地模型被误判成 128K 上下文、提示词撑爆却永不压缩的问题。\n- 以上改动只作用于本地模型配置，云端模型配置的请求参数与鉴权方式保持原样。\n\n### 2. 本地模型改为流式输出\n\n- 本地模型的回复改为边生成边显示，不再需要等全部生成完才出字（此前表现为长时间转圈、界面无回复）。\n- 流式异常时会自动回退到原来的整段返回方式，不会比之前更差。",
-  "pubDate": "2026-08-29T11:50:21+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.1/AI.Copilot-0.11.1-arm64.dmg",
-  "sha256": "f87d29bfb5bde9c8c8c64cf12f933e9413b460bb73f683eb80531c1331c472a0",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.1/AI.Copilot-0.11.1.zip",
-  "patchSha256": "e66d21462b560111e1ffb52b42eabc7f32bda652bad1ab3300796ff853463fd3",
+  "version": "0.11.2",
+  "notes": "### 1. 本地模型配置保留「API Key」输入框\n\n- 选择本地模型（Ollama / oMLX / LM Studio / llama.cpp）时，API Key 输入框重新显示，不再隐藏。\n- 部分本地推理服务同样启用了鉴权（例如 llama.cpp 的 `--api-key`、LM Studio 的鉴权设置、或在服务前加了反向代理），这类情况现在可以直接填写 Key。\n- Key 仍然**不是必填**：本地服务未启用鉴权时留空即可，保存与拉取模型都不会再提示「API Key 不能为空」；一旦填写，请求会正常带上鉴权信息。",
+  "pubDate": "2026-08-29T12:18:36+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.2/AI.Copilot-0.11.2-arm64.dmg",
+  "sha256": "62551af44f7d7acd4419d51101ac6e672e2f35da4ee0e91a97c3554028c1e387",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.2/AI.Copilot-0.11.2.zip",
+  "patchSha256": "25b906354a67ea603db6524e24d02936c29a75e7345de7f044d16cf1dd7a84ae",
   "deltas": [
     {
-      "from": "0.11.0",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.1/AI.Copilot-0.11.1.zip",
-      "sha256": "e66d21462b560111e1ffb52b42eabc7f32bda652bad1ab3300796ff853463fd3"
+      "from": "0.11.1",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.2/AI.Copilot-0.11.2.zip",
+      "sha256": "25b906354a67ea603db6524e24d02936c29a75e7345de7f044d16cf1dd7a84ae"
     }
   ]
 }

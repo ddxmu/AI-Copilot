@@ -671,7 +671,6 @@ const fetchStatusEl = document.getElementById('fetch-status');
 const modelPriceEl = document.getElementById('model-price');
 // 本地模型专属参数区
 const localSettingsEl = document.getElementById('local-settings');
-const apiKeyCellEl = document.getElementById('p-apikey-cell');
 const ctxLenInput = document.getElementById('p-ctxlen');
 const maxTokensInput = document.getElementById('p-maxtokens');
 const temperatureInput = document.getElementById('p-temperature');
@@ -699,10 +698,10 @@ providerSel.addEventListener('change', () => {
   baseUrlInput.value = p.baseUrl;
   baseUrlInput.readOnly = false;
   baseUrlInput.placeholder = p.id === 'custom' ? '填写你的 API 地址，如 https://xxx.com/v1' : p.baseUrl;
-  // 本地模型：无需 API Key，改由「本地模型参数」区提供上下文长度等
+  // 本地模型：展开「本地模型参数」区；API Key 输入框保持可见（部分本地服务也启用了鉴权），只是不强制填写
   const local = !!p.local;
   localSettingsEl.classList.toggle('hidden', !local);
-  apiKeyCellEl.classList.toggle('hidden', local);
+  apiKeyInput.placeholder = local ? '本地服务一般留空；若启用了鉴权请填写' : 'sk-...';
 });
 
 function setFetchStatus(text, cls) {
