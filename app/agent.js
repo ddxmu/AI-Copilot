@@ -1602,8 +1602,9 @@ function trimMessagesToFit(messages, system, toolList, contextWindow, reserveOut
 }
 
 // SSE 流式请求（仅本地模型使用）。逐段解析 delta：文本走 onDelta 实时推送，
+// 深度思考内容（reasoning_content）走 onReasoning 通知一次，用于界面切「深度思考中…」；
 // tool_calls 按 index 累积（arguments 是跨多个 chunk 拼出来的字符串）。
-function openaiStreamRequest(urlStr, headers, body, signal, onDelta, timeoutMs = 300000) {
+function openaiStreamRequest(urlStr, headers, body, signal, onDelta, onReasoning, timeoutMs = 300000) {
   return new Promise((resolve, reject) => {
     const url = new URL(urlStr);
     const lib = url.protocol === 'http:' ? http : https;
@@ -1646,6 +1647,11 @@ function openaiStreamRequest(urlStr, headers, body, signal, onDelta, timeoutMs =
             if (!choice) continue;
             if (choice.finish_reason) finishReason = choice.finish_reason;
             const delta = choice.delta || {};
+            // 深度思考：Qwen3 / R1 等推理模型把思维链放在 reasoning_content，
+            // 只通知一次即可（界面据此把「思考中…」切成「深度思考中…」），不重复刷 IPC
+            if (typeof delta.reasoning_content === 'string' && delta.reasoning_content && onReasoning) {
+              try { onReasoning(delta.reasoning_content); } catch (e) { /* 不影响主流程 */ }
+            }
             if (typeof delta.content === 'string' && delta.content) {
               content += delta.content;
               if (onDelta) { try { onDelta(delta.content); } catch (e) { /* 推送失败不影响主流程 */ } }
@@ -1673,7 +1679,7 @@ function openaiStreamRequest(urlStr, headers, body, signal, onDelta, timeoutMs =
   });
 }
 
-async function callApi(profile, apiType, system, messages, toolList, signal = null, onDelta = null) {
+async function callApi(profile, apiType, system, messages, toolList, signal = null, onDelta = null, onReasoning = null) {
   const base = profile.baseUrl.replace(/\/+$/, '');
   if (apiType === 'anthropic') {
     const msgUrl = /\/v\d+(?:\.\d+)?$/.test(base) ? `${base}/messages` : `${base}/v1/messages`;
@@ -1715,7 +1721,7 @@ async function callApi(profile, apiType, system, messages, toolList, signal = nu
   // 这里任何异常（服务端不支持 / 超时 / 解析失败）都静默回退到下面的非流式，不会比现状更差。
   if (isLocal && typeof onDelta === 'function') {
     try {
-      const s = await openaiStreamRequest(`${base}/chat/completions`, headers, body, signal, onDelta);
+      const s = await openaiStreamRequest(`${base}/chat/completions`, headers, body, signal, onDelta, onReasoning);
       const raw = s.toolCalls || [];
       const parsed = raw.map((tc) => {
         let input = {};
@@ -2044,10 +2050,15 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
       : messages;
     let r;
     let streamedText = ''; // 本轮流式已推送的文本（用于避免回退时重复显示）
+    let reasoningNotified = false; // 深度思考只通知一次，避免思维链每片都刷一条 IPC
     try {
       r = await callApi(profile, apiType, system, sanitizeMessages(sendMessages, apiType), toolList, ac.signal, (t) => {
         streamedText += t;
         ctx.emit('text', t);
+      }, () => {
+        if (reasoningNotified) return;
+        reasoningNotified = true;
+        ctx.emit('reasoning', {});
       });
     } catch (e) {
       // 停止导致的请求中断（AbortError）或已请求停止 → 直接结束，不算异常
@@ -2157,6 +2168,7 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
     emit: (event, data) => {
       const map = {
         text: callbacks.onText,
+        reasoning: callbacks.onReasoning,
         'tool-start': callbacks.onToolStart,
         'tool-end': callbacks.onToolEnd,
         'subagent-start': callbacks.onSubagentStart,

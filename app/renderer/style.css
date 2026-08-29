@@ -1854,6 +1854,38 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   border: 1px solid var(--border-light);
 }
 
+/* 「思考中…」占位气泡：模型 prefill 期间给即时反馈（含已等待秒数） */
+.chat-bubble.chat-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-dim);
+  background: #f4f5f7;
+  border: 1px solid var(--border-light);
+}
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.thinking-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  opacity: 0.35;
+  animation: thinking-bounce 1.2s infinite ease-in-out;
+}
+.thinking-dots i:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes thinking-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+.thinking-label {
+  font-variant-numeric: tabular-nums;
+}
+
 /* 工具调用行 */
 .chat-tool {
   max-width: 78%;
@@ -3885,6 +3917,12 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   color: var(--text);
   border-color: rgba(255, 255, 255, 0.06);
 }
+:root.dark .chat-bubble.chat-thinking {
+  background: #2a2f3a;
+  color: var(--text-dim);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+:root.dark .thinking-dots i { background: var(--text-dim); }
 :root.dark .chat-msg.user .chat-bubble {
   background: var(--primary);
   color: #fff;

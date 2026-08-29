@@ -114,6 +114,7 @@ contextBridge.exposeInMainWorld('api', {
   chatLoad: () => ipcRenderer.invoke('chat-load'),
   chatSave: (chats, activeId) => ipcRenderer.invoke('chat-save', { chats, activeId }),
   onAiText: (cb) => ipcRenderer.on('ai-chat-text', (_e, t) => cb(t)),
+  onAiReasoning: (cb) => ipcRenderer.on('ai-chat-reasoning', () => cb()),
   onAiToolStart: (cb) => ipcRenderer.on('ai-chat-tool-start', (_e, d) => cb(d)),
   onAiToolEnd: (cb) => ipcRenderer.on('ai-chat-tool-end', (_e, d) => cb(d)),
   onAiConfirm: (cb) => ipcRenderer.on('ai-chat-confirm', (_e, payload) => cb(payload)),

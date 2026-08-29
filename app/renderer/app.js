@@ -525,7 +525,7 @@ async function executeReplaceByAI() {
     currentAssistantBubble = null;
     chatStatusEl.textContent = 'AI 正在执行替换…';
 
-    const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
+    const r = await runAiChat(chatHistory.slice(0, -1), prompt);
 
     chatStatusEl.textContent = '';
     const stillActive = runChatId === activeChatId;
@@ -2296,6 +2296,149 @@ let segOpen = false;
 let curSegText = '';
 let lastSegText = '';
 function resetRunSegments() { segOpen = false; curSegText = ''; lastSegText = ''; }
+
+/* ========== 流式输出平滑：逐字打字机 + 「思考中…」占位 ========== */
+// 本地模型每 ~800ms 才推 2~6 个字，整片直接刷出体感就是「一段一段蹦」。
+// 这里先把每片文本入队，再按「观测到的模型吐字速率」匀速逐字吐出，视觉上变成连续打字。
+const TYPE_FLUSH_AT = 300;   // 待吐字符超过这个数直接整段显示（云端非流式一次性回包）
+const TYPE_MIN_MS = 12;      // 每字最小间隔 ≈ 上限 83 字/秒
+const TYPE_MAX_MS = 220;     // 每字最大间隔 ≈ 下限 4.5 字/秒（放宽到能填满本地模型 ~800ms 的推送空档）
+let typeQueue = '';
+let typeRaf = 0;
+let typeAcc = 0;
+let typeLastFrame = 0;
+let typeLastChunkAt = null;  // null 表示本轮还没有上一片（不能用 0 当哨兵，首片时间戳可能就是 0）
+let typeRate = 0;            // 观测到的输入速率（字/秒，指数滑动平均）
+
+// 「思考中…」占位气泡：本地模型 prefill 往往要 10~15 秒，期间界面完全空白，
+// 用它给出即时反馈并显示已等待时长；首字到达或任务结束时撤销。
+let thinkingWrap = null;
+let thinkingTimer = 0;
+let thinkingStartAt = 0;
+let thinkingDeep = false;   // 模型进入深度思考（推 reasoning_content）后置真
+
+function renderThinkingLabel() {
+  const el = thinkingWrap && thinkingWrap.querySelector('.thinking-label');
+  if (!el) { if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = 0; } return; }
+  const s = ((Date.now() - thinkingStartAt) / 1000).toFixed(1);
+  el.textContent = `${thinkingDeep ? '深度思考中…' : '思考中…'} ${s}s`;
+}
+
+function startThinkingHint() {
+  clearThinkingHint();
+  thinkingDeep = false;
+  if (!chatMessagesEl) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-msg assistant';
+  const b = document.createElement('div');
+  b.className = 'chat-bubble chat-thinking';
+  const dots = document.createElement('span');
+  dots.className = 'thinking-dots';
+  for (let i = 0; i < 3; i++) dots.appendChild(document.createElement('i'));
+  const label = document.createElement('span');
+  label.className = 'thinking-label';
+  label.textContent = '思考中…';
+  b.append(dots, label);
+  wrap.appendChild(b);
+  chatMessagesEl.appendChild(wrap);
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  thinkingWrap = wrap;
+  thinkingStartAt = Date.now();
+  thinkingTimer = setInterval(renderThinkingLabel, 100);
+}
+
+function clearThinkingHint() {
+  if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = 0; }
+  if (thinkingWrap) { thinkingWrap.remove(); thinkingWrap = null; }
+  thinkingDeep = false;
+}
+
+function typeIntervalMs() {
+  // 还没测出速率时用偏慢的默认值：宁可开头略滞后，也不要第一片整段砸出来后又干等
+  let ms = typeRate > 0 ? 1000 / typeRate : 160;
+  ms = Math.min(TYPE_MAX_MS, Math.max(TYPE_MIN_MS, ms));
+  // 队列积压时提速，避免越拖越长
+  if (typeQueue.length > 60) ms = Math.max(TYPE_MIN_MS, ms / 2);
+  if (typeQueue.length > 150) ms = Math.max(TYPE_MIN_MS, ms / 4);
+  return ms;
+}
+
+function stepType(now) {
+  typeRaf = 0;
+  if (!typeQueue) return;
+  const dt = Math.min(now - typeLastFrame, 400); // 切后台/卡顿时不要一次吐太多
+  typeLastFrame = now;
+  typeAcc += dt;
+  const iv = typeIntervalMs();
+  let n = Math.floor(typeAcc / iv);
+  if (n <= 0) { typeRaf = requestAnimationFrame(stepType); return; }
+  typeAcc -= n * iv;
+  if (n > typeQueue.length) n = typeQueue.length;
+  const out = typeQueue.slice(0, n);
+  typeQueue = typeQueue.slice(n);
+  // 只在「本任务属于当前会话」时渲染；否则丢弃，避免把 A 会话的字写进 B 会话
+  if (!currentAssistantBubble) {
+    if (runningChatId && activeChatId !== runningChatId) { typeQueue = ''; return; }
+    currentAssistantBubble = addBubble('assistant', '');
+  }
+  currentAssistantBubble.textContent += out;
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  if (typeQueue) typeRaf = requestAnimationFrame(stepType);
+}
+
+function enqueueTypeText(t) {
+  if (!t) return;
+  const now = performance.now();
+  if (typeLastChunkAt !== null) {
+    const gap = now - typeLastChunkAt;
+    if (gap > 0 && gap < 5000) {
+      const inst = (t.length * 1000) / gap;        // 本片观测速率（字/秒）
+      typeRate = typeRate ? typeRate * 0.7 + inst * 0.3 : inst;
+    }
+  }
+  typeLastChunkAt = now;
+  typeQueue += t;
+  // 单片就很大 = 云端非流式整包返回（流式每片只有几个字），直接整段显示，不逐字卡住
+  // 队列积压过多同理，避免界面越拖越远
+  if (t.length > 60 || typeQueue.length > TYPE_FLUSH_AT) { flushTypeText(); return; }
+  if (!typeRaf) { typeLastFrame = performance.now(); typeRaf = requestAnimationFrame(stepType); }
+}
+
+function flushTypeText() {
+  if (typeRaf) { cancelAnimationFrame(typeRaf); typeRaf = 0; }
+  if (!typeQueue) return;
+  const out = typeQueue;
+  typeQueue = '';
+  typeAcc = 0;
+  // 只在「本任务属于当前会话」时渲染；否则丢弃，避免把 A 会话的字写进 B 会话
+  if (!currentAssistantBubble) {
+    if (runningChatId && activeChatId !== runningChatId) return;
+    currentAssistantBubble = addBubble('assistant', '');
+  }
+  currentAssistantBubble.textContent += out;
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+// 切换会话时彻底重置打字机状态（队列里没吐完的字直接丢弃，不做跨会话渲染）
+function resetTypewriter() {
+  if (typeRaf) { cancelAnimationFrame(typeRaf); typeRaf = 0; }
+  typeQueue = '';
+  typeAcc = 0;
+  typeLastChunkAt = null;
+  typeRate = 0;
+}
+
+// 统一包裹一次 AI 调用：开始前插「思考中」占位，结束（含异常）时把队列吐完并撤掉占位
+async function runAiChat(history, text, attachments) {
+  resetTypewriter();    // 每轮重新测速率，避免上一轮（可能是快速云端流）的估值带过来
+  startThinkingHint();
+  try {
+    return await window.api.aiChat(history, text, attachments);
+  } finally {
+    flushTypeText();
+    clearThinkingHint();
+  }
+}
 // 待发送附件（拖入对话框、尚未发送的文件）
 let pendingAttachments = [];
 let attachmentSeq = 0;
@@ -2442,6 +2585,8 @@ function switchToChat(chatId) {
   // 恢复消息到界面
   chatHistory.length = 0;
   sessionUsage = { input: 0, output: 0 };
+  resetTypewriter();   // 队列里没吐完的字属于上一个会话，直接丢弃不做跨会话渲染
+  clearThinkingHint(); // 占位气泡与计时器同样属于上一个会话
   currentAssistantBubble = null; // 进行中的气泡属于上一个会话，丢弃引用避免写串
   chatMessagesEl.innerHTML = '';
   todoPanel.classList.add('hidden');
@@ -3530,18 +3675,28 @@ function toolSummary(name, input) {
 window.api.onAiText((t) => {
   // 文本段累积（与界面解耦，切走会话后内容仍能正确落库）
   if (!segOpen) { segOpen = true; curSegText = ''; }
-  curSegText += (curSegText ? '\n' : '') + t;
+  // 流式下每片只是模型回复的一小段，必须直接拼接；插 \n 会让每片独占一行（气泡被压成竖条）
+  curSegText += t;
   lastSegText = curSegText;
   // 用户已切到其他会话：只累积内容，不往当前界面渲染（隔离）
   if (runningChatId && activeChatId !== runningChatId) return;
+  clearThinkingHint(); // 首字到达：撤掉「思考中…」占位
   if (!currentAssistantBubble) currentAssistantBubble = addBubble('assistant', '');
-  currentAssistantBubble.textContent += (currentAssistantBubble.textContent ? '\n' : '') + t;
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  enqueueTypeText(t);  // 入队后由打字机匀速吐出，而不是整片一次刷出
+});
+
+// 模型进入深度思考（推 reasoning_content）：占位立刻切成「深度思考中…」
+window.api.onAiReasoning(() => {
+  if (runningChatId && activeChatId !== runningChatId) return;
+  if (!thinkingWrap || thinkingDeep) return;
+  thinkingDeep = true;
+  renderThinkingLabel();
 });
 
 window.api.onAiToolStart(({ name, input }) => {
   segOpen = false; // 工具调用打断当前文本段
   if (runningChatId && activeChatId !== runningChatId) return;
+  flushTypeText(); // 先把队列里没吐完的字补上，否则下面判空会把有内容的气泡误删
   // 助手只调用工具没出文字时，把空文字气泡清掉，避免留下空条
   if (currentAssistantBubble && !currentAssistantBubble.textContent.trim()) {
     const emptyWrap = currentAssistantBubble.closest('.chat-msg');
@@ -4156,7 +4311,7 @@ async function sendChat() {
   }
 
   // 传完整历史（含 tool_calls/tool）；agent loop 会正确清洗；本轮附件随附发送
-  const r = await window.api.aiChat(chatHistory.slice(0, -1), augmentedText, attachmentsMeta);
+  const r = await runAiChat(chatHistory.slice(0, -1), augmentedText, attachmentsMeta);
 
   chatStatusEl.textContent = '';
   const stillActive = runChatId === activeChatId; // 运行期间用户可能切去了别的会话
@@ -4714,7 +4869,7 @@ document.getElementById('auto-start').addEventListener('click', async () => {
   currentAssistantBubble = null;
   chatStatusEl.textContent = 'AI 正在按模版与规范编写文件…';
 
-  const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
+  const r = await runAiChat(chatHistory.slice(0, -1), prompt);
 
   chatStatusEl.textContent = '';
   const stillActive = runChatId === activeChatId;
@@ -4876,7 +5031,7 @@ document.getElementById('auto-ai-convert').addEventListener('click', async () =>
   currentAssistantBubble = null;
   chatStatusEl.textContent = 'AI 正在核对文件摆放完整性…';
 
-  const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
+  const r = await runAiChat(chatHistory.slice(0, -1), prompt);
 
   chatStatusEl.textContent = '';
   const stillActive = runChatId === activeChatId;
@@ -5142,7 +5297,7 @@ document.getElementById('ppt-ai-save').addEventListener('click', async () => {
   currentAssistantBubble = null;
   chatStatusEl.textContent = 'AI 正在了解你的 PPT 修改需求…';
 
-  const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
+  const r = await runAiChat(chatHistory.slice(0, -1), prompt);
 
   chatStatusEl.textContent = '';
   const stillActive = runChatId === activeChatId;
@@ -5588,7 +5743,7 @@ async function aiConvertWithSkill(skillName) {
   pushToChat(runChatId, { role: 'user', content: prompt });
   currentAssistantBubble = null;
   chatStatusEl.textContent = 'AI 正在转换文件…';
-  const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
+  const r = await runAiChat(chatHistory.slice(0, -1), prompt);
   chatStatusEl.textContent = '';
   const stillActive = runChatId === activeChatId;
   if (!r.ok) {
@@ -5635,7 +5790,7 @@ document.getElementById('conv-ai-start').addEventListener('click', async () => {
   pushToChat(runChatId, { role: 'user', content: prompt });
   currentAssistantBubble = null;
   chatStatusEl.textContent = 'AI 正在转换文件…';
-  const r = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
+  const r = await runAiChat(chatHistory.slice(0, -1), prompt);
   chatStatusEl.textContent = '';
   const stillActive = runChatId === activeChatId;
   if (!r.ok) {
@@ -5826,7 +5981,7 @@ document.getElementById('wm-ai-analyze').addEventListener('click', async () => {
     pushToChat(runChatId, { role: 'user', content: prompt });
     currentAssistantBubble = null;
     chatStatusEl.textContent = 'AI 正在分析水印…';
-    const r2 = await window.api.aiChat(chatHistory.slice(0, -1), prompt);
+    const r2 = await runAiChat(chatHistory.slice(0, -1), prompt);
     chatStatusEl.textContent = '';
     const stillActive = runChatId === activeChatId;
     if (!r2.ok) {
@@ -5914,7 +6069,7 @@ document.getElementById('wm-ai-remove').addEventListener('click', async () => {
   pushToChat(runChatId, { role: 'user', content: full });
   currentAssistantBubble = null;
   chatStatusEl.textContent = 'AI 正在去水印…';
-  const r = await window.api.aiChat(chatHistory.slice(0, -1), full);
+  const r = await runAiChat(chatHistory.slice(0, -1), full);
   chatStatusEl.textContent = '';
   const stillActive = runChatId === activeChatId;
   if (!r.ok) {

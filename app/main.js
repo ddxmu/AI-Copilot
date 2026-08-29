@@ -2114,6 +2114,8 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
       chatId: activeChatId,
       memoryEnabled: aiConfig.getMemoryEnabled(),
       onText: (t) => wc.send('ai-chat-text', t),
+      // 深度思考（推理模型的思维链）只通知一次，用于把「思考中…」切成「深度思考中…」
+      onReasoning: () => wc.send('ai-chat-reasoning'),
       onToolStart: (d) => wc.send('ai-chat-tool-start', d),
       onToolEnd: (d) => wc.send('ai-chat-tool-end', d),
       onConfirm: (payload) => new Promise((resolve) => {
