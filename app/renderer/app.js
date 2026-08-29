@@ -632,6 +632,11 @@ const PROVIDERS = [
   { id: 'qwen', name: '通义千问（Qwen）', type: 'openai', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
   { id: 'doubao', name: '豆包（火山引擎）', type: 'openai', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
   { id: 'custom', name: '自定义…', type: 'openai', baseUrl: '' },
+  // —— 本地模型（本机运行的推理服务，OpenAI 兼容，无需 API Key；可独立配置上下文长度等）——
+  { id: 'ollama', name: '本地 · Ollama', type: 'openai', baseUrl: 'http://localhost:11434/v1', local: true },
+  { id: 'omlx', name: '本地 · oMLX（Apple 芯片）', type: 'openai', baseUrl: 'http://localhost:8000/v1', local: true },
+  { id: 'lmstudio', name: '本地 · LM Studio', type: 'openai', baseUrl: 'http://localhost:1234/v1', local: true },
+  { id: 'llamacpp', name: '本地 · llama.cpp', type: 'openai', baseUrl: 'http://localhost:8080/v1', local: true },
 ];
 
 // 已知的模型价格（美元 / 百万 token，input + output），仅作展示参考
@@ -664,6 +669,22 @@ const keyHint = document.getElementById('key-hint');
 const modelSel = document.getElementById('p-model');
 const fetchStatusEl = document.getElementById('fetch-status');
 const modelPriceEl = document.getElementById('model-price');
+// 本地模型专属参数区
+const localSettingsEl = document.getElementById('local-settings');
+const apiKeyCellEl = document.getElementById('p-apikey-cell');
+const ctxLenInput = document.getElementById('p-ctxlen');
+const maxTokensInput = document.getElementById('p-maxtokens');
+const temperatureInput = document.getElementById('p-temperature');
+
+// 当前选中的提供商定义
+function currentProvider() {
+  return PROVIDERS.find((x) => x.id === providerSel.value);
+}
+// 本地模型无需 API Key，改由「本地模型参数」区提供上下文长度等
+function isLocalProvider() {
+  const p = currentProvider();
+  return !!(p && p.local);
+}
 
 // 初始化厂商下拉
 PROVIDERS.forEach((p) => {
@@ -678,6 +699,10 @@ providerSel.addEventListener('change', () => {
   baseUrlInput.value = p.baseUrl;
   baseUrlInput.readOnly = false;
   baseUrlInput.placeholder = p.id === 'custom' ? '填写你的 API 地址，如 https://xxx.com/v1' : p.baseUrl;
+  // 本地模型：无需 API Key，改由「本地模型参数」区提供上下文长度等
+  const local = !!p.local;
+  localSettingsEl.classList.toggle('hidden', !local);
+  apiKeyCellEl.classList.toggle('hidden', local);
 });
 
 function setFetchStatus(text, cls) {
@@ -687,7 +712,7 @@ function setFetchStatus(text, cls) {
 
 function currentProfileDraft() {
   const p = PROVIDERS.find((x) => x.id === providerSel.value);
-  return {
+  const draft = {
     id: editingId || 'p' + Date.now(),
     provider: p.id,
     providerName: p.name,
@@ -696,13 +721,24 @@ function currentProfileDraft() {
     apiKey: apiKeyInput.value || cachedKey,
     model: modelSel.value,
   };
+  // 本地模型：额外保存上下文长度 / 最大输出 / 温度（留空 = 用服务端默认）
+  if (p.local) {
+    draft.local = true;
+    const ctx = parseInt(ctxLenInput.value, 10);
+    const maxTok = parseInt(maxTokensInput.value, 10);
+    const temp = parseFloat(temperatureInput.value);
+    draft.contextLength = Number.isFinite(ctx) && ctx > 0 ? ctx : null;
+    draft.maxTokens = Number.isFinite(maxTok) && maxTok > 0 ? maxTok : null;
+    draft.temperature = Number.isFinite(temp) ? temp : null;
+  }
+  return draft;
 }
 
 // 拉取模型列表
 document.getElementById('btn-fetch-models').addEventListener('click', async () => {
   const draft = currentProfileDraft();
   if (!draft.baseUrl) { setFetchStatus('请先填写模型地址', 'err'); return; }
-  if (!draft.apiKey) { setFetchStatus('请先填写 API Key', 'err'); return; }
+  if (!isLocalProvider() && !draft.apiKey) { setFetchStatus('请先填写 API Key', 'err'); return; }
   setFetchStatus('正在拉取模型列表…', 'loading');
   const r = await window.api.aiFetchModels(draft);
   if (!r.ok) { setFetchStatus('拉取失败：' + r.error, 'err'); return; }
@@ -741,7 +777,7 @@ function updatePrice() {
 document.getElementById('btn-save-profile').addEventListener('click', async () => {
   const draft = currentProfileDraft();
   if (!draft.baseUrl) { setFetchStatus('模型地址不能为空', 'err'); return; }
-  if (!draft.apiKey) { setFetchStatus('API Key 不能为空', 'err'); return; }
+  if (!isLocalProvider() && !draft.apiKey) { setFetchStatus('API Key 不能为空', 'err'); return; }
   const state = await window.api.aiSaveProfile(draft);
   aiState.profiles = state.profiles;
   aiState.activeId = state.activeId;
@@ -770,6 +806,10 @@ function openEditor(profile) {
   } else {
     modelSel.innerHTML = '<option value="">（先拉取模型）</option>';
   }
+  // 本地模型专属参数回填（temperature 允许为 0，故用 typeof 判断）
+  ctxLenInput.value = profile && profile.contextLength ? String(profile.contextLength) : '';
+  maxTokensInput.value = profile && profile.maxTokens ? String(profile.maxTokens) : '';
+  temperatureInput.value = profile && typeof profile.temperature === 'number' ? String(profile.temperature) : '';
   apiKeyInput.value = '';
   keyHint.classList.toggle('hidden', !profile);
   setFetchStatus('', '');

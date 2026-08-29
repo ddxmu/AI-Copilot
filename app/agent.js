@@ -119,8 +119,13 @@ function getContextWindow(model) {
 }
 
 // 压缩阈值 = 上下文窗口 × 75%（留 25% 给输出和系统提示）
-function getCompactThreshold(model) {
-  return Math.floor(getContextWindow(model) * 0.75);
+// explicitContextLength：用户在「本地模型参数」里显式填的上下文长度，优先级最高
+// （本地模型名无法可靠推断上下文，靠模型名猜会得出 128K 之类的错值，导致永不压缩、提示词撑爆）
+function getCompactThreshold(model, explicitContextLength) {
+  const win = Number.isFinite(explicitContextLength) && explicitContextLength > 0
+    ? explicitContextLength
+    : getContextWindow(model);
+  return Math.floor(win * 0.75);
 }
 
 function getExt(p) {
@@ -1544,7 +1549,91 @@ function buildToolList(allowedTools, isSubagent, webAccess, mcpEnabled = true, m
   return local.concat(mcpTools);
 }
 
-async function callApi(profile, apiType, system, messages, toolList, signal = null) {
+// 流式下部分本地服务端不返回 usage（prompt_tokens），会让压缩阈值失效、提示词重新撑爆。
+// 用请求体规模粗估 input token 兜底：宁可高估（提前压缩）也不要低估。
+function estimateInputTokens(system, messages, toolDefs) {
+  let chars = String(system || '').length;
+  for (const m of messages || []) {
+    const c = m && m.content;
+    chars += typeof c === 'string' ? c.length : JSON.stringify(c || '').length;
+  }
+  chars += JSON.stringify(toolDefs || []).length;
+  return Math.ceil(chars / 2.5);
+}
+
+// SSE 流式请求（仅本地模型使用）。逐段解析 delta：文本走 onDelta 实时推送，
+// tool_calls 按 index 累积（arguments 是跨多个 chunk 拼出来的字符串）。
+function openaiStreamRequest(urlStr, headers, body, signal, onDelta, timeoutMs = 300000) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlStr);
+    const lib = url.protocol === 'http:' ? http : https;
+    const payload = JSON.stringify({ ...body, stream: true, stream_options: { include_usage: true } });
+    const req = lib.request(
+      {
+        method: 'POST',
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'http:' ? 80 : 443),
+        path: url.pathname + url.search,
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload), 'Accept-Encoding': 'identity', ...headers },
+        timeout: timeoutMs,
+        signal,
+      },
+      (res) => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          let buf = '';
+          res.on('data', (c) => { buf += c; });
+          res.on('end', () => reject(new Error(`HTTP ${res.statusCode}: ${buf.slice(0, 300)}`)));
+          return;
+        }
+        let buffer = '';
+        let content = '';
+        const toolCalls = [];
+        let usage = null;
+        let finishReason = null;
+        res.on('data', (chunk) => {
+          buffer += chunk.toString('utf8');
+          let idx;
+          while ((idx = buffer.indexOf('\n')) >= 0) {
+            const line = buffer.slice(0, idx).trim();
+            buffer = buffer.slice(idx + 1);
+            if (!line || !line.startsWith('data:')) continue;
+            const data = line.slice(5).trim();
+            if (data === '[DONE]') continue;
+            let json;
+            try { json = JSON.parse(data); } catch (e) { continue; }
+            if (json && json.usage) usage = json.usage;
+            const choice = json && json.choices && json.choices[0];
+            if (!choice) continue;
+            if (choice.finish_reason) finishReason = choice.finish_reason;
+            const delta = choice.delta || {};
+            if (typeof delta.content === 'string' && delta.content) {
+              content += delta.content;
+              if (onDelta) { try { onDelta(delta.content); } catch (e) { /* 推送失败不影响主流程 */ } }
+            }
+            if (Array.isArray(delta.tool_calls)) {
+              for (const tc of delta.tool_calls) {
+                const i = typeof tc.index === 'number' ? tc.index : 0;
+                if (!toolCalls[i]) toolCalls[i] = { id: '', type: 'function', function: { name: '', arguments: '' } };
+                if (tc.id) toolCalls[i].id = tc.id;
+                if (tc.function) {
+                  if (tc.function.name) toolCalls[i].function.name += tc.function.name;
+                  if (tc.function.arguments) toolCalls[i].function.arguments += tc.function.arguments;
+                }
+              }
+            }
+          }
+        });
+        res.on('end', () => resolve({ content, toolCalls: toolCalls.filter(Boolean), usage, finishReason }));
+      }
+    );
+    req.on('timeout', () => req.destroy(new Error('流式请求超时')));
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+async function callApi(profile, apiType, system, messages, toolList, signal = null, onDelta = null) {
   const base = profile.baseUrl.replace(/\/+$/, '');
   if (apiType === 'anthropic') {
     const msgUrl = /\/v\d+(?:\.\d+)?$/.test(base) ? `${base}/messages` : `${base}/v1/messages`;
@@ -1570,10 +1659,55 @@ async function callApi(profile, apiType, system, messages, toolList, signal = nu
   // openai 兼容
   const toolDefs = toolList.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.schema } }));
   const apiMessages = [{ role: 'system', content: system }, ...messages];
+  const body = { model: profile.model, messages: apiMessages, tools: toolDefs.length ? toolDefs : undefined, tool_choice: 'auto' };
+  // 本地模型（Ollama / oMLX / LM Studio / llama.cpp）常把输出上限默认为「不限」，
+  // 一旦模型不吐 EOS 就会一直生成、界面长期无响应。故本地配置未填时兜底 2048。
+  const isLocal = profile.local === true;
+  const maxTok = Number.isFinite(profile.maxTokens) && profile.maxTokens > 0
+    ? profile.maxTokens
+    : (isLocal ? 2048 : null);
+  if (maxTok) body.max_tokens = maxTok;
+  if (typeof profile.temperature === 'number') body.temperature = profile.temperature;
+  // 本地服务通常不需要鉴权，无 Key 时不发 Authorization 头
+  const headers = profile.apiKey ? { Authorization: `Bearer ${profile.apiKey}` } : {};
+
+  // 本地模型走 SSE 流式：边生成边显示。非流式要等全部生成完才出字，体感就是「一直转、不显示回复」。
+  // 这里任何异常（服务端不支持 / 超时 / 解析失败）都静默回退到下面的非流式，不会比现状更差。
+  if (isLocal && typeof onDelta === 'function') {
+    try {
+      const s = await openaiStreamRequest(`${base}/chat/completions`, headers, body, signal, onDelta);
+      const raw = s.toolCalls || [];
+      const parsed = raw.map((tc) => {
+        let input = {};
+        try { input = JSON.parse(tc.function.arguments || '{}'); } catch (e) {}
+        return { id: tc.id || ('call_' + Math.random().toString(36).slice(2, 10)), name: tc.function.name, input };
+      });
+      const estInput = estimateInputTokens(system, apiMessages, toolDefs);
+      return {
+        text: s.content || '',
+        toolCalls: parsed,
+        // 部分本地服务端流式不返回 usage，缺失时用估算值，保证压缩阈值仍生效
+        usage: {
+          input: s.usage && s.usage.prompt_tokens > 0 ? s.usage.prompt_tokens : estInput,
+          output: s.usage && s.usage.completion_tokens > 0 ? s.usage.completion_tokens : 0,
+        },
+        assistantMessage: {
+          role: 'assistant',
+          content: s.content || '',
+          ...(raw.length ? { tool_calls: raw } : {}),
+        },
+        openaiStyle: true,
+        streamed: true,
+      };
+    } catch (e) {
+      // 回退非流式
+    }
+  }
+
   const resp = await httpPostJsonWithRetry(
     `${base}/chat/completions`,
-    { Authorization: `Bearer ${profile.apiKey}` },
-    { model: profile.model, messages: apiMessages, tools: toolDefs.length ? toolDefs : undefined, tool_choice: 'auto' },
+    headers,
+    body,
     undefined, undefined, signal
   );
   const choice = resp.choices[0].message;
@@ -1836,7 +1970,7 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   let finalText = '';
   let compacted = false;
   // 根据当前模型动态计算压缩阈值（模型支持 1M 就用 1M，2M 就用 2M）
-  const compactThreshold = getCompactThreshold(profile.model);
+  const compactThreshold = getCompactThreshold(profile.model, profile.contextLength);
 
   for (let turn = 0; turn < maxTurns; turn++) {
     // 需求 #1：停止后不再发起任何模型请求、不再执行工具、不再进入下一轮
@@ -1860,8 +1994,12 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
 
     // 调用前清洗历史，确保 tool / tool_calls 配对（防压缩导致的 HTTP 400）
     let r;
+    let streamedText = ''; // 本轮流式已推送的文本（用于避免回退时重复显示）
     try {
-      r = await callApi(profile, apiType, system, sanitizeMessages(messages, apiType), toolList, ac.signal);
+      r = await callApi(profile, apiType, system, sanitizeMessages(messages, apiType), toolList, ac.signal, (t) => {
+        streamedText += t;
+        ctx.emit('text', t);
+      });
     } catch (e) {
       // 停止导致的请求中断（AbortError）或已请求停止 → 直接结束，不算异常
       if (_stopRequested || e.name === 'AbortError') {
@@ -1871,7 +2009,15 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
       throw e;
     }
     if (r.usage) { totalUsage.input += r.usage.input; totalUsage.output += r.usage.output; }
-    if (r.text) { finalText = r.text; ctx.emit('text', r.text); }
+    if (r.streamed) {
+      // 流式已在生成过程中逐段推送过，这里只补最终文本，不重复 emit
+      if (streamedText) finalText = streamedText;
+      else if (r.text) finalText = r.text;
+    } else if (r.text) {
+      finalText = r.text;
+      // 流式中途失败回退到非流式时可能已推过一部分，避免重复显示
+      if (!streamedText) ctx.emit('text', r.text);
+    }
 
     // 每次调用后都记录 assistant 的回复（纯文本回答也必须落库，否则返回的 messages 里只有用户问题、会话历史缺 AI 回答，切回会话后看不到）
     messages.push(r.assistantMessage);

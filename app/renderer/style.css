@@ -1721,6 +1721,21 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   display: none;
 }
 
+/* 本地模型专属参数区（选中「本地 ·」提供商时显示） */
+.local-settings {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--sidebar-hover);
+}
+.local-settings-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
 .apikey-row {
   display: flex;
   align-items: center;

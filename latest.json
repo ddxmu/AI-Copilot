@@ -1,16 +1,16 @@
 {
-  "version": "0.11.0",
-  "notes": "### 1. 右侧「工作完成」面板增强：在线预览 + 文件信息 + 点击打开\n\n- 任务刚完成时，在右侧「工作完成」里内联显示「在线预览」：图片出缩略图、文本/代码/Markdown 出前几行片段、其它文件出类型图标。\n- App 重新打开后（记录持久化到本地），该条显示「文件信息」（文件名、大小、修改时间、完整路径）；文件若已移动/删除会标红提示。\n- 点击卡片或「打开」按钮用系统默认程序打开文件；另保留「在访达显示」定位入口。",
-  "pubDate": "2026-08-28T19:18:01+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.0/AI.Copilot-0.11.0-arm64.dmg",
-  "sha256": "4be0525abbf495a962f6ac6881bba384b717f74792ae63a7d6a5e151fca56a5f",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.0/AI.Copilot-0.11.0.zip",
-  "patchSha256": "870054839b1efe2da2f9c1e5087290eec946356ed7e8f8247fdd4d7eba13835c",
+  "version": "0.11.1",
+  "notes": "### 1. AI 配置新增「本地模型」提供商\n\n- 新增配置的下拉里支持 **Ollama / oMLX / LM Studio / llama.cpp** 四种本地推理服务，选中后自动填好默认地址（分别为 11434 / 8000 / 1234 / 8080 端口的 `/v1`），无需 API Key 即可保存与拉取模型。\n- 本地模型拥有**独立参数区**：上下文长度、最大输出 token、温度。其中上下文长度直接决定对话压缩时机，解决了本地模型被误判成 128K 上下文、提示词撑爆却永不压缩的问题。\n- 以上改动只作用于本地模型配置，云端模型配置的请求参数与鉴权方式保持原样。\n\n### 2. 本地模型改为流式输出\n\n- 本地模型的回复改为边生成边显示，不再需要等全部生成完才出字（此前表现为长时间转圈、界面无回复）。\n- 流式异常时会自动回退到原来的整段返回方式，不会比之前更差。",
+  "pubDate": "2026-08-29T11:50:21+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.1/AI.Copilot-0.11.1-arm64.dmg",
+  "sha256": "f87d29bfb5bde9c8c8c64cf12f933e9413b460bb73f683eb80531c1331c472a0",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.1/AI.Copilot-0.11.1.zip",
+  "patchSha256": "e66d21462b560111e1ffb52b42eabc7f32bda652bad1ab3300796ff853463fd3",
   "deltas": [
     {
-      "from": "0.10.30",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.0/AI.Copilot-0.11.0.zip",
-      "sha256": "870054839b1efe2da2f9c1e5087290eec946356ed7e8f8247fdd4d7eba13835c"
+      "from": "0.11.0",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.1/AI.Copilot-0.11.1.zip",
+      "sha256": "e66d21462b560111e1ffb52b42eabc7f32bda652bad1ab3300796ff853463fd3"
     }
   ]
 }

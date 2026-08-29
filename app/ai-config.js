@@ -502,12 +502,16 @@ function modelsUrlCandidates(profile) {
 async function fetchModels(profile) {
   const base = (profile.baseUrl || '').replace(/\/+$/, '');
   if (!base) throw new Error('请先填写 API 地址');
-  if (!profile.apiKey) throw new Error('请先填写 API Key');
+  // 本地模型（Ollama / oMLX / LM Studio / llama.cpp）本机运行，不需要 API Key
+  if (!profile.local && !profile.apiKey) throw new Error('请先填写 API Key');
 
-  const headers =
-    profile.type === 'anthropic'
-      ? { 'x-api-key': profile.apiKey, 'anthropic-version': '2023-06-01' }
-      : { Authorization: `Bearer ${profile.apiKey}` };
+  let headers;
+  if (profile.type === 'anthropic') {
+    headers = { 'anthropic-version': '2023-06-01' };
+    if (profile.apiKey) headers['x-api-key'] = profile.apiKey;
+  } else {
+    headers = profile.apiKey ? { Authorization: `Bearer ${profile.apiKey}` } : {};
+  }
 
   const candidates = modelsUrlCandidates(profile);
   let lastErr = null;

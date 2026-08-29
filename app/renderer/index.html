@@ -1000,7 +1000,7 @@
                         <label>模型地址</label>
                         <input id="p-baseurl" type="text" placeholder="https://api.deepseek.com/v1" />
                       </div>
-                      <div class="form-cell">
+                      <div class="form-cell" id="p-apikey-cell">
                         <label>API Key</label>
                         <input id="p-apikey" type="password" placeholder="sk-..." />
                         <div id="key-hint" class="field-hint hidden">已保存，留空则保留原 Key</div>
@@ -1010,6 +1010,28 @@
                         <select id="p-model">
                           <option value="">（先拉取模型）</option>
                         </select>
+                      </div>
+                    </div>
+
+                    <!-- 本地模型专属参数（仅在选中「本地 ·」提供商时显示） -->
+                    <div id="local-settings" class="local-settings hidden">
+                      <div class="local-settings-title">本地模型参数</div>
+                      <div class="form-grid">
+                        <div class="form-cell">
+                          <label>上下文长度（token）</label>
+                          <input id="p-ctxlen" type="number" min="1024" step="1024" placeholder="8192" />
+                          <div class="field-hint">须与本地服务端的上下文（Ollama 的 num_ctx / llama.cpp 的 -c）保持一致。本地跑智能体任务建议 16384 以上——系统提示与工具定义本身就要占数千 token。</div>
+                        </div>
+                        <div class="form-cell">
+                          <label>最大输出 token</label>
+                          <input id="p-maxtokens" type="number" min="256" step="256" placeholder="2048" />
+                          <div class="field-hint">单次回复的生成上限。留空时本地模型自动按 2048 兜底，避免部分服务端默认「不限」导致长时间无响应。</div>
+                        </div>
+                        <div class="form-cell">
+                          <label>温度</label>
+                          <input id="p-temperature" type="number" min="0" max="2" step="0.1" placeholder="留空 = 服务端默认" />
+                          <div class="field-hint">0 更确定，1 更有创造性。需要调用工具时建议 0 ~ 0.3。</div>
+                        </div>
                       </div>
                     </div>
 
