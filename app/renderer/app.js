@@ -2316,6 +2316,7 @@ let thinkingWrap = null;
 let thinkingTimer = 0;
 let thinkingStartAt = 0;
 let thinkingDeep = false;   // 模型进入深度思考（推 reasoning_content）后置真
+let runReasoningStarted = false; // 本轮运行是否已开始推 reasoning_content（切回正在跑的会话时恢复占位用）
 
 function renderThinkingLabel() {
   const el = thinkingWrap && thinkingWrap.querySelector('.thinking-label');
@@ -2326,7 +2327,7 @@ function renderThinkingLabel() {
 
 function startThinkingHint() {
   clearThinkingHint();
-  thinkingDeep = false;
+  // 注意：不在这里重置 thinkingDeep，方便恢复占位时提前设为「深度思考中」
   if (!chatMessagesEl) return;
   const wrap = document.createElement('div');
   wrap.className = 'chat-msg assistant';
@@ -2345,6 +2346,7 @@ function startThinkingHint() {
   thinkingWrap = wrap;
   thinkingStartAt = Date.now();
   thinkingTimer = setInterval(renderThinkingLabel, 100);
+  renderThinkingLabel(); // 初始化一次，避免等 100ms 才刷出「深度思考中」
 }
 
 function clearThinkingHint() {
@@ -2430,7 +2432,9 @@ function resetTypewriter() {
 
 // 统一包裹一次 AI 调用：开始前插「思考中」占位，结束（含异常）时把队列吐完并撤掉占位
 async function runAiChat(history, text, attachments) {
-  resetTypewriter();    // 每轮重新测速率，避免上一轮（可能是快速云端流）的估值带过来
+  resetTypewriter();         // 每轮重新测速率，避免上一轮（可能是快速云端流）的估值带过来
+  runReasoningStarted = false; // 新一轮运行，深度思考状态重置
+  thinkingDeep = false;       // 占位标签也重置
   startThinkingHint();
   try {
     return await window.api.aiChat(history, text, attachments);
@@ -2596,6 +2600,15 @@ function switchToChat(chatId) {
       chatHistory.push(m);
       renderHistoryMessage(m);
     });
+  }
+  // 如果切回正在运行 AI 的会话，恢复进行中的占位或已吐出的文字
+  if (runningChatId && chatId === runningChatId && sending) {
+    if (lastSegText && lastSegText.trim()) {
+      currentAssistantBubble = addBubble('assistant', lastSegText);
+    } else {
+      thinkingDeep = runReasoningStarted;
+      startThinkingHint();
+    }
   }
   removeEmptyAssistantBubbles();
   renderChatList();
@@ -3689,6 +3702,7 @@ window.api.onAiText((t) => {
 window.api.onAiReasoning(() => {
   if (runningChatId && activeChatId !== runningChatId) return;
   if (!thinkingWrap || thinkingDeep) return;
+  runReasoningStarted = true;   // 本轮运行已进入深度思考（切回时恢复标签用）
   thinkingDeep = true;
   renderThinkingLabel();
 });
