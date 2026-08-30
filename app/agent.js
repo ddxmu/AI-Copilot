@@ -624,10 +624,111 @@ function loadExternalSkills(skillsDir) {
   return SKILLS;
 }
 
+/* ================= 技能辅助：任务预检 + 自动激活 ================= */
+// 任务触发词 → 候选技能名。用户用自然语言描述任务时，靠这些词把相关技能「点亮」：
+//  - 已装技能：把其操作手册（body）注入系统提示，弱模型无需自己调 skill 工具就有指引；
+//  - 未装推荐技能：runAgent 入口据此主动弹窗授权安装。
+const SKILL_TRIGGERS = {
+  'pdf': ['pdf-toolkit', 'pdf-to-office', 'pdf-compress', 'pdf-merge-split', 'pdf-watermark-remover', 'document-converter'],
+  '去水印': ['pdf-watermark-remover'],
+  '水印': ['pdf-watermark-remover'],
+  '浏览器': ['claude-in-chrome', 'browser-automation'],
+  '表单': ['browser-automation'],
+  '填写': ['browser-automation'],
+  '自动作答': ['browser-automation', 'claude-in-chrome'],
+  '问卷': ['browser-automation', 'claude-in-chrome'],
+  '润色': ['polish-document'],
+  '完善文档': ['polish-document'],
+  '排版': ['reformat-document'],
+  '整理文件': ['file-organizer-skill'],
+  '整理文件夹': ['file-organizer-skill'],
+  '重命名': ['batch-rename-company', 'file-organizer-skill'],
+  '格式转换': ['format-convert', 'document-converter', 'system-data-intelligence'],
+  '转换': ['format-convert', 'document-converter'],
+  '合并': ['pdf-merge-split', 'system-data-intelligence'],
+  '拆分': ['pdf-merge-split'],
+  '压缩': ['pdf-compress'],
+  '批量替换': ['system-data-intelligence', 'batch-rename-company'],
+  '公司名': ['batch-rename-company'],
+  '实体替换': ['batch-rename-company'],
+  '概览文件夹': ['summarize-folder'],
+  '看图': ['view-image'],
+  '查看图片': ['view-image'],
+  '截图': ['view-image'],
+  '终端': ['terminal-ops'],
+  '命令': ['terminal-ops'],
+  '代码审查': ['simplify'],
+  '审查': ['simplify'],
+  '清理': ['simplify'],
+  '文档处理': ['system-data-intelligence', 'document-converter'],
+};
+
+// 已装技能自动激活：把与当前任务相关的已装技能操作手册注入系统提示
+function buildTaskSkillBoost(userText) {
+  if (!userText || typeof userText !== 'string') return '';
+  const t = userText.toLowerCase();
+  const names = new Set();
+  for (const [trig, list] of Object.entries(SKILL_TRIGGERS)) {
+    if (t.includes(trig.toLowerCase())) list.forEach((n) => { if (SKILLS[n]) names.add(n); });
+  }
+  if (!names.size) return '';
+  const blocks = [];
+  for (const n of Array.from(names).slice(0, 3)) {
+    const def = SKILLS[n];
+    const body = (def.body || '').trim().slice(0, 1400);
+    if (body) blocks.push(`### ${n}\n${body}`);
+  }
+  if (!blocks.length) return '';
+  return `\n\n## 本任务相关技能操作指引（优先按以下手册执行，无需再调用 skill 工具）\n` + blocks.join('\n\n');
+}
+
+// 未装推荐技能预检：返回首个与任务相关且尚未安装的推荐技能名（没有则 null）
+function pickRecommendedSkillForTask(userText) {
+  if (!userText || typeof userText !== 'string') return null;
+  const t = userText.toLowerCase();
+  for (const [trig, list] of Object.entries(SKILL_TRIGGERS)) {
+    if (t.includes(trig.toLowerCase())) {
+      for (const n of list) {
+        if (RECOMMENDED_SKILLS[n] && !SKILLS[n]) return n;
+      }
+    }
+  }
+  return null;
+}
+
+// 本次会话内用户已拒绝安装的推荐技能（避免反复弹窗）
+const skillRecommendDismissed = new Set();
+
 /* ================= 工具注册表 ================= */
 // 每个工具：{ description, schema, readOnly, permission, run(args, ctx) }
 // permission: 'allow' 直接执行 | 'ask' 需用户确认
 // ctx: { rules, rulesChanged, confirm(desc)->Promise<bool>, todos, setTodos, emit, profile, depth }
+
+// 安装一个推荐技能的实际动作（授权由调用方负责，install_skill 工具与 runAgent 预检共用）
+async function installSkillByName(name, ctx) {
+  const def = RECOMMENDED_SKILLS[name];
+  if (!def) return { ok: false, error: `未知推荐技能「${name}」` };
+  if (SKILLS[name]) return { ok: true };
+  if (!ctx || !ctx.skillsDir) return { ok: false, error: '未配置技能目录，无法安装' };
+  if (def.repo) {
+    if (ctx.installSkillFromUrl) {
+      try {
+        const r = await ctx.installSkillFromUrl(def.repo, def.branch || 'main', name);
+        if (r && r.ok) { if (def.prerequisites) SKILL_PREREQS[name] = def.prerequisites; return { ok: true }; }
+        return { ok: false, error: (r && r.error) || '安装失败（未知原因）' };
+      } catch (e) { return { ok: false, error: e.message }; }
+    }
+    return { ok: false, error: '当前运行环境不支持从仓库安装，请到「AI 设置 → 智能体技能 → 推荐技能」中点击「安装」。' };
+  }
+  try {
+    const dir = path.join(ctx.skillsDir, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const md = `---\nname: ${name}\ndescription: ${def.description}\n---\n\n${def.body}`;
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), md, 'utf8');
+    if (def.prerequisites) SKILL_PREREQS[name] = def.prerequisites;
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
 
 const tools = {
 
@@ -1149,39 +1250,15 @@ const tools = {
       const def = RECOMMENDED_SKILLS[skill];
       if (!def) return `错误：未知推荐技能「${skill}」。可用：${Object.keys(RECOMMENDED_SKILLS).join(', ')}`;
       if (SKILLS[skill]) return `技能「${skill}」已安装，可直接用 skill 工具调用。`;
-      // 请求用户授权安装
-      if (ctx.onInstallSkill) {
-        const approved = await ctx.onInstallSkill({ name: skill, description: def.description, category: def.category });
-        if (!approved) return `用户拒绝了安装技能「${skill}」。请尝试其他方式完成任务。`;
-      }
-      // 安装技能：写入 SKILL.md 并重新加载
-      if (ctx.skillsDir) {
-        let ok = false, errMsg = '';
-        if (def.repo) {
-          // 仓库型技能：从 GitHub 下载（需主进程支持 installSkillFromUrl）
-          if (ctx.installSkillFromUrl) {
-            try {
-              const r = await ctx.installSkillFromUrl(def.repo, def.branch || 'main', skill);
-              if (r && r.ok) ok = true; else errMsg = (r && r.error) || '安装失败（未知原因）';
-            } catch (e) { errMsg = e.message; }
-          } else {
-            errMsg = '当前运行环境不支持从仓库安装，请到「AI 设置 → 智能体技能 → 推荐技能」中点击「安装」。';
-          }
-        } else {
-          // 内联 body 写入
-          const dir = path.join(ctx.skillsDir, skill);
-          try {
-            fs.mkdirSync(dir, { recursive: true });
-            const md = `---\nname: ${skill}\ndescription: ${def.description}\n---\n\n${def.body}`;
-            fs.writeFileSync(path.join(dir, 'SKILL.md'), md, 'utf8');
-            ok = true;
-          } catch (e) { errMsg = e.message; }
-        }
-        if (!ok) return `安装技能「${skill}」失败：${errMsg}`;
-        loadExternalSkills(ctx.skillsDir);
-        if (def.prerequisites) SKILL_PREREQS[skill] = def.prerequisites;
-      }
-      return `技能「${skill}」已安装成功！现在可以用 skill 工具调用「${skill}」获取操作指引，然后按指引执行任务。`;
+    // 请求用户授权安装
+    if (ctx.onInstallSkill) {
+      const approved = await ctx.onInstallSkill({ name: skill, description: def.description, category: def.category });
+      if (!approved) return `用户拒绝了安装技能「${skill}」。请尝试其他方式完成任务。`;
+    }
+    const r = await installSkillByName(skill, ctx);
+    if (!r.ok) return `安装技能「${skill}」失败：${r.error}`;
+    loadExternalSkills(ctx.skillsDir);
+    return `技能「${skill}」已安装成功！现在可以用 skill 工具调用「${skill}」获取操作指引，然后按指引执行任务。`;
     },
   },
 
@@ -1695,6 +1772,8 @@ async function callApi(profile, apiType, system, messages, toolList, signal = nu
     return {
       text, toolCalls,
       usage: resp.usage ? { input: resp.usage.input_tokens, output: resp.usage.output_tokens } : null,
+      // stop_reason 为 'max_tokens' 表示输出被长度上限截断，上层据此自动续写
+      finishReason: (resp.stop_reason === 'max_tokens' || resp.stop_reason === 'length') ? 'length' : (resp.stop_reason || null),
       assistantMessage: { role: 'assistant', content: resp.content },
       makeToolResults: (results) => ({
         role: 'user',
@@ -1732,6 +1811,7 @@ async function callApi(profile, apiType, system, messages, toolList, signal = nu
       return {
         text: s.content || '',
         toolCalls: parsed,
+        finishReason: s.finishReason || null,
         // 部分本地服务端流式不返回 usage，缺失时用估算值，保证压缩阈值仍生效
         usage: {
           input: s.usage && s.usage.prompt_tokens > 0 ? s.usage.prompt_tokens : estInput,
@@ -1765,6 +1845,7 @@ async function callApi(profile, apiType, system, messages, toolList, signal = nu
   return {
     text: choice.content || '',
     toolCalls,
+    finishReason: (resp.choices && resp.choices[0] && resp.choices[0].finish_reason) || null,
     usage: resp.usage ? { input: resp.usage.prompt_tokens, output: resp.usage.completion_tokens } : null,
     assistantMessage: choice,
     openaiStyle: true,
@@ -1773,7 +1854,7 @@ async function callApi(profile, apiType, system, messages, toolList, signal = nu
 
 /* ================= 系统提示词 ================= */
 
-function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatId = null) {
+function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatId = null, userText = null) {
   const home = os.homedir();
   const skillList = Object.entries(SKILLS).map(([k, v]) => `- ${k}：${v.description}`).join('\n');
   // 推荐技能：尚未安装的列出来，提示模型可按需安装
@@ -1825,6 +1906,7 @@ function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatI
   const memorySection = userMem || chatMem
     ? `\n\n## 长期记忆（来自历史对话的总结）\n以下信息是从你与 AI 的历史对话中自动提炼的，回答时请参考，但不必复述给正在看的用户。\n${userMem ? userMem + '\n' : ''}${chatMem ? chatMem + '\n' : ''}`
     : '';
+  const taskBoostSection = buildTaskSkillBoost(userText);
   return `你是「AI Copilot」应用内嵌的智能体，运行在本机（macOS）。你可以自主查找、读取、修改、创建本机文件，帮助用户：替换内容、编写文件、修改文件、完善文件、排版文件。
 
 ## 环境
@@ -1852,9 +1934,10 @@ function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatI
 - 若中途遇到错误，记录错误信息继续推进下一项，最后一并汇报。
 - 不要因为工具调用多就主动暂停等待用户确认；只有需要授权的敏感操作（写/改/执行命令/打开）才会弹窗，其余自主决策。
 - 一次性回复中最多 40 轮工具调用（系统限制），如超出请用普通文本回复用户当前进度，让用户说"继续"再续做。
+- 输出长列表、答案表、批量记录或长段代码时，必须用 write_file 写入文件（再告知用户路径），不要直接在对话里一次性输出——对话单条回复有长度上限，超限会被截断导致任务中断。单条回复正文尽量控制在 1500 字以内。
 
 ## 技能包
-${skillList}${recommendedSection}${mcpSection}${memorySection}`;
+${skillList}${recommendedSection}${mcpSection}${memorySection}${taskBoostSection}`;
 }
 
 async function extractMemoryFacts(profile, apiType, messages) {
@@ -1977,7 +2060,7 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   // 本轮 AbortController：停止时中断正在飞的模型 HTTP 请求
   const ac = new AbortController();
   _currentAbort = ac;
-  const system = opts.system || buildSystemPrompt(ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer, ctx.chatId);
+  const system = opts.system || buildSystemPrompt(ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer, ctx.chatId, userText);
   const maxTurns = opts.maxTurns || MAX_TURNS;
   const toolList = buildToolList(opts.allowedTools, opts.isSubagent, ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer);
 
@@ -2018,6 +2101,8 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   // 根据当前模型动态计算压缩阈值（模型支持 1M 就用 1M，2M 就用 2M）
   const compactThreshold = getCompactThreshold(profile.model, profile.contextLength);
 
+  let continueCount = 0;       // 输出被长度截断后的自动续写次数
+  const MAX_CONTINUE = 3;      // 防止无限续写死循环
   for (let turn = 0; turn < maxTurns; turn++) {
     // 需求 #1：停止后不再发起任何模型请求、不再执行工具、不再进入下一轮
     if (_stopRequested) {
@@ -2082,7 +2167,19 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
     // 每次调用后都记录 assistant 的回复（纯文本回答也必须落库，否则返回的 messages 里只有用户问题、会话历史缺 AI 回答，切回会话后看不到）
     messages.push(r.assistantMessage);
 
-    if (!r.toolCalls.length) break;
+    if (!r.toolCalls.length) {
+      // 输出被长度上限截断（finishReason==='length'）：模型还有话要说但被砍断。
+      // 不把"截断"当成"任务结束"，自动追加续写提示再跑一轮，避免任务突然停住。
+      if (r.finishReason === 'length' && continueCount < MAX_CONTINUE) {
+        continueCount++;
+        const tip = '\n\n（回复因达到输出长度上限被截断，正在自动续写…）';
+        finalText += tip;
+        ctx.emit('text', tip);
+        messages.push({ role: 'user', content: '【系统提示】你上一条回复因达到输出长度上限被截断，尚未表达完整。请立即从断点继续未完成的任务，不要重复已输出的内容；如果接下来要输出长列表（如答案表）、大段代码或多条记录，改用 write_file 写入文件并在对话里只告知路径，不要整段重复输出。' });
+        continue;
+      }
+      break;
+    }
 
     const results = [];
     const pendingImages = []; // view_image 收集的待注入视觉输入
@@ -2149,6 +2246,27 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
     CURRENT_SKILLS_DIR = callbacks.skillsDir;
     loadExternalSkills(callbacks.skillsDir);
   }
+  // 技能预检：用户任务明显需要某「未装推荐技能」时，主动弹窗授权安装
+  // （弱模型不会自己调 install_skill 工具，也能在开始前拿到所需技能）
+  if (callbacks.skillsDir) {
+    const hit = pickRecommendedSkillForTask(userText);
+    if (hit && !SKILLS[hit] && !skillRecommendDismissed.has(hit)) {
+      let approved = true;
+      if (callbacks.onInstallSkill) {
+        approved = await callbacks.onInstallSkill({
+          name: hit,
+          description: RECOMMENDED_SKILLS[hit].description,
+          category: RECOMMENDED_SKILLS[hit].category,
+        });
+      }
+      if (approved) {
+        const r = await installSkillByName(hit, { skillsDir: callbacks.skillsDir, installSkillFromUrl: callbacks.installSkillFromUrl });
+        if (r.ok) { CURRENT_SKILLS_DIR = callbacks.skillsDir; loadExternalSkills(callbacks.skillsDir); }
+      } else {
+        skillRecommendDismissed.add(hit);
+      }
+    }
+  }
   const ctx = {
     profile,
     rules: callbacks.getRules ? callbacks.getRules() : [],
@@ -2164,6 +2282,7 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
     chatId: callbacks.chatId || null,          // 当前对话 ID（用于对话级记忆）
     memoryEnabled: callbacks.memoryEnabled === true, // 是否自动生成对话记忆
     onInstallSkill: callbacks.onInstallSkill || null,
+    installSkillFromUrl: callbacks.installSkillFromUrl || null,
     setTodos: (todos) => { ctx.todos = todos; callbacks.onTodo && callbacks.onTodo(todos); },
     emit: (event, data) => {
       const map = {
