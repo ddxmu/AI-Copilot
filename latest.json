@@ -1,16 +1,16 @@
 {
-  "version": "0.11.5",
-  "notes": "### 1. 修复：切换历史记录后看不到 AI 正在进行的工作\n\n- AI 正在回答时（显示「思考中…」或文字正在逐字流出），如果切到别的历史记录或功能页，再切回这个会话，之前看到的思考状态和已经流出的文字都会消失，只能干等到 AI 全部回答完才重新出现。\n- 原因是切换会话时聊天区会被清空并按已保存的历史重新渲染，而「思考中…」的占位和正在输入的文字属于运行中的临时状态，并不在已保存的历史里，所以切回来没有恢复。\n- 现在切回正在运行 AI 的会话时，会自动恢复当时的状态：还没出字就重新显示「思考中…」（深度思考中则显示「深度思考中…」），已经出过字就把收到的内容完整显示出来，并且后续内容会接着继续流出。",
-  "pubDate": "2026-08-29T15:52:37+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.5/AI.Copilot-0.11.5-arm64.dmg",
-  "sha256": "7eda35179ee9913f5dec1c0664a3683e7124d2ba3b0eb7f1a76c660be182b719",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.5/AI.Copilot-0.11.5.zip",
-  "patchSha256": "17d8595c57f968c0c27db803eff8372fd9d9f8280da20a898389c9384af5671f",
+  "version": "0.11.6",
+  "notes": "### 1. 修复：本地模型长任务未完成就中途停止\n\n- 之前当单条回复撞上 `maxTokens` 上限被截断时，智能体会把「截断」误判成「模型说完了」，直接结束任务，导致答案表 / 长列表只输出一半就停住。\n- 现在 `callApi` 会透传 `finishReason`，智能体循环在检测到 `length` 截断且无工具调用时，自动补一条「从断点继续」的系统提示续写，最多续写 3 次，避免任务突然中断。\n\n### 2. 系统提示约束：长内容改走 write_file\n\n- 长列表、答案表、大段代码等结构化输出现在要求先用 `write_file` 写入文件再告知路径，单条回复正文控制在 1500 字以内，从源头避免撞长度上限被截断。\n\n### 3. 技能预检：自动激活 + 授权弹窗\n\n- 任务触发词命中「已装技能」时，自动把该技能操作手册注入系统提示，免得弱模型不会自己调用技能工具。\n- 命中「未安装的推荐技能」时，在对话入口主动弹窗请你授权安装，装完热加载即可使用（例如「浏览器自动作答」「批量重命名」「整理文件夹」等）。",
+  "pubDate": "2026-08-30T11:53:56+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.6/AI.Copilot-0.11.6-arm64.dmg",
+  "sha256": "343d8953a57e3f646f41684f04e59a518662366a50d326bd9173dd43d107aebc",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.6/AI.Copilot-0.11.6.zip",
+  "patchSha256": "e49d48ac39615e7a538ca3feea6c726b97fcf2f12bfdde8f72cf2708d63c054f",
   "deltas": [
     {
-      "from": "0.11.4",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.5/AI.Copilot-0.11.5.zip",
-      "sha256": "17d8595c57f968c0c27db803eff8372fd9d9f8280da20a898389c9384af5671f"
+      "from": "0.11.5",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.6/AI.Copilot-0.11.6.zip",
+      "sha256": "e49d48ac39615e7a538ca3feea6c726b97fcf2f12bfdde8f72cf2708d63c054f"
     }
   ]
 }
