@@ -20,8 +20,8 @@ contextBridge.exposeInMainWorld('api', {
   openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
   // 读取文件信息（大小 / 修改时间 / 是否存在），用于「工作完成」面板
   getFileInfo: (filePath) => ipcRenderer.invoke('get-file-info', filePath),
-  // 取文件「在线预览」内容（图片 / 文本片段 / 其他），用于「工作完成」面板内联预览
-  getFilePreview: (filePath) => ipcRenderer.invoke('get-file-preview', filePath),
+  // 「工作完成」面板内联预览：按文件类型返回预览资源（PDF/图片/文本/Office→PDF/HTML/网页）
+  previewFile: (filePath) => ipcRenderer.invoke('preview-file', filePath),
   // 读取「工作完成」面板持久化记录（app 重新打开后恢复）
   loadWorkItems: () => ipcRenderer.invoke('load-work-items'),
   // 保存「工作完成」面板记录到本地

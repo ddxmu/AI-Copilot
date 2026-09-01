@@ -665,26 +665,123 @@ ipcMain.handle('get-file-info', (_e, filePath) => {
   } catch (_) { return { ok: true, exists: false }; }
 });
 
-// 取文件「在线预览」内容：图片返回 kind:'image'（渲染层用 readImageThumb 取缩略图），
-// 文本类返回前 4KB 文本片段（kind:'text'），其余返回 kind:'other'。仅用于「工作完成」面板内联预览。
-const WORK_PREVIEW_IMG = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'heic', 'ico']);
-const WORK_PREVIEW_TXT = new Set([
-  'txt', 'md', 'markdown', 'json', 'js', 'ts', 'tsx', 'jsx', 'html', 'htm',
-  'css', 'csv', 'log', 'xml', 'yml', 'yaml', 'py', 'java', 'c', 'cpp', 'h',
-  'hpp', 'sh', 'bat', 'go', 'rs', 'php', 'sql', 'rtf', 'toml', 'ini', 'env',
+// 「工作完成」面板内联预览：按文件类型返回预览资源供渲染层 iframe/img/pre 加载。
+// 返回结构：{ ok, kind, ... } 
+//   kind='pdf'         → { path, mime, fromOffice? }    渲染层 <iframe src="file://">
+//   kind='image'       → { dataUrl, mime }              渲染层 <img src=dataUrl>
+//   kind='text'        → { text, lang }                 渲染层 <pre>（自动按宽匹配）
+//   kind='html'        → { path }                       渲染层 sandbox iframe
+//   kind='web'         → { url }                        渲染层普通 iframe（外部网页）
+//   kind='unsupported' → { reason }                     渲染层降级为「打开」按钮
+const PREVIEW_MAX_IMG = 20 * 1024 * 1024;     // 20MB 图片
+const PREVIEW_MAX_TXT = 2 * 1024 * 1024;      // 2MB 文本
+const PREVIEW_MAX_PDF = 80 * 1024 * 1024;     // 80MB PDF
+const PREVIEW_PDF_EXT = new Set(['pdf']);
+const PREVIEW_IMG_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
+const PREVIEW_TXT_EXT = new Set([
+  'txt', 'md', 'markdown', 'json', 'js', 'ts', 'tsx', 'jsx', 'mjs', 'cjs',
+  'css', 'scss', 'less', 'csv', 'tsv', 'log', 'xml',
+  'yml', 'yaml', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'cc', 'cs',
+  'sh', 'bash', 'zsh', 'bat', 'go', 'rs', 'php', 'rb', 'pl', 'lua',
+  'sql', 'toml', 'ini', 'conf', 'env', 'gradle', 'dockerfile',
 ]);
-ipcMain.handle('get-file-preview', (_e, filePath) => {
+const PREVIEW_OFFICE_EXT = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp']);
+
+// 文本扩展名 → highlight.js / 显示用语言名（解析失败时也用作 pre class）
+const PREVIEW_LANG_MAP = {
+  js: 'javascript', ts: 'typescript', mjs: 'javascript', cjs: 'javascript',
+  sh: 'bash', bash: 'bash', zsh: 'bash', py: 'python', rb: 'ruby',
+  yml: 'yaml', yaml: 'yaml', md: 'markdown', markdown: 'markdown',
+  htm: 'html', dockerfile: 'dockerfile',
+};
+
+// 探测本地 LibreOffice（soffice）路径：优先 PATH，常见安装位置兜底
+function findSofficePath() {
+  const candidates = [
+    '/Applications/LibreOffice.app/Contents/MacOS/soffice',
+    '/opt/homebrew/bin/soffice',
+    '/usr/local/bin/soffice',
+    '/usr/bin/soffice',
+  ];
+  for (const p of candidates) {
+    try { if (fs.statSync(p).isFile()) return p; } catch (_) { /* 继续 */ }
+  }
+  return null;
+}
+const SOFFICE_PATH = findSofficePath();
+const PREVIEW_CACHE_DIR = path.join(os.tmpdir(), 'ai-copilot-preview');
+try { fs.mkdirSync(PREVIEW_CACHE_DIR, { recursive: true }); } catch (_) { /* 忽略 */ }
+
+// Office → PDF：缓存到 tmp（按 path+mtime 哈希），命中复用
+function convertOfficeToPdf(filePath) {
+  return new Promise((resolve) => {
+    if (!SOFFICE_PATH) return resolve(null);
+    let st;
+    try { st = fs.statSync(filePath); } catch (_) { return resolve(null); }
+    const hash = crypto.createHash('sha1')
+      .update(filePath + '|' + st.mtimeMs + '|' + st.size).digest('hex').slice(0, 16);
+    const outPath = path.join(PREVIEW_CACHE_DIR, hash + '.pdf');
+    try {
+      const cst = fs.statSync(outPath);
+      if (cst.isFile() && cst.mtimeMs >= st.mtimeMs) return resolve(outPath);
+    } catch (_) { /* 缓存不存在，重新转 */ }
+    const args = ['--headless', '--convert-to', 'pdf', '--outdir', PREVIEW_CACHE_DIR, filePath];
+    execFile(SOFFICE_PATH, args, { timeout: 60000, maxBuffer: 4 * 1024 * 1024 }, (err) => {
+      if (err) return resolve(null);
+      // soffice 输出文件名 = 原 basename.pdf；找到后改名为 hash.pdf 缓存
+      const expected = path.join(PREVIEW_CACHE_DIR,
+        path.basename(filePath, path.extname(filePath)) + '.pdf');
+      try {
+        if (!fs.statSync(expected).isFile()) return resolve(null);
+        try { fs.renameSync(expected, outPath); } catch (_) { return resolve(expected); }
+        return resolve(outPath);
+      } catch (_) { return resolve(null); }
+    });
+  });
+}
+
+ipcMain.handle('preview-file', async (_e, filePath) => {
+  if (!filePath || typeof filePath !== 'string') return { ok: false, error: 'invalid path' };
   try {
-    const ext = (String(filePath).split('.').pop() || '').toLowerCase();
-    if (WORK_PREVIEW_IMG.has(ext)) return { ok: true, kind: 'image' };
-    if (WORK_PREVIEW_TXT.has(ext)) {
-      const st = fs.statSync(filePath);
-      if (st.size > 2 * 1024 * 1024) return { ok: true, kind: 'other' };
-      const text = fs.readFileSync(filePath).slice(0, 4000).toString('utf8');
-      return { ok: true, kind: 'text', text, truncated: st.size > 4000 };
+    const st = fs.statSync(filePath);
+    if (!st.isFile()) return { ok: false, error: 'not a file' };
+    const ext = (filePath.split('.').pop() || '').toLowerCase();
+
+    if (PREVIEW_PDF_EXT.has(ext)) {
+      if (st.size > PREVIEW_MAX_PDF) return { ok: true, kind: 'unsupported', reason: 'too_large' };
+      return { ok: true, kind: 'pdf', path: filePath, mime: 'application/pdf' };
     }
-    return { ok: true, kind: 'other' };
-  } catch (e) { return { ok: false, error: e.message || String(e) }; }
+    if (PREVIEW_IMG_EXT.has(ext)) {
+      if (st.size > PREVIEW_MAX_IMG) return { ok: true, kind: 'unsupported', reason: 'too_large' };
+      const mime = ext === 'svg' ? 'image/svg+xml'
+                 : ext === 'jpg' ? 'image/jpeg'
+                 : `image/${ext}`;
+      const b64 = fs.readFileSync(filePath).toString('base64');
+      return { ok: true, kind: 'image', dataUrl: `data:${mime};base64,${b64}`, mime };
+    }
+    if (PREVIEW_TXT_EXT.has(ext)) {
+      if (st.size > PREVIEW_MAX_TXT) return { ok: true, kind: 'unsupported', reason: 'too_large' };
+      const text = fs.readFileSync(filePath, { encoding: 'utf8' });
+      return { ok: true, kind: 'text', text, lang: PREVIEW_LANG_MAP[ext] || ext };
+    }
+    if (PREVIEW_OFFICE_EXT.has(ext)) {
+      const pdfPath = await convertOfficeToPdf(filePath);
+      if (pdfPath) {
+        try {
+          const pst = fs.statSync(pdfPath);
+          if (pst.size > PREVIEW_MAX_PDF) return { ok: true, kind: 'unsupported', reason: 'too_large' };
+        } catch (_) { /* 转换产物异常 */ }
+        return { ok: true, kind: 'pdf', path: pdfPath, mime: 'application/pdf', fromOffice: true };
+      }
+      return { ok: true, kind: 'unsupported', reason: 'no_libreoffice' };
+    }
+    if (ext === 'html' || ext === 'htm') {
+      return { ok: true, kind: 'html', path: filePath };
+    }
+    return { ok: true, kind: 'unsupported' };
+  } catch (e) {
+    return { ok: false, error: e.message || String(e) };
+  }
 });
 
 // 「工作完成」面板记录持久化（app 关闭后再次打开仍可见文件信息）

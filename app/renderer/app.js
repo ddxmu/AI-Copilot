@@ -3868,40 +3868,147 @@ function renderWorkList() {
 
 // 内联「在线预览」：图片显示缩略图，文本显示片段，其它显示文件类型图标
 function renderWorkPreview(container, it) {
-  const name = it.name || it.path || '';
-  const isImage = it.type === 'file' && attachmentKindFromName(name) === 'image';
-  if (isImage && it.path && window.api.readImageThumb) {
-    const ph = createAttFileIcon(fileIconForName(name) || 'assets/file-icons/png.png');
-    container.appendChild(ph);
-    window.api.readImageThumb(it.path).then((dataUrl) => {
-      if (!dataUrl) return;
-      const img = document.createElement('img');
-      img.className = 'work-preview-img';
-      img.src = dataUrl;
-      img.onerror = () => { img.replaceWith(createAttFileIcon(fileIconForName(name) || 'assets/file-icons/png.png')); };
-      ph.replaceWith(img);
-    }).catch(() => {});
+  // 清空容器（原代码会先放占位图标再异步替换，新实现统一在 pane 内渲染）
+  while (container.firstChild) container.removeChild(container.firstChild);
+
+  // 顶部工具栏：文件名 + 缩放 + 「打开」
+  const toolbar = document.createElement('div');
+  toolbar.className = 'work-preview-toolbar';
+
+  const name = document.createElement('span');
+  name.className = 'work-preview-name';
+  name.textContent = it.name || (it.type === 'web' ? it.url : basenameOf(it.path));
+  name.title = it.path || it.url || '';
+  toolbar.appendChild(name);
+
+  const zoomSel = document.createElement('select');
+  zoomSel.className = 'work-preview-zoom';
+  zoomSel.title = '缩放';
+  zoomSel.innerHTML =
+    '<option value="auto">按宽</option>' +
+    '<option value="50">50%</option>' +
+    '<option value="75">75%</option>' +
+    '<option value="100">100%</option>' +
+    '<option value="150">150%</option>';
+  zoomSel.value = 'auto';
+  toolbar.appendChild(zoomSel);
+
+  const openBtn = document.createElement('button');
+  openBtn.className = 'work-preview-open';
+  openBtn.type = 'button';
+  openBtn.textContent = '打开';
+  openBtn.title = '用默认程序打开';
+  openBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const target = it.path || it.url;
+    if (target && window.api.openFile) window.api.openFile(target);
+  });
+  toolbar.appendChild(openBtn);
+
+  container.appendChild(toolbar);
+
+  // 内容区
+  const pane = document.createElement('div');
+  pane.className = 'work-preview-pane';
+  pane.dataset.zoom = 'auto';
+  container.appendChild(pane);
+
+  // 缩放控制：CSS zoom 作用于整个 pane（iframe/img/pre/html 都生效）
+  zoomSel.addEventListener('change', () => {
+    pane.dataset.zoom = zoomSel.value;
+    pane.style.zoom = zoomSel.value === 'auto' ? '' : String(parseInt(zoomSel.value, 10) / 100);
+  });
+
+  // 外部网页：直接 iframe
+  if (it.type === 'web' && it.url) {
+    renderPreviewWeb(pane, it);
     return;
   }
-  if (it.type === 'file' && it.path && window.api.getFilePreview) {
-    const ph = createAttFileIcon(fileIconForName(name));
-    container.appendChild(ph);
-    const tip = document.createElement('div');
-    tip.className = 'work-preview-tip';
-    tip.textContent = '点击「打开」查看内容';
-    container.appendChild(tip);
-    window.api.getFilePreview(it.path).then((r) => {
-      if (!r || !r.ok || r.kind !== 'text') return;
-      ph.replaceWith(createAttFileIcon(fileIconForName(name)));
-      const pre = document.createElement('pre');
-      pre.className = 'work-preview-text';
-      pre.textContent = r.text + (r.truncated ? '\n…' : '');
-      container.appendChild(pre);
-    }).catch(() => {});
+  if (!it.path) {
+    pane.textContent = '无文件路径';
     return;
   }
-  // web 或其它：图标 + 提示
-  container.appendChild(createAttFileIcon(null));
+  if (!window.api.previewFile) {
+    pane.textContent = '预览通道不可用';
+    return;
+  }
+  window.api.previewFile(it.path).then((r) => {
+    if (!r || !r.ok) {
+      pane.textContent = '预览失败：' + ((r && r.error) || '未知错误');
+      return;
+    }
+    switch (r.kind) {
+      case 'pdf':       renderPreviewPdf(pane, r, it); break;
+      case 'image':     renderPreviewImage(pane, r, it); break;
+      case 'text':      renderPreviewText(pane, r, it); break;
+      case 'html':      renderPreviewHtml(pane, r, it); break;
+      case 'unsupported': renderPreviewUnsupported(pane, r, it); break;
+      default:          pane.textContent = '未知预览类型';
+    }
+  }).catch((e) => {
+    pane.textContent = '预览失败：' + (e && e.message || String(e));
+  });
+}
+
+// 各 kind 渲染分支
+function renderPreviewPdf(pane, r, it) {
+  const iframe = document.createElement('iframe');
+  iframe.className = 'preview-iframe';
+  // Chromium 内置 PDF 查看器，file:// 直接渲染；fromOffice 转换出来的 PDF 也在缓存里
+  iframe.src = 'file://' + r.path;
+  pane.appendChild(iframe);
+}
+
+function renderPreviewImage(pane, r, it) {
+  const img = document.createElement('img');
+  img.className = 'preview-image';
+  img.alt = it.name || '';
+  img.src = r.dataUrl;
+  pane.appendChild(img);
+}
+
+function renderPreviewText(pane, r, it) {
+  const wrap = document.createElement('div');
+  wrap.className = 'preview-text-wrap';
+  // 大文本提示（避免误以为被截断）
+  const header = document.createElement('div');
+  header.className = 'preview-text-head';
+  header.textContent = (r.lang ? r.lang : 'text') + '　·　' + (it.name || basenameOf(it.path));
+  wrap.appendChild(header);
+  const pre = document.createElement('pre');
+  pre.className = 'preview-text';
+  if (r.lang) pre.classList.add('lang-' + r.lang);
+  pre.textContent = r.text;
+  wrap.appendChild(pre);
+  pane.appendChild(wrap);
+}
+
+function renderPreviewHtml(pane, r, it) {
+  // 用 sandbox iframe 加载本地 HTML：限制脚本/表单/弹窗，保留同源以加载相对资源
+  const iframe = document.createElement('iframe');
+  iframe.className = 'preview-iframe';
+  iframe.setAttribute('sandbox', 'allow-same-origin');
+  iframe.src = 'file://' + r.path;
+  pane.appendChild(iframe);
+}
+
+function renderPreviewWeb(pane, it) {
+  const iframe = document.createElement('iframe');
+  iframe.className = 'preview-iframe';
+  iframe.src = it.url;
+  pane.appendChild(iframe);
+}
+
+function renderPreviewUnsupported(pane, r, it) {
+  const div = document.createElement('div');
+  div.className = 'preview-unsupported';
+  const reasonMap = {
+    too_large: '文件太大，暂不支持预览（请点「打开」用其他程序查看）',
+    no_libreoffice: '需要安装 LibreOffice 才能预览 Office 文档',
+  };
+  const msg = reasonMap[r.reason] || '此文件类型暂不支持内联预览';
+  div.textContent = msg;
+  pane.appendChild(div);
 }
 
 // 「文件信息」：大小 / 修改时间 / 路径（重新打开后展示）

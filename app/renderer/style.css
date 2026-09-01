@@ -496,8 +496,8 @@ body {
 }
 
 .right-sidebar.open {
-  width: 300px;
-  min-width: 300px;
+  width: 380px;
+  min-width: 380px;
   opacity: 1;
 }
 
@@ -771,6 +771,113 @@ body {
   padding: 6px 8px;
 }
 .work-preview-tip { font-size: 11px; color: var(--text-light); align-self: center; }
+
+/* 「工作完成」预览工具栏（文件名 + 缩放 + 打开） */
+.work-preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--sidebar-hover);
+}
+.work-preview-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.work-preview-zoom {
+  flex-shrink: 0;
+  font-size: 11px;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  padding: 2px 4px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+}
+.work-preview-open {
+  flex-shrink: 0;
+  font-size: 11px;
+  border: 1px solid var(--primary);
+  border-radius: 4px;
+  padding: 3px 9px;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 500;
+}
+.work-preview-open:hover { background: var(--primary-hover, #2459d8); border-color: var(--primary-hover, #2459d8); }
+
+/* 「工作完成」预览内容容器（按宽匹配，缩放通过 CSS zoom 作用于整个 pane） */
+.work-preview-pane {
+  margin-top: 5px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: #fff;
+  overflow: auto;
+  max-height: 520px;
+}
+.work-preview-pane[data-zoom="auto"] { /* 默认按宽匹配 */ }
+.preview-iframe {
+  width: 100%;
+  height: 480px;
+  border: none;
+  display: block;
+  background: #fff;
+}
+.preview-image {
+  width: 100%;
+  height: auto;
+  max-height: 520px;
+  display: block;
+  object-fit: contain;
+  background: #fff;
+}
+.preview-text-wrap {
+  display: flex;
+  flex-direction: column;
+  max-height: 520px;
+}
+.preview-text-head {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-light);
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--sidebar-hover);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.preview-text {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  font-family: var(--mono, ui-monospace, Menlo, Consolas, monospace);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #fff;
+}
+.preview-unsupported {
+  padding: 22px 14px;
+  text-align: center;
+  color: var(--text-light);
+  font-size: 12px;
+  line-height: 1.6;
+}
 
 /* 「文件信息」区（重新打开后） */
 .work-info {
