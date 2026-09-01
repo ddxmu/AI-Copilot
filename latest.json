@@ -1,16 +1,16 @@
 {
-  "version": "0.11.7",
-  "notes": "### 1. 「工作完成」面板支持内联文件预览\n\n- 之前 AI 生成的文件在右栏只显示一个占位图标（图片显示小缩略图、文本显示头几百字），PDF / Word / Excel / PPT / HTML 等完全看不到内容，只能点「打开」跳到外部程序。\n- 现在右栏「工作完成」里，文件会**直接内联预览**：PDF 用内置 PDF 查看器渲染、图片按面板宽度缩放、文本/代码完整显示、HTML 用沙箱 iframe 渲染、网页地址直接内嵌。\n- Office 文档（`.doc` / `.docx` / `.xls` / `.xlsx` / `.ppt` / `.pptx` / `.odt` / `.ods` / `.odp`）会调用本机 LibreOffice 后台转成 PDF 再内联预览，转换结果会缓存复用；**本机未安装 LibreOffice 时会退化为提示 + 「打开」按钮**，不影响使用。\n- 每条预览顶部有**文件名 + 缩放控件（按宽 / 50% / 75% / 100% / 150%）+ 「打开」按钮**，默认「按宽」即缩放到刚好填满面板宽度。\n- 右侧栏宽度从 300px 增加到 380px，让预览内容有足够空间显示。\n- 安全与性能：HTML 预览在沙箱 iframe 中运行（禁用脚本 / 表单 / 弹窗）；图片 ≤ 20MB、文本 ≤ 2MB、PDF ≤ 80MB 才内联预览，超大会提示并保留「打开」按钮。全部在本地完成，**不联网、不上传文件**。",
-  "pubDate": "2026-09-01T20:43:41+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.7/AI.Copilot-0.11.7-arm64.dmg",
-  "sha256": "00a83f4dcb2d055dc956d141d1a310dd4bfaa0eeed058c8f857377d0634bba5b",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.7/AI.Copilot-0.11.7.zip",
-  "patchSha256": "c2be546eb5deec93bea9d447444079f2a9e9b7fe63e1bb7cc02a1d793d10cf79",
+  "version": "0.11.8",
+  "notes": "### 1. 点文件即打开「预览页面」，鼠标滚轮查看\n\n- 「工作完成」里点条目任意位置（**不点按钮**），整个右栏立刻变成预览页面：顶部有 `← 返回`、文件名、缩放控件（按宽 / 50% / 75% / 100% / 150%）和「打开」按钮，下方内容区撑满剩余高度。\n- 预览区域不再被塞在工作项里的小框中，鼠标滚轮可以直接在整个预览上滚动翻页。\n- 「打开」按钮仍然用默认程序打开，「在访达显示」仍然在访达中定位，这两个按钮的点击不会误触发预览。\n\n### 2. 修复：PDF / Office 预览被压成窄条\n\n- 之前 PDF（含 Office 转出来的 PDF）在预览里被压成约 40px 宽的竖条，几乎看不清内容。\n- 原因是 Chromium 内置 PDF 查看器默认按「整页适配」，会把所有页面整体缩到塞进预览框的高度，竖版 A4 就被压扁。\n- 现在加载时强制按宽度适配，每页横向撑满预览宽度，纵向滚动即可逐页查看。\n\n### 3. 「工作完成」列表更清爽\n\n- 列表项不再内嵌预览区，只保留图标、文件名、路径、时间和两个操作按钮，点击整行打开预览页面。",
+  "pubDate": "2026-09-01T21:11:25+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.8/AI.Copilot-0.11.8-arm64.dmg",
+  "sha256": "f1b1ec27173f6b6241a7ff0599165c9b80c1ad3200fca59183d9cf3984a20b26",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.8/AI.Copilot-0.11.8.zip",
+  "patchSha256": "165b8173702e6202040e361c2e8d90ad1ea995de9fb183175a02cbe5631d18ac",
   "deltas": [
     {
-      "from": "0.11.6",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.7/AI.Copilot-0.11.7.zip",
-      "sha256": "c2be546eb5deec93bea9d447444079f2a9e9b7fe63e1bb7cc02a1d793d10cf79"
+      "from": "0.11.7",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.8/AI.Copilot-0.11.8.zip",
+      "sha256": "165b8173702e6202040e361c2e8d90ad1ea995de9fb183175a02cbe5631d18ac"
     }
   ]
 }
