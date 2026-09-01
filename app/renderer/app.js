@@ -3821,18 +3821,6 @@ function renderWorkList() {
 
     div.append(ico, meta, tm);
 
-    // 主体区：本会话刚完成显示「在线预览」；重新打开（历史）显示「文件信息」
-    const body = document.createElement('div');
-    body.className = 'work-body';
-    if (it.fresh) {
-      body.classList.add('work-preview');
-      renderWorkPreview(body, it);
-    } else {
-      body.classList.add('work-info');
-      renderWorkInfo(body, it);
-    }
-    div.appendChild(body);
-
     // 操作区：打开（默认程序）/ 在访达显示
     const actions = document.createElement('div');
     actions.className = 'work-actions';
@@ -3856,17 +3844,56 @@ function renderWorkList() {
     actions.append(openBtn, revealBtn);
     div.appendChild(actions);
 
-    // 点击卡片（非按钮）即打开文件
+    // 点击卡片（非按钮）→ 打开右侧「预览页面」（不是直接打开文件）
     div.addEventListener('click', () => {
-      if (it.type === 'web' && it.url) window.open(it.url, '_blank');
-      else if (it.path) window.api.openFile(it.path);
+      showFilePreview(it);
     });
     workListEl.appendChild(div);
   });
   updateWorkBadge();
 }
 
+// 「工作完成」预览页面：右侧栏整页变成文件预览，鼠标可上下滚动
+const previewPanelEl = document.querySelector('.right-sidebar-panel[data-panel="preview"]');
+const previewBodyEl = document.getElementById('preview-view-body');
+const previewBackBtn = document.getElementById('btn-preview-back');
+const rightSidebarBodyEl = document.getElementById('right-sidebar-body');
+const rightSidebarTabsEl = document.getElementById('right-sidebar-tabs');
+
+function showFilePreview(it) {
+  if (!previewPanelEl || !previewBodyEl) return;
+  // 切到预览面板 + 隐藏 tabs / 去 padding 让预览铺满
+  document.querySelectorAll('.right-sidebar-panel').forEach((p) => {
+    p.classList.toggle('active', p.dataset.panel === 'preview');
+  });
+  if (rightSidebarTabsEl) rightSidebarTabsEl.classList.add('hidden');
+  if (rightSidebarBodyEl) rightSidebarBodyEl.classList.add('preview-mode');
+  // 标题栏显示文件名（顺手覆盖）
+  const titleEl = document.getElementById('right-sidebar-title');
+  if (titleEl) titleEl.textContent = it.name || (it.type === 'web' ? it.url : basenameOf(it.path)) || '预览';
+  // 清空 + 渲染（复用 renderWorkPreview，自带工具栏/缩放/打开按钮）
+  previewBodyEl.innerHTML = '';
+  renderWorkPreview(previewBodyEl, it);
+}
+
+function hideFilePreview() {
+  // 切回 work 面板 + 恢复 tabs / padding
+  document.querySelectorAll('.right-sidebar-panel').forEach((p) => {
+    p.classList.toggle('active', p.dataset.panel === 'work');
+  });
+  if (rightSidebarTabsEl) rightSidebarTabsEl.classList.remove('hidden');
+  if (rightSidebarBodyEl) rightSidebarBodyEl.classList.remove('preview-mode');
+  // 标题还原（取当前激活 tab 的 data-title）
+  const activeTab = rightSidebarTabsEl && rightSidebarTabsEl.querySelector('.right-sidebar-tab.active');
+  const titleEl = document.getElementById('right-sidebar-title');
+  if (titleEl && activeTab) titleEl.textContent = activeTab.dataset.title || '最近消息';
+  if (previewBodyEl) previewBodyEl.innerHTML = '';
+}
+
+if (previewBackBtn) previewBackBtn.addEventListener('click', hideFilePreview);
+
 // 内联「在线预览」：图片显示缩略图，文本显示片段，其它显示文件类型图标
+// （当前仅在「工作完成」列表项点击 → 右侧「预览页面」调用此函数渲染）
 function renderWorkPreview(container, it) {
   // 清空容器（原代码会先放占位图标再异步替换，新实现统一在 pane 内渲染）
   while (container.firstChild) container.removeChild(container.firstChild);
@@ -3954,8 +3981,10 @@ function renderWorkPreview(container, it) {
 function renderPreviewPdf(pane, r, it) {
   const iframe = document.createElement('iframe');
   iframe.className = 'preview-iframe';
-  // Chromium 内置 PDF 查看器，file:// 直接渲染；fromOffice 转换出来的 PDF 也在缓存里
-  iframe.src = 'file://' + r.path;
+  // Chromium 内置 PDF 查看器：file:// 直接渲染；fromOffice 转换出来的 PDF 也在缓存里。
+  // #zoom=page-width 强制按宽度适配（默认 page-fit 会把所有页面整体缩到塞进 iframe，
+  // 竖版 A4 会被压成窄条；这里 iframe 高度跟随外层，鼠标滚轮上下翻页）。
+  iframe.src = 'file://' + r.path + '#zoom=page-width';
   pane.appendChild(iframe);
 }
 

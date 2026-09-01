@@ -575,9 +575,72 @@ body {
   min-width: 0;
 }
 
+/* 预览视图占据整个右侧栏时，去掉 body 的 padding 让预览铺满 */
+.right-sidebar-body.preview-mode {
+  padding: 0;
+  overflow: hidden;
+}
+
 .right-sidebar-panel {
   display: none;
 }
+
+/* 预览视图：flex 列布局，高度撑满父容器 */
+.right-sidebar-panel[data-panel="preview"].active {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.preview-view-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+  background: var(--sidebar-bg);
+}
+.preview-back {
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  padding: 3px 10px;
+  background: #fff;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.preview-back:hover { background: var(--sidebar-hover); }
+.preview-view-body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+  min-height: 0;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 在专用预览视图里：工具栏固定在顶，内容 pane 撑满剩余高度（鼠标滚轮滚动整个预览） */
+.preview-view-body .work-preview-toolbar { flex-shrink: 0; }
+.preview-view-body .work-preview-pane {
+  flex: 1;
+  max-height: none;
+  margin-top: 6px;
+}
+.preview-view-body .preview-iframe {
+  height: 100%;
+  min-height: 600px;
+}
+.preview-view-body .preview-image {
+  max-height: none;
+  height: auto;
+}
+.preview-view-body .preview-text-wrap { max-height: none; flex: 1; }
+.preview-view-body .preview-text { max-height: none; flex: 1; }
+.preview-view-body .preview-unsupported { flex: 1; display: flex; align-items: center; justify-content: center; }
 
 .right-sidebar-panel.active {
   display: block;

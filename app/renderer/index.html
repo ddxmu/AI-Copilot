@@ -1510,11 +1510,17 @@
         </div>
         <div class="right-sidebar-panel" data-panel="work">
           <div class="work-head">
-            <span class="work-hint">刚完成的会内联显示预览；重新打开后显示文件信息，点「打开」用默认程序打开</span>
+            <span class="work-hint">点条目打开预览；重新打开后点「打开」用默认程序查看</span>
             <button class="work-clear" id="btn-clear-work">清空</button>
           </div>
           <div id="work-list" class="work-list"></div>
           <div id="work-empty" class="work-empty">还没有已完成的内容。<br />让 AI 助手写一个文件或打开一个网页试试。</div>
+        </div>
+        <div class="right-sidebar-panel" data-panel="preview">
+          <div class="preview-view-header">
+            <button class="preview-back" id="btn-preview-back" title="返回工作完成列表">← 返回</button>
+          </div>
+          <div class="preview-view-body" id="preview-view-body"></div>
         </div>
       </div>
     </aside>
