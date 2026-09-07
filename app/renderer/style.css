@@ -2737,6 +2737,7 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   color: var(--primary, #2f6fed);
 }
 .effort-badge .model-arrow { margin-left: 1px; }
+.effort-icon { height: 14px; width: 14px; object-fit: contain; display: block; }
 
 /* 配置面板：思考强度档位多选组 */
 .effort-levels {
