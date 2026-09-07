@@ -674,6 +674,46 @@ const localSettingsEl = document.getElementById('local-settings');
 const ctxLenInput = document.getElementById('p-ctxlen');
 const maxTokensInput = document.getElementById('p-maxtokens');
 const temperatureInput = document.getElementById('p-temperature');
+// 思考强度：配置面板的多选勾选组（本地模型不支持，整块隐藏）
+const effortSettingsEl = document.getElementById('effort-settings');
+const effortLevelsEl = document.getElementById('effort-levels');
+// 思考强度档位：v = 发给服务端的 reasoning_effort 值，t = 界面显示名
+const EFFORT_LEVELS = [
+  { v: 'none', t: '不推理' },
+  { v: 'low', t: '轻' },
+  { v: 'medium', t: '中' },
+  { v: 'high', t: '高' },
+  { v: 'xhigh', t: '极高' },
+];
+function effortLabel(v) {
+  const hit = EFFORT_LEVELS.find((x) => x.v === v);
+  return hit ? hit.t : v;
+}
+
+// 渲染「思考强度」勾选组（可多选；已保存的档位自动勾上）
+function renderEffortLevels(selected) {
+  const cur = Array.isArray(selected) ? selected : [];
+  effortLevelsEl.innerHTML = '';
+  EFFORT_LEVELS.forEach((lv) => {
+    const lab = document.createElement('label');
+    lab.className = 'effort-chip';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = lv.v;
+    cb.checked = cur.includes(lv.v);
+    const span = document.createElement('span');
+    span.textContent = lv.t;
+    lab.append(cb, span);
+    effortLevelsEl.appendChild(lab);
+  });
+}
+
+// 读取勾选结果
+function readEffortLevels() {
+  return [...effortLevelsEl.querySelectorAll('input[type=checkbox]')]
+    .filter((cb) => cb.checked)
+    .map((cb) => cb.value);
+}
 
 // 当前选中的提供商定义
 function currentProvider() {
@@ -701,6 +741,8 @@ providerSel.addEventListener('change', () => {
   // 本地模型：展开「本地模型参数」区；API Key 输入框保持可见（部分本地服务也启用了鉴权），只是不强制填写
   const local = !!p.local;
   localSettingsEl.classList.toggle('hidden', !local);
+  // 思考强度：仅云端模型可配（本地模型隐藏该块）
+  effortSettingsEl.classList.toggle('hidden', local);
   apiKeyInput.placeholder = local ? '本地服务一般留空；若启用了鉴权请填写' : 'sk-...';
 });
 
@@ -729,6 +771,18 @@ function currentProfileDraft() {
     draft.contextLength = Number.isFinite(ctx) && ctx > 0 ? ctx : null;
     draft.maxTokens = Number.isFinite(maxTok) && maxTok > 0 ? maxTok : null;
     draft.temperature = Number.isFinite(temp) ? temp : null;
+  } else {
+    // 云端模型的「思考强度」：勾选的档位 + 当前选中档（本地模型不参与，见 local 分支）
+    draft.effortLevels = readEffortLevels();
+    // 当前档：若之前选的档不在新勾选范围内，则回落到勾选项里的第一个（都沒勾就清空）
+    const prev = editingId
+      ? (aiState.profiles.find((x) => x.id === editingId) || {}).effort
+      : null;
+    if (draft.effortLevels.length) {
+      draft.effort = draft.effortLevels.includes(prev) ? prev : draft.effortLevels[0];
+    } else {
+      draft.effort = null;
+    }
   }
   return draft;
 }
@@ -809,6 +863,9 @@ function openEditor(profile) {
   ctxLenInput.value = profile && profile.contextLength ? String(profile.contextLength) : '';
   maxTokensInput.value = profile && profile.maxTokens ? String(profile.maxTokens) : '';
   temperatureInput.value = profile && typeof profile.temperature === 'number' ? String(profile.temperature) : '';
+  // 思考强度：回填该模型已勾选的档位（本地模型整块隐藏，由 provider change 事件控制）
+  effortSettingsEl.classList.toggle('hidden', isLocalProvider());
+  renderEffortLevels(profile && profile.effortLevels ? profile.effortLevels : []);
   apiKeyInput.value = '';
   keyHint.classList.toggle('hidden', !profile);
   setFetchStatus('', '');
@@ -3449,7 +3506,58 @@ function updateModelInfo() {
     modelInfoEl.dataset.tip = '未配置模型';
     modelInfoEl.classList.add('warn');
   }
+  updateEffortBadge();
 }
+
+/* ===== 思考强度切换器（聊天界面，模型名旁） ===== */
+const effortBadgeEl = document.getElementById('effort-badge');
+const effortNameEl = document.getElementById('effort-name');
+const effortMenuEl = document.getElementById('effort-menu');
+const effortMenuListEl = document.getElementById('effort-menu-list');
+
+// 只在当前模型「配置里勾了档位」时才显示；没勾 = 该模型不支持强度 → 隐藏
+function updateEffortBadge() {
+  const p = aiState.profiles.find((x) => x.id === aiState.activeId);
+  const levels = p && Array.isArray(p.effortLevels) ? p.effortLevels : [];
+  if (!p || !levels.length) { effortBadgeEl.classList.add('hidden'); return; }
+  const cur = levels.includes(p.effort) ? p.effort : levels[0];
+  effortNameEl.textContent = effortLabel(cur);
+  effortBadgeEl.classList.remove('hidden');
+  effortBadgeEl.dataset.tip = `思考强度：${effortLabel(cur)}（点击切换）`;
+  effortBadgeEl.title = effortBadgeEl.dataset.tip;
+}
+
+function renderEffortMenu() {
+  const p = aiState.profiles.find((x) => x.id === aiState.activeId);
+  const levels = p && Array.isArray(p.effortLevels) ? p.effortLevels : [];
+  const cur = levels.includes(p && p.effort) ? p.effort : levels[0];
+  effortMenuListEl.innerHTML = '';
+  levels.forEach((v) => {
+    const item = document.createElement('div');
+    item.className = 'model-item' + (v === cur ? ' active' : '');
+    item.innerHTML = `<div class="model-item-text"><div class="model-item-name">${effortLabel(v)}</div></div><div class="model-item-check">${v === cur ? '✓' : ''}</div>`;
+    item.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      // 选中即写入配置持久化，下次仍是这个档
+      const state = await window.api.aiSaveProfile({ ...p, effort: v });
+      aiState.profiles = state.profiles;
+      aiState.activeId = state.activeId;
+      updateEffortBadge();
+      effortMenuEl.classList.add('hidden');
+    });
+    effortMenuListEl.appendChild(item);
+  });
+}
+
+effortBadgeEl.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const willOpen = effortMenuEl.classList.contains('hidden');
+  modelMenu.classList.add('hidden');   // 与模型菜单互斥，避免两个浮层叠在一起
+  modelWrap.classList.remove('open');
+  if (willOpen) renderEffortMenu();
+  effortMenuEl.classList.toggle('hidden', !willOpen);
+});
+document.addEventListener('click', () => effortMenuEl.classList.add('hidden'));
 
 // 模型切换器（右下角弹出菜单）
 const modelWrap = document.querySelector('.model-wrap');

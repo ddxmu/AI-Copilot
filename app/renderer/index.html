@@ -893,7 +893,12 @@
                 <span id="model-info" class="model-info has-tip" data-tip="切换模型" title="切换模型">
                   <img class="model-ico-img" src="assets/ai-agent.png" alt="" /><span id="model-name">未配置模型</span><span class="model-arrow">▾</span>
                 </span>
+                <span id="effort-badge" class="effort-badge hidden has-tip" data-tip="切换思考强度" title="切换思考强度">🧠<span id="effort-name">不推理</span><span class="model-arrow">▾</span></span>
                 <span id="web-badge" class="web-badge hidden has-tip" data-tip="联网已开启：AI 可搜索互联网和读取网页" title="联网已开启">🌐</span>
+                <div id="effort-menu" class="model-menu hidden">
+                  <div class="model-menu-title">思考强度</div>
+                  <div id="effort-menu-list"></div>
+                </div>
                 <div id="model-menu" class="model-menu hidden">
                   <div class="model-menu-title">切换模型</div>
                   <div id="model-menu-list"></div>
@@ -1033,6 +1038,13 @@
                           <div class="field-hint">0 更确定，1 更有创造性。需要调用工具时建议 0 ~ 0.3。</div>
                         </div>
                       </div>
+                    </div>
+
+                    <!-- 思考强度：勾选该模型实际支持的档位（仅云端模型；本地模型隐藏） -->
+                    <div id="effort-settings" class="local-settings hidden">
+                      <div class="local-settings-title">思考强度（可多选）</div>
+                      <div id="effort-levels" class="effort-levels"></div>
+                      <div class="field-hint">勾选该模型实际支持的强度档位；<b>全不勾 = 该模型不支持强度调节</b>，聊天界面就不显示强度选项。选中后聊天时可在模型名旁随时切换。<br />「不推理」= 显式关闭推理：部分推理模型（如 gpt-5.6-luna）带工具调用时必须选它，否则服务端会报「Function tools with reasoning_effort」错误。</div>
                     </div>
 
                     <div id="model-price" class="model-price"></div>

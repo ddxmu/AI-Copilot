@@ -1793,6 +1793,10 @@ async function callApi(profile, apiType, system, messages, toolList, signal = nu
     : (isLocal ? 2048 : null);
   if (maxTok) body.max_tokens = maxTok;
   if (typeof profile.temperature === 'number') body.temperature = profile.temperature;
+  // 思考强度（reasoning_effort）：只在该模型配置里选过档位时才发。
+  // 未配置就完全不发这个字段——不少服务端不认识它，发了会直接报错。
+  // 注：部分推理模型（如 gpt-5.6-luna）带工具调用时必须显式传 'none'，否则服务端报 400。
+  if (profile.effort) body.reasoning_effort = profile.effort;
   // 本地服务通常不需要鉴权，无 Key 时不发 Authorization 头
   const headers = profile.apiKey ? { Authorization: `Bearer ${profile.apiKey}` } : {};
 
