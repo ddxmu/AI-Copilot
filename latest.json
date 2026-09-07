@@ -1,16 +1,16 @@
 {
-  "version": "0.11.8",
-  "notes": "### 1. 点文件即打开「预览页面」，鼠标滚轮查看\n\n- 「工作完成」里点条目任意位置（**不点按钮**），整个右栏立刻变成预览页面：顶部有 `← 返回`、文件名、缩放控件（按宽 / 50% / 75% / 100% / 150%）和「打开」按钮，下方内容区撑满剩余高度。\n- 预览区域不再被塞在工作项里的小框中，鼠标滚轮可以直接在整个预览上滚动翻页。\n- 「打开」按钮仍然用默认程序打开，「在访达显示」仍然在访达中定位，这两个按钮的点击不会误触发预览。\n\n### 2. 修复：PDF / Office 预览被压成窄条\n\n- 之前 PDF（含 Office 转出来的 PDF）在预览里被压成约 40px 宽的竖条，几乎看不清内容。\n- 原因是 Chromium 内置 PDF 查看器默认按「整页适配」，会把所有页面整体缩到塞进预览框的高度，竖版 A4 就被压扁。\n- 现在加载时强制按宽度适配，每页横向撑满预览宽度，纵向滚动即可逐页查看。\n\n### 3. 「工作完成」列表更清爽\n\n- 列表项不再内嵌预览区，只保留图标、文件名、路径、时间和两个操作按钮，点击整行打开预览页面。",
-  "pubDate": "2026-09-01T21:11:25+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.8/AI.Copilot-0.11.8-arm64.dmg",
-  "sha256": "f1b1ec27173f6b6241a7ff0599165c9b80c1ad3200fca59183d9cf3984a20b26",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.8/AI.Copilot-0.11.8.zip",
-  "patchSha256": "165b8173702e6202040e361c2e8d90ad1ea995de9fb183175a02cbe5631d18ac",
+  "version": "0.11.9",
+  "notes": "### 1. 新增「思考强度」调节\n\n- **AI 设置**里每个模型可多选勾选它实际支持的强度档位：**不推理 / 轻 / 中 / 高 / 极高**；全不勾 = 该模型不支持强度调节，聊天界面就不显示强度选项。\n- **聊天界面**模型名旁新增强度徽章，鼠标点一下即可切换，选择会记住并写入配置。\n- 只在配置里选过档位的模型才会发送 `reasoning_effort` 参数，未配置的模型完全不受影响。\n- 「不推理」用于显式关闭推理：部分推理模型（如 `gpt-5.6-luna`）带工具调用时必须选它，否则服务端会报「Function tools with reasoning_effort are not supported」错误。",
+  "pubDate": "2026-09-07T21:49:51+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.9/AI.Copilot-0.11.9-arm64.dmg",
+  "sha256": "e4c15a6a9f3be48488b556882dc6b1db308c8964e943f9edd5887d7c6f08cb6e",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.9/AI.Copilot-0.11.9.zip",
+  "patchSha256": "9ec97c3b11ff884985e1f901f0a6edcb39fad8f6de37da8b6e0530164348dd8a",
   "deltas": [
     {
-      "from": "0.11.7",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.8/AI.Copilot-0.11.8.zip",
-      "sha256": "165b8173702e6202040e361c2e8d90ad1ea995de9fb183175a02cbe5631d18ac"
+      "from": "0.11.8",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.9/AI.Copilot-0.11.9.zip",
+      "sha256": "9ec97c3b11ff884985e1f901f0a6edcb39fad8f6de37da8b6e0530164348dd8a"
     }
   ]
 }
