@@ -1,16 +1,16 @@
 {
-  "version": "0.11.10",
-  "notes": "### 1. 思考强度图标替换\n\n- 聊天界面模型名旁「思考强度」的图标由 emoji 换成应用内置图标（学士帽），与整体界面风格一致。",
-  "pubDate": "2026-09-07T21:59:50+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.10/AI.Copilot-0.11.10-arm64.dmg",
-  "sha256": "91a335da335faa53dad3969a964c751eca016887ccd11be43c6c50f18b31e448",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.10/AI.Copilot-0.11.10.zip",
-  "patchSha256": "6af13652e68386ddadd13772655676de5ed0e367c2e1af7fa2aa032f06391370",
+  "version": "0.11.11",
+  "notes": "### 1. AI 配置支持手动添加模型\n\n- 「拉取模型」按钮旁新增「＋ 添加模型」按钮：API 不支持在线拉取模型列表、或想用的模型不在列表里时，可手动添加。\n- 弹窗填写**模型 ID**（必填，如 `gpt-3.5-turbo`）、**模型名称**（选填，如 GPT-4）、**分组名称**（选填，如 ChatGPT，相同分组的模型会在下拉列表里归到一起），点「添加模型」即加入列表并自动选中。\n- 会自动校验：模型 ID 必填、重复添加会提示；保存模型配置后即可正常使用。",
+  "pubDate": "2026-09-08T22:18:06+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.11/AI.Copilot-0.11.11-arm64.dmg",
+  "sha256": "26f572e8f60a49a9913eaa126fa0f23d6eca0c85d6612089d4ad507dfb721395",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.11/AI.Copilot-0.11.11.zip",
+  "patchSha256": "f5d9b10ae4e19a11ec772b2ff466e385984feaf4cdc066f10b02a7f04031cad7",
   "deltas": [
     {
-      "from": "0.11.9",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.10/AI.Copilot-0.11.10.zip",
-      "sha256": "6af13652e68386ddadd13772655676de5ed0e367c2e1af7fa2aa032f06391370"
+      "from": "0.11.10",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.11/AI.Copilot-0.11.11.zip",
+      "sha256": "f5d9b10ae4e19a11ec772b2ff466e385984feaf4cdc066f10b02a7f04031cad7"
     }
   ]
 }
