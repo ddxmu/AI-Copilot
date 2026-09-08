@@ -807,6 +807,79 @@ document.getElementById('btn-fetch-models').addEventListener('click', async () =
   updatePrice();
 });
 
+// 手动添加模型
+const addModelModal = document.getElementById('add-model-modal');
+const amModelId = document.getElementById('am-model-id');
+const amModelName = document.getElementById('am-model-name');
+const amModelGroup = document.getElementById('am-model-group');
+const amError = document.getElementById('am-error');
+
+document.getElementById('btn-add-model').addEventListener('click', () => {
+  amModelId.value = '';
+  amModelName.value = '';
+  amModelGroup.value = '';
+  amError.classList.add('hidden');
+  addModelModal.classList.remove('hidden');
+  setTimeout(() => amModelId.focus(), 50);
+});
+
+document.getElementById('btn-am-cancel').addEventListener('click', () => {
+  addModelModal.classList.add('hidden');
+});
+
+addModelModal.addEventListener('click', (e) => {
+  if (e.target === addModelModal) addModelModal.classList.add('hidden');
+});
+
+function addModelToSelect(id, name, group) {
+  const opt = document.createElement('option');
+  opt.value = id;
+  opt.textContent = name || id;
+  if (group) {
+    let grp = null;
+    for (const child of modelSel.children) {
+      if (child.tagName === 'OPTGROUP' && child.label === group) { grp = child; break; }
+    }
+    if (!grp) {
+      grp = document.createElement('optgroup');
+      grp.label = group;
+      modelSel.appendChild(grp);
+    }
+    grp.appendChild(opt);
+  } else {
+    modelSel.appendChild(opt);
+  }
+  modelSel.value = id;
+}
+
+document.getElementById('btn-am-confirm').addEventListener('click', () => {
+  const id = amModelId.value.trim();
+  const name = amModelName.value.trim();
+  const group = amModelGroup.value.trim();
+  if (!id) {
+    amError.textContent = '请填写模型 ID';
+    amError.classList.remove('hidden');
+    return;
+  }
+  const exists = [...modelSel.querySelectorAll('option')].some((o) => o.value === id);
+  if (exists) {
+    amError.textContent = `模型「${id}」已在列表中`;
+    amError.classList.remove('hidden');
+    return;
+  }
+  addModelToSelect(id, name, group);
+  addModelModal.classList.add('hidden');
+  setFetchStatus(`已手动添加模型「${name || id}」，保存模型配置后即可使用。`, 'ok');
+  updatePrice();
+});
+
+[amModelId, amModelName, amModelGroup].forEach((el) => {
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('btn-am-confirm').click();
+    if (e.key === 'Escape') addModelModal.classList.add('hidden');
+  });
+});
+
 document.getElementById('btn-test-conn').addEventListener('click', async () => {
   const draft = currentProfileDraft();
   setFetchStatus('正在测试连接…', 'loading');
