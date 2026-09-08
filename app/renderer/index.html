@@ -1052,6 +1052,7 @@
 
                     <div class="btn-group" style="margin-top:18px">
                       <button id="btn-fetch-models" class="btn">拉取模型</button>
+                      <button id="btn-add-model" class="btn" title="手动添加模型">＋ 添加模型</button>
                       <button id="btn-test-conn" class="btn ghost">测试连接</button>
                       <button id="btn-save-profile" class="btn primary">保存模型配置</button>
                       <button id="btn-cancel-edit" class="btn ghost">取消</button>
@@ -1579,6 +1580,30 @@
       <div class="modal-btns">
         <button id="btn-mic-cancel" class="btn">取消</button>
         <button id="btn-mic-grant" class="btn primary">授权</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 手动添加模型弹窗 -->
+  <div id="add-model-modal" class="modal hidden">
+    <div class="modal-box">
+      <h2>添加模型</h2>
+      <div class="form-row" style="margin-bottom:14px">
+        <label><span style="color:var(--danger)">*</span> 模型 ID</label>
+        <input id="am-model-id" type="text" placeholder="必填，例如 gpt-3.5-turbo" />
+      </div>
+      <div class="form-row" style="margin-bottom:14px">
+        <label>模型名称</label>
+        <input id="am-model-name" type="text" placeholder="选填，例如 GPT-4" />
+      </div>
+      <div class="form-row" style="margin-bottom:14px">
+        <label>分组名称</label>
+        <input id="am-model-group" type="text" placeholder="选填，例如 ChatGPT" />
+      </div>
+      <div id="am-error" class="field-hint hidden" style="color:var(--danger)"></div>
+      <div class="modal-btns">
+        <button id="btn-am-cancel" class="btn ghost">取消</button>
+        <button id="btn-am-confirm" class="btn primary">添加模型</button>
       </div>
     </div>
   </div>
