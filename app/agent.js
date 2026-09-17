@@ -1858,7 +1858,7 @@ async function callApi(profile, apiType, system, messages, toolList, signal = nu
 
 /* ================= 系统提示词 ================= */
 
-function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatId = null, userText = null) {
+function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatId = null, userText = null, memoryEnabled = false) {
   const home = os.homedir();
   const skillList = Object.entries(SKILLS).map(([k, v]) => `- ${k}：${v.description}`).join('\n');
   // 推荐技能：尚未安装的列出来，提示模型可按需安装
@@ -1904,11 +1904,12 @@ function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatI
       mcpSection += `\n\n## MCP 外部工具（用户已接入）\n以下工具由用户配置的 MCP 服务器提供，命名规则 mcp__<服务器>__<工具名>，调用前会请求用户授权：\n${lines}\n优先在这些工具能力覆盖的场景使用它们（例如数据库、云服务、第三方 API）。`;
     }
   } catch (e) { /* ignore */ }
-  // 长期记忆注入：用户级 + 当前对话级
-  const userMem = memory.formatMemory('user', null, 30);
+  // 长期记忆注入：仅当前对话级 + （开关开启时的）用户偏好级。
+  // 用户级记忆只存「偏好/习惯/约定」，不含具体任务内容——保证新建对话不关联历史任务。
+  const userMem = memoryEnabled ? memory.formatMemory('user', null, 30) : '';
   const chatMem = chatId ? memory.formatMemory('chat', chatId, 15) : '';
   const memorySection = userMem || chatMem
-    ? `\n\n## 长期记忆（来自历史对话的总结）\n以下信息是从你与 AI 的历史对话中自动提炼的，回答时请参考，但不必复述给正在看的用户。\n${userMem ? userMem + '\n' : ''}${chatMem ? chatMem + '\n' : ''}`
+    ? `\n\n## 用户偏好与约定\n以下是用户的长期偏好与工作约定，仅供本次回答作背景参考。\n严格注意：不要在回复中提及、暗示或引用任何过往对话或历史任务；每个对话都是独立的。\n${userMem ? userMem + '\n' : ''}${chatMem ? chatMem + '\n' : ''}`
     : '';
   const taskBoostSection = buildTaskSkillBoost(userText);
   return `你是「AI Copilot」应用内嵌的智能体，运行在本机（macOS）。你可以自主查找、读取、修改、创建本机文件，帮助用户：替换内容、编写文件、修改文件、完善文件、排版文件。
@@ -1951,7 +1952,7 @@ async function extractMemoryFacts(profile, apiType, messages) {
     const c = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
     return `[${m.role}] ${String(c).slice(0, 1500)}`;
   }).join('\n\n');
-  const prompt = `请从以下最近对话中提炼关于用户的长期事实、偏好、习惯、项目约定或关键决策。\n输出严格 JSON，不要任何解释：\n{"facts":[{"category":"preference|habit|project|convention|decision|error|other","content":"简洁的一句话事实","confidence":0.0-1.0}]}\n\n对话记录：\n${recent}`;
+  const prompt = `请从以下最近对话中提炼关于用户的「长期偏好 / 习惯 / 工作约定」。\n\n严格限制——只允许提炼这一类信息：\n- 语言与沟通偏好（如：回复用中文、少夹英文）\n- 工作习惯与风格偏好（如：喜欢浅色界面、喜欢先看方案再动手）\n- 长期有效的通用约定（如：所有回复要简洁）\n\n绝对禁止提炼以下内容（出现了也要丢弃）：\n- 任何 IP 地址、域名、主机名、端口、路径、账号、密码、凭据\n- 具体任务的内容、过程或结果（例如某次替某系统做了什么、某台机器的用途）\n- 一次性的临时事实、项目细节、技术排错结论\n\n每个对话都是独立的：你的任务只是让下次对话更懂用户的「偏好」，而不是记住用户做过什么。\n\n输出严格 JSON，不要任何解释：\n{"facts":[{"category":"preference|habit|convention","content":"简洁的一句话事实","confidence":0.0-1.0}]}\n\n对话记录：\n${recent}`;
   try {
     const r = await callApi(profile, apiType, '你是对话记忆提炼助手。只输出 JSON。', [{ role: 'user', content: prompt }], []);
     const text = (r.text || '').trim();
@@ -1959,6 +1960,13 @@ async function extractMemoryFacts(profile, apiType, messages) {
     if (!jsonMatch) return;
     const data = JSON.parse(jsonMatch[0]);
     if (!Array.isArray(data.facts) || !data.facts.length) return;
+    // 后置过滤（双保险）：含 IP/域名/URL/凭据/过长细节的事实一律丢弃，防止任务内容混进长期记忆
+    const SENSITIVE = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})|(https?:\/\/)|((?:sk|ghp|gho|token)[-_a-z0-9]{8,})|(密码|凭据|口令)|(\/[A-Za-z0-9_\-./]{6,})/i;
+    data.facts = data.facts.filter((f) => {
+      const c = String((f && f.content) || '');
+      return c && !SENSITIVE.test(c) && c.length <= 120;
+    });
+    if (!data.facts.length) return;
     const existing = memory.loadMemory('user');
     const merged = memory.mergeMemory(existing, data.facts);
     memory.saveMemory('user', null, merged);
@@ -2064,7 +2072,7 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   // 本轮 AbortController：停止时中断正在飞的模型 HTTP 请求
   const ac = new AbortController();
   _currentAbort = ac;
-  const system = opts.system || buildSystemPrompt(ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer, ctx.chatId, userText);
+  const system = opts.system || buildSystemPrompt(ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer, ctx.chatId, userText, ctx.memoryEnabled);
   const maxTurns = opts.maxTurns || MAX_TURNS;
   const toolList = buildToolList(opts.allowedTools, opts.isSubagent, ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer);
 
