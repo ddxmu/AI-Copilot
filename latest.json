@@ -1,16 +1,16 @@
 {
-  "version": "0.11.12",
-  "notes": "### 1. 修复「新建对话仍关联历史内容」\n\n- 新建对话不再关联以往对话的任务内容：每个对话都是独立的。\n- 长期记忆改为**只记录用户偏好、习惯与工作约定**；IP、域名、主机、密码、任务过程等具体内容一律不再写入记忆，写入前还会再做一次过滤。\n- 记忆注入改为遵循「生成对话记忆」开关：关闭后不再注入任何记忆。\n- 旧的记忆数据（积累了大量任务细节）已清理，仅保留备份。",
-  "pubDate": "2026-09-17T14:25:04+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.12/AI.Copilot-0.11.12-arm64.dmg",
-  "sha256": "694de7754f45a997194059223d76b9a32dcd52b066e6bd58ba99ee0dfff34546",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.12/AI.Copilot-0.11.12.zip",
-  "patchSha256": "cc31e3a79f8cb5601210860f9ca44889a70d62d426f93c66120952e0bcc29b62",
+  "version": "0.11.13",
+  "notes": "### 1. MCP 市场新增 REA（逆向工程）服务器\n\n- 「MCP 市场」新增 **REA**（Reverse Engineer Anything）模板：选中后点「配置并添加」即可启用，无需填写任何参数，自动以 `npx -y rea-agents@latest --mcp`（stdio）启动，可用约 170 个逆向工程工具（原生二进制、APK/Flutter、Web/JS bundle、固件、WASM 等）。\n- 深度分析能力需要本机另装 Ghidra / Hopper / IDA、Playwright、adb、binwalk 等（可选，未装不影响基础能力）。\n\n### 2. MCP 服务器支持单独「停止服务」\n\n- 服务器列表中，运行中的服务器新增「停止服务」按钮，点击即可关闭该服务器的子进程，不再需要删除配置。\n- 停止后按钮变为「启动」，可随时重新连接。",
+  "pubDate": "2026-10-13T21:07:55+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.13/AI.Copilot-0.11.13-arm64.dmg",
+  "sha256": "7bc2569cf595eb53ac1caa58828f5b0a19e9dbdd955fc75fe3adc122d1029dce",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.13/AI.Copilot-0.11.13.zip",
+  "patchSha256": "3069cbc7a8ca84c2b5d7bc0cea254e03799fc05f22436e920344046abafe9544",
   "deltas": [
     {
-      "from": "0.11.11",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.12/AI.Copilot-0.11.12.zip",
-      "sha256": "cc31e3a79f8cb5601210860f9ca44889a70d62d426f93c66120952e0bcc29b62"
+      "from": "0.11.12",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.13/AI.Copilot-0.11.13.zip",
+      "sha256": "3069cbc7a8ca84c2b5d7bc0cea254e03799fc05f22436e920344046abafe9544"
     }
   ]
 }
