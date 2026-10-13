@@ -1620,6 +1620,17 @@ const MCP_MARKET_TEMPLATES = [
     args: ['-y', 'mcp-markdownify-server'],
     env: {},
     params: []
+  },
+  {
+    id: 'rea',
+    name: 'REA 逆向工程',
+    category: '开发',
+    icon: '🔬',
+    desc: 'Reverse Engineer Anything（rea）——让 AI 助手具备逆向工程能力：分析 PE / ELF / Mach-O 二进制、APK / Flutter、固件、WASM、Web 打包产物等。无需 API Key，首次运行会自动下载依赖（约数百 MB，首次稍慢）。深度原生分析（Hopper / Ghidra / IDA）与 Android / 浏览器场景为可选能力。内置工具较多（170+），弱模型可能吃力，建议用云端强模型。',
+    command: 'npx',
+    args: ['-y', 'rea-agents@latest', '--mcp'],
+    env: {},
+    params: []
   }
 ];
 
@@ -1692,10 +1703,28 @@ function renderMcpList() {
       const r = await window.api.mcpDelete(s.id);
       if (r.ok) { mcpState.servers = r.servers; mcpState.status = r.status; renderMcpList(); }
     });
-    ops.append(editBtn, delBtn);
+    // 运行中显示「停止服务」，已停止 / 禁用 / 出错显示「启动」（复用 mcp-save 切换 enabled + 增量 kill 关闭子进程）
+    if (['ready', 'idle', 'connecting'].includes(st.status)) {
+      const stopBtn = document.createElement('button');
+      stopBtn.textContent = '停止服务';
+      stopBtn.addEventListener('click', () => toggleMcpServer(s, false));
+      ops.append(editBtn, stopBtn, delBtn);
+    } else {
+      const startBtn = document.createElement('button');
+      startBtn.textContent = '启动';
+      startBtn.addEventListener('click', () => toggleMcpServer(s, true));
+      ops.append(editBtn, startBtn, delBtn);
+    }
     li.append(main, ops);
     listEl.appendChild(li);
   });
+}
+
+// 启停单个 MCP 服务器：切换 enabled 后 mcp-save 会触发 connectFromConfig 增量重连 / kill 子进程
+async function toggleMcpServer(server, enable) {
+  const r = await window.api.mcpSave({ ...server, enabled: enable });
+  if (r.ok) await refreshMcpState();
+  else console.error('MCP 启停失败：' + r.error);
 }
 
 function toggleMcpTransport() {
