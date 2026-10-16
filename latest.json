@@ -1,16 +1,16 @@
 {
-  "version": "0.11.13",
-  "notes": "### 1. MCP 市场新增 REA（逆向工程）服务器\n\n- 「MCP 市场」新增 **REA**（Reverse Engineer Anything）模板：选中后点「配置并添加」即可启用，无需填写任何参数，自动以 `npx -y rea-agents@latest --mcp`（stdio）启动，可用约 170 个逆向工程工具（原生二进制、APK/Flutter、Web/JS bundle、固件、WASM 等）。\n- 深度分析能力需要本机另装 Ghidra / Hopper / IDA、Playwright、adb、binwalk 等（可选，未装不影响基础能力）。\n\n### 2. MCP 服务器支持单独「停止服务」\n\n- 服务器列表中，运行中的服务器新增「停止服务」按钮，点击即可关闭该服务器的子进程，不再需要删除配置。\n- 停止后按钮变为「启动」，可随时重新连接。",
-  "pubDate": "2026-10-13T21:07:55+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.13/AI.Copilot-0.11.13-arm64.dmg",
-  "sha256": "7bc2569cf595eb53ac1caa58828f5b0a19e9dbdd955fc75fe3adc122d1029dce",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.13/AI.Copilot-0.11.13.zip",
-  "patchSha256": "3069cbc7a8ca84c2b5d7bc0cea254e03799fc05f22436e920344046abafe9544",
+  "version": "0.11.14",
+  "notes": "### 1. 修复 npx 型 MCP 服务器连接超时\n\n- 部分 MCP 服务器通过 `npx -y xxx@latest` 启动（如 REA 逆向工程服务器），首次启动需要现场下载整包，耗时远超原有 30 秒限制，导致添加或启动时报「调用超时（initialize）」。\n- stdio 类型服务器的连接超时由 30 秒放宽到 **120 秒**，首次下载慢的服务器现在可以正常握手；SSE 类型仍保持 30 秒不变。",
+  "pubDate": "2026-10-16T23:20:06+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.14/AI.Copilot-0.11.14-arm64.dmg",
+  "sha256": "26043295812ced3d2fc647c050699ff4edd54afd3adc8a8218af56b80536fb61",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.14/AI.Copilot-0.11.14.zip",
+  "patchSha256": "61feb6cf396ac26bd36149c16150c9ff8bafd4092d2b9160ed11c2b3f8febcd6",
   "deltas": [
     {
-      "from": "0.11.12",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.13/AI.Copilot-0.11.13.zip",
-      "sha256": "3069cbc7a8ca84c2b5d7bc0cea254e03799fc05f22436e920344046abafe9544"
+      "from": "0.11.13",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.14/AI.Copilot-0.11.14.zip",
+      "sha256": "61feb6cf396ac26bd36149c16150c9ff8bafd4092d2b9160ed11c2b3f8febcd6"
     }
   ]
 }
