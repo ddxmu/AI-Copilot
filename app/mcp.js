@@ -81,7 +81,7 @@ class McpConnection {
     this.stderrTail = (this.stderrTail + msg).slice(-2000);
   }
 
-  async connect(timeoutMs = 30000) {
+  async connect(timeoutMs = 120000) {
     if (this.status === 'connecting' || this.status === 'ready') return this;
     this.status = 'connecting';
     this.error = '';
@@ -667,7 +667,8 @@ function getAllStatus() {
 // 测试单个服务器（不影响连接池里的常驻连接）
 async function testServer(cfg) {
   const conn = createConnection(cfg);
-  await conn.connect(30000);
+  // stdio 首次启动可能要 npx 现场下载包，给足超时；sse 保持 30s
+  await conn.connect(cfg.transport === 'sse' ? 30000 : 120000);
   const res = statusOf(conn);
   conn.kill();
   return res;
