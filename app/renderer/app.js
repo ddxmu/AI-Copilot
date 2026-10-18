@@ -4341,6 +4341,60 @@ window.api.onAiConfirm((payload) => {
   confirmBar.classList.remove('hidden');
 });
 
+// 用户选择题（ask_user 工具）：展示问题+选项，用户点击后把选择回传给主进程
+const askUserBar = document.getElementById('ask-user-bar');
+const askUserQuestionEl = document.getElementById('ask-user-question');
+const askUserOptionsEl = document.getElementById('ask-user-options');
+const askUserCustomInput = document.getElementById('ask-user-custom');
+
+function answerAskUser(text) {
+  if (!askUserBar) return;
+  askUserBar.classList.add('hidden');
+  if (askUserCustomInput) askUserCustomInput.value = '';
+  window.api.aiAskUserReply(text);
+}
+
+window.api.onAiAskUser((payload) => {
+  if (!askUserBar) return;
+  askUserQuestionEl.textContent = (payload && payload.question) || '请选择';
+  askUserOptionsEl.innerHTML = '';
+  const opts = (payload && Array.isArray(payload.options)) ? payload.options : [];
+  opts.forEach((o, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'ask-option';
+    const num = document.createElement('span');
+    num.className = 'ask-num';
+    num.textContent = (i + 1) + '.';
+    const body = document.createElement('span');
+    body.className = 'ask-opt-body';
+    const lab = document.createElement('span');
+    lab.className = 'ask-opt-label';
+    lab.textContent = (o && o.label) || ('选项 ' + (i + 1));
+    body.appendChild(lab);
+    if (o && o.description) {
+      const d = document.createElement('span');
+      d.className = 'ask-opt-desc';
+      d.textContent = o.description;
+      body.appendChild(d);
+    }
+    btn.append(num, body);
+    btn.addEventListener('click', () => answerAskUser((o && o.label) || ''));
+    askUserOptionsEl.appendChild(btn);
+  });
+  askUserBar.classList.remove('hidden');
+  if (chatMessagesEl) chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+});
+const btnAskSkip = document.getElementById('btn-ask-skip');
+if (btnAskSkip) btnAskSkip.addEventListener('click', () => answerAskUser(null));
+const btnAskCustom = document.getElementById('btn-ask-custom');
+if (btnAskCustom) btnAskCustom.addEventListener('click', () => {
+  const v = (askUserCustomInput.value || '').trim();
+  if (v) answerAskUser(v);
+});
+if (askUserCustomInput) askUserCustomInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && btnAskCustom) btnAskCustom.click();
+});
+
 // Todo 任务清单
 const todoPanel = document.getElementById('todo-panel');
 const todoListEl = document.getElementById('todo-list');

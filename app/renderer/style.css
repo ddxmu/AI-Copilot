@@ -2098,6 +2098,78 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   display: none;
 }
 
+/* 用户选择题（ask_user） */
+.ask-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin: 2px 0;
+}
+
+.ask-option {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  text-align: left;
+  padding: 9px 14px;
+  border: 1px solid #e3e6ec;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text, #1f2329);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.ask-option:hover {
+  background: #f0f5ff;
+  border-color: #2f6fed;
+}
+
+.ask-num {
+  color: #2f6fed;
+  font-weight: 600;
+  flex: none;
+}
+
+.ask-opt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ask-opt-label {
+  font-weight: 600;
+}
+
+.ask-opt-desc {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.ask-custom {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  margin: 2px 0;
+}
+
+.ask-custom input {
+  flex: 1;
+  padding: 7px 12px;
+  border: 1px solid #e3e6ec;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  color: var(--text, #1f2329);
+}
+
+.ask-custom input:focus {
+  border-color: #2f6fed;
+}
+
 .confirm-head {
   display: flex;
   align-items: flex-start;

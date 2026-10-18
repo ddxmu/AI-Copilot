@@ -732,6 +732,43 @@ async function installSkillByName(name, ctx) {
 
 const tools = {
 
+  /* ---------- 用户交互 ---------- */
+  ask_user: {
+    description: '向用户展示一道选择题（问题 + 多个选项），等待用户点击选择后你再继续。当任务进行中出现多个可选的方向/方案/范围、需要用户拍板时调用；用户选择后按其选择继续执行。不要不问就自己停下等待用户打字。',
+    schema: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', description: '要问用户的问题，一句话说清背景' },
+        options: {
+          type: 'array',
+          description: '2~8 个选项，按推荐优先级排序',
+          items: {
+            type: 'object',
+            properties: {
+              label: { type: 'string', description: '选项短标题（几个字）' },
+              description: { type: 'string', description: '一句话说明该选项具体做什么' },
+            },
+            required: ['label'],
+          },
+        },
+      },
+      required: ['question', 'options'],
+    },
+    readOnly: true,
+    permission: 'allow',
+    async run({ question, options }, ctx) {
+      const opts = (Array.isArray(options) ? options : [])
+        .map((o) => (typeof o === 'string' ? { label: o } : o))
+        .filter((o) => o && o.label)
+        .slice(0, 8);
+      if (!question || !opts.length) return '错误：question 与 options（至少 1 个选项）为必填';
+      if (!ctx.askUser) return '当前环境不支持交互提问，请自行选择最合理的默认方案继续执行任务，不要停下等待。';
+      const answer = await ctx.askUser({ question: String(question).slice(0, 300), options: opts });
+      if (!answer) return '用户没有选择（点了「跳过」）。请自行选择最合理的默认方案继续执行，任务不要中断。';
+      return `用户选择了：「${answer}」。请严格按该选择继续执行任务。`;
+    },
+  },
+
   /* ---------- 文件读取 ---------- */
   read_file: {
     description: '读取文件内容（带行号）。默认最多 2000 行，可用 offset/limit 分段。支持本机任意路径。',
@@ -1920,7 +1957,7 @@ function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatI
 - 已安装技能目录：${CURRENT_SKILLS_DIR || '（暂无，技能安装后位于用户数据目录下的 skills/）'}（每个技能一个子目录，内含 SKILL.md 与 scripts/ 等；运行技能里的脚本时用此目录的绝对路径，例如 <已安装技能目录>/<技能名>/scripts/xxx.py）
 
 ## 可用工具
-读取(read_file)、编写(write_file)、局部修改(edit_file)、扫描文件夹(glob_files)、搜索内容(grep_files)、列目录(list_dir)、添加替换规则(add_replace_rule)、批量替换(batch_replace)、打开文件(open_file)、打开网页(open_url)、格式转换(convert_file)、查看图片(view_image)、终端命令(run_command)、任务清单(todo_write)、子代理(agent)、技能包(skill)${webToolsLine}。
+读取(read_file)、编写(write_file)、局部修改(edit_file)、扫描文件夹(glob_files)、搜索内容(grep_files)、列目录(list_dir)、添加替换规则(add_replace_rule)、批量替换(batch_replace)、打开文件(open_file)、打开网页(open_url)、格式转换(convert_file)、查看图片(view_image)、终端命令(run_command)、任务清单(todo_write)、子代理(agent)、技能包(skill)、询问用户(ask_user)${webToolsLine}。
 
 ## 工作指引
 - 写文件、修改文件、批量替换、打开文件、打开网页等敏感操作前，工具会向用户请求授权，你正常调用即可；用户拒绝则操作中止。
@@ -1940,6 +1977,12 @@ function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatI
 - 不要因为工具调用多就主动暂停等待用户确认；只有需要授权的敏感操作（写/改/执行命令/打开）才会弹窗，其余自主决策。
 - 一次性回复中最多 40 轮工具调用（系统限制），如超出请用普通文本回复用户当前进度，让用户说"继续"再续做。
 - 输出长列表、答案表、批量记录或长段代码时，必须用 write_file 写入文件（再告知用户路径），不要直接在对话里一次性输出——对话单条回复有长度上限，超限会被截断导致任务中断。单条回复正文尽量控制在 1500 字以内。
+
+## 用户选择题（重要）
+- 当任务进行中出现「多个可选方向/方案/范围/优先级」需要用户拍板时，必须调用 ask_user 工具：把问题与选项列出来，让用户直接点击选择。
+- 用户点选后（工具会返回用户的选择），按该选择继续执行。
+- 严禁不调用 ask_user 就直接输出"请告诉我你想要哪种/A/B/C 你选一个"之类的文字然后停止——那样界面不会出现可点击的选项，用户无法便捷回复。
+- 若 ask_user 返回"用户没有选择（跳过）"或环境不支持提问，就自行选择最合理的默认方案继续做，直到任务完成。
 
 ## 技能包
 ${skillList}${recommendedSection}${mcpSection}${memorySection}${taskBoostSection}`;
@@ -2285,6 +2328,7 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
     todos: [],
     history: chatHistory,
     confirm: callbacks.onConfirm,
+    askUser: callbacks.onAskUser,
     rulesChanged: callbacks.onRulesChanged || (() => {}),
     webAccess: callbacks.webAccess || false,
     mcpEnabled: callbacks.mcpEnabled === true, // 外部 MCP 开关；内置 ComputerUse 由应用设置控制

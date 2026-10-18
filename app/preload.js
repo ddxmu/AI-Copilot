@@ -94,6 +94,7 @@ contextBridge.exposeInMainWorld('api', {
   // 拖拽 / 粘贴得到的 File 对象取真实磁盘路径（Electron 32+ 移除了 File.path，须用 webUtils）
   getPathForFile: (file) => { try { return webUtils.getPathForFile(file) || ''; } catch (e) { return ''; } },
   aiConfirmReply: (ok, remember) => ipcRenderer.invoke('ai-chat-confirm-reply', ok, remember),
+  aiAskUserReply: (answer) => ipcRenderer.invoke('ai-chat-ask-user-reply', answer),
   setPermissionMode: (mode) => ipcRenderer.invoke('set-permission-mode', mode),
   setMcpEnabled: (enabled) => ipcRenderer.invoke('set-mcp-enabled', enabled),
   setMcpServer: (name) => ipcRenderer.invoke('set-mcp-server', name),
@@ -118,6 +119,7 @@ contextBridge.exposeInMainWorld('api', {
   onAiToolStart: (cb) => ipcRenderer.on('ai-chat-tool-start', (_e, d) => cb(d)),
   onAiToolEnd: (cb) => ipcRenderer.on('ai-chat-tool-end', (_e, d) => cb(d)),
   onAiConfirm: (cb) => ipcRenderer.on('ai-chat-confirm', (_e, payload) => cb(payload)),
+  onAiAskUser: (cb) => ipcRenderer.on('ai-chat-ask-user', (_e, payload) => cb(payload)),
   onAiTodo: (cb) => ipcRenderer.on('ai-chat-todo', (_e, todos) => cb(todos)),
   onAiSubagentStart: (cb) => ipcRenderer.on('ai-chat-subagent-start', (_e, d) => cb(d)),
   onAiSubagentEnd: (cb) => ipcRenderer.on('ai-chat-subagent-end', (_e, d) => cb(d)),

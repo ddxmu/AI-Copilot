@@ -2234,6 +2234,14 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
         };
         wc.send('ai-chat-confirm', data);
       }),
+      // ask_user 工具：向渲染端展示选择题卡片，等用户点击后把选项文本回传（null=跳过）
+      onAskUser: (payload) => new Promise((resolve) => {
+        pendingAskUser = (answer) => {
+          resolve(answer);
+          pendingAskUser = null;
+        };
+        wc.send('ai-chat-ask-user', payload || {});
+      }),
       onTodo: (todos) => wc.send('ai-chat-todo', todos),
       onSubagentStart: (d) => wc.send('ai-chat-subagent-start', d),
       onSubagentEnd: (d) => wc.send('ai-chat-subagent-end', d),
@@ -2293,6 +2301,12 @@ ipcMain.handle('ai-chat-confirm-reply', (_e, ok, remember) => {
 let pendingInstallSkill = null;
 ipcMain.handle('ai-chat-install-skill-reply', (_e, ok) => {
   if (pendingInstallSkill) { pendingInstallSkill(!!ok); }
+});
+
+// ask_user 选择题回答回调（answer=选项文本；null=用户跳过）
+let pendingAskUser = null;
+ipcMain.handle('ai-chat-ask-user-reply', (_e, answer) => {
+  if (pendingAskUser) { pendingAskUser(answer === undefined ? null : answer); }
 });
 
 /* ---------------- 文件自动化：编写规范预设持久化 ---------------- */

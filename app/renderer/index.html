@@ -820,6 +820,25 @@
             </div>
           </div>
 
+          <!-- 用户选择题（ask_user 工具） -->
+          <div id="ask-user-bar" class="confirm-bar hidden">
+            <div class="confirm-head">
+              <span class="confirm-icon">❓</span>
+              <div class="confirm-body">
+                <div class="confirm-title">需要你的选择</div>
+                <div id="ask-user-question" class="confirm-text"></div>
+              </div>
+            </div>
+            <div id="ask-user-options" class="ask-options"></div>
+            <div class="ask-custom">
+              <input type="text" id="ask-user-custom" placeholder="或输入你自己的答案…" />
+              <button id="btn-ask-custom" class="btn small ghost">提交</button>
+            </div>
+            <div class="confirm-btns">
+              <button id="btn-ask-skip" class="btn small ghost">跳过，由 AI 自行决定</button>
+            </div>
+          </div>
+
           <!-- 技能安装授权 -->
           <div id="install-skill-bar" class="confirm-bar hidden">
             <div class="confirm-head">
