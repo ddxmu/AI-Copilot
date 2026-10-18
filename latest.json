@@ -1,16 +1,16 @@
 {
-  "version": "0.11.14",
-  "notes": "### 1. 修复 npx 型 MCP 服务器连接超时\n\n- 部分 MCP 服务器通过 `npx -y xxx@latest` 启动（如 REA 逆向工程服务器），首次启动需要现场下载整包，耗时远超原有 30 秒限制，导致添加或启动时报「调用超时（initialize）」。\n- stdio 类型服务器的连接超时由 30 秒放宽到 **120 秒**，首次下载慢的服务器现在可以正常握手；SSE 类型仍保持 30 秒不变。",
-  "pubDate": "2026-10-16T23:20:06+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.14/AI.Copilot-0.11.14-arm64.dmg",
-  "sha256": "26043295812ced3d2fc647c050699ff4edd54afd3adc8a8218af56b80536fb61",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.14/AI.Copilot-0.11.14.zip",
-  "patchSha256": "61feb6cf396ac26bd36149c16150c9ff8bafd4092d2b9160ed11c2b3f8febcd6",
+  "version": "0.11.15",
+  "notes": "### 1. 新增「用户选择题」：AI 需要决策时弹出可点击的选项\n\n- 修复「执行任务中 AI 分析完选项后自己停下来、没有任何提示」的问题：现在 AI 遇到多个可选方向/方案/范围需要用户拍板时，会调用新增的 `ask_user` 工具，在输入框上方弹出选择题卡片——问题 + 编号选项（每个选项带一句话说明），点一下即继续执行。\n- 也可以在输入框里输入自己的答案提交，或点「跳过，由 AI 自行决定」让 AI 按最合理的默认方案继续。\n- 系统提示同步约束：需要用户选择时必须弹选项卡片，禁止只输出\"请告诉我你选哪个\"之类的文字然后干等；没有选择题的任务则一气呵成跑到结束。",
+  "pubDate": "2026-10-18T12:02:17+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.15/AI.Copilot-0.11.15-arm64.dmg",
+  "sha256": "98973f17df4aa120e29401cbba7ae7fb32892565fa79646c4a5820da8cab9f08",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.15/AI.Copilot-0.11.15.zip",
+  "patchSha256": "3c73e56745975b6dfcb9d24c2bbd0803a0e58e9d977266405f34b96ea8814064",
   "deltas": [
     {
-      "from": "0.11.13",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.14/AI.Copilot-0.11.14.zip",
-      "sha256": "61feb6cf396ac26bd36149c16150c9ff8bafd4092d2b9160ed11c2b3f8febcd6"
+      "from": "0.11.14",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.15/AI.Copilot-0.11.15.zip",
+      "sha256": "3c73e56745975b6dfcb9d24c2bbd0803a0e58e9d977266405f34b96ea8814064"
     }
   ]
 }
