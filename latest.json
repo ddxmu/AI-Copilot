@@ -1,16 +1,16 @@
 {
-  "version": "0.11.15",
-  "notes": "### 1. 新增「用户选择题」：AI 需要决策时弹出可点击的选项\n\n- 修复「执行任务中 AI 分析完选项后自己停下来、没有任何提示」的问题：现在 AI 遇到多个可选方向/方案/范围需要用户拍板时，会调用新增的 `ask_user` 工具，在输入框上方弹出选择题卡片——问题 + 编号选项（每个选项带一句话说明），点一下即继续执行。\n- 也可以在输入框里输入自己的答案提交，或点「跳过，由 AI 自行决定」让 AI 按最合理的默认方案继续。\n- 系统提示同步约束：需要用户选择时必须弹选项卡片，禁止只输出\"请告诉我你选哪个\"之类的文字然后干等；没有选择题的任务则一气呵成跑到结束。",
-  "pubDate": "2026-10-18T12:02:17+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.15/AI.Copilot-0.11.15-arm64.dmg",
-  "sha256": "98973f17df4aa120e29401cbba7ae7fb32892565fa79646c4a5820da8cab9f08",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.15/AI.Copilot-0.11.15.zip",
-  "patchSha256": "3c73e56745975b6dfcb9d24c2bbd0803a0e58e9d977266405f34b96ea8814064",
+  "version": "0.11.16",
+  "notes": "### 1. 任务没完成不再自己停止\n\n- 修复「任务做一半就停下」：此前单次任务最多 40 轮工具调用，用尽后 AI 会输出\"已完成部分操作，回复继续可接着处理\"把任务交回给用户。\n- 现在**轮数用尽时系统自动续跑**（最多再续 6 段，合计约 240 轮工具调用），对话里只提示\"正在自动继续执行\"，无需用户操作。\n- **todo 清单还有未完成项时也不停**：AI 输出中间回复但清单没做完，系统会自动注入续跑提示让它接着干（最多 2 次，防止 AI 忘记更新清单时打转）。\n- 系统提示同步收紧：禁止输出\"请回复继续 / 是否继续？\"之类把任务交回用户的话，一直执行到全部完成；需要用户拍板的场景仍走「用户选择题」。",
+  "pubDate": "2026-10-20T00:00:47+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.16/AI.Copilot-0.11.16-arm64.dmg",
+  "sha256": "3cacdf625a680b3a65953766ce70df21c01649b63fea88d18c6010535bba65bf",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.16/AI.Copilot-0.11.16.zip",
+  "patchSha256": "23b6e8ee7e3f4ff3cdce6841d16c9cf07e9e57ee08c6defbeefe19d82645151c",
   "deltas": [
     {
-      "from": "0.11.14",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.15/AI.Copilot-0.11.15.zip",
-      "sha256": "3c73e56745975b6dfcb9d24c2bbd0803a0e58e9d977266405f34b96ea8814064"
+      "from": "0.11.15",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.16/AI.Copilot-0.11.16.zip",
+      "sha256": "23b6e8ee7e3f4ff3cdce6841d16c9cf07e9e57ee08c6defbeefe19d82645151c"
     }
   ]
 }
