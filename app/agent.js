@@ -1975,7 +1975,8 @@ function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatI
 - 一次性任务应当一气呵成：建立 todo 后，逐项推进，每完成一项立刻更新 todo 状态，不要中途停下总结、问"是否继续"。
 - 若中途遇到错误，记录错误信息继续推进下一项，最后一并汇报。
 - 不要因为工具调用多就主动暂停等待用户确认；只有需要授权的敏感操作（写/改/执行命令/打开）才会弹窗，其余自主决策。
-- 一次性回复中最多 40 轮工具调用（系统限制），如超出请用普通文本回复用户当前进度，让用户说"继续"再续做。
+- 工具调用轮数用尽或输出了中间进度时，系统会检测任务清单中的未完成项并自动续跑，你无需等待用户——收到【系统自动续跑】提示后直接从断点继续，不要重复已完成的工作。
+- 严禁输出"请回复继续"、"是否继续？"之类把任务交回给用户的语句；除非需要用户在多个方案间拍板（此时用 ask_user 弹选项），否则一直执行到任务全部完成再输出最终汇报。
 - 输出长列表、答案表、批量记录或长段代码时，必须用 write_file 写入文件（再告知用户路径），不要直接在对话里一次性输出——对话单条回复有长度上限，超限会被截断导致任务中断。单条回复正文尽量控制在 1500 字以内。
 
 ## 用户选择题（重要）
@@ -2158,11 +2159,28 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
 
   let continueCount = 0;       // 输出被长度截断后的自动续写次数
   const MAX_CONTINUE = 3;      // 防止无限续写死循环
-  for (let turn = 0; turn < maxTurns; turn++) {
+  let autoContinues = 0;       // 工具轮数用尽后的自动续跑段数
+  const MAX_AUTO_CONTINUE = 6; // 40 轮 × 6 段 = 最多 240 轮工具调用，防死循环
+  let undoneContinues = 0;     // 「输出文本但 todo 未完成」的自动续跑次数
+  const MAX_UNDONE_CONTINUE = 2;
+  for (let turn = 0; ; turn++) {
     // 需求 #1：停止后不再发起任何模型请求、不再执行工具、不再进入下一轮
     if (_stopRequested) {
       _currentAbort = null;
       return { ok: true, stopped: true, text: (finalText || '') + '\n\n（已按你的要求停止。）', usage: totalUsage, messages };
+    }
+    // 需求：任务没完成不能停——本段工具轮数用尽时自动续跑（不抛回给用户说"继续"）
+    if (turn >= maxTurns) {
+      if (autoContinues < MAX_AUTO_CONTINUE) {
+        autoContinues++;
+        const tip = `\n\n（系统提示：本轮已执行 ${maxTurns} 次工具调用，任务尚未完成，正在自动继续执行（第 ${autoContinues} 段）…）`;
+        finalText += tip;
+        ctx.emit('text', tip);
+        messages.push({ role: 'user', content: '【系统自动续跑】上一段已执行较多工具调用，但任务还未完成。请从当前进度继续执行剩余工作：不要重复已完成的操作，不要停下来等待用户回复；全部做完后输出最终汇报。' });
+        turn = -1; // continue 后 turn++ 归零，重新计本段轮数
+        continue;
+      }
+      break; // 续跑次数用尽，按原逻辑收尾
     }
     // 上下文压缩：主对话且超阈值时触发
     if (!opts.isSubagent && !compacted && totalUsage.input > compactThreshold && messages.length > KEEP_RECENT_TURNS + 2) {
@@ -2233,6 +2251,21 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
         messages.push({ role: 'user', content: '【系统提示】你上一条回复因达到输出长度上限被截断，尚未表达完整。请立即从断点继续未完成的任务，不要重复已输出的内容；如果接下来要输出长列表（如答案表）、大段代码或多条记录，改用 write_file 写入文件并在对话里只告知路径，不要整段重复输出。' });
         continue;
       }
+      // 需求：任务没完成不能停——模型输出了文本就收尾，但 todo 清单还有未完成项时，
+      // 自动注入续跑提示继续执行（主对话限定；最多 2 次，防 AI 忘更新 todo 时死循环）。
+      if (!opts.isSubagent && undoneContinues < MAX_UNDONE_CONTINUE) {
+        const undone = (ctx.todos || []).filter((t) => t.status !== 'completed');
+        if (undone.length) {
+          undoneContinues++;
+          const tip = '\n\n（系统提示：检测到任务清单还有未完成项，正在自动继续执行…）';
+          finalText += tip;
+          ctx.emit('text', tip);
+          const list = undone.map((t) => '- ' + t.content).join('\n');
+          messages.push({ role: 'user', content: '【系统自动续跑】你输出了回复，但任务清单还有未完成项：\n' + list + '\n\n请继续执行这些未完成项，全部完成后再输出最终汇报；不要停下来等待用户。如果这些工作实际上已经完成，请先用 todo_write 把清单状态更新为已完成，再输出简短确认。若确有无法继续的阻塞原因，说明原因并给出已完成部分的交付说明。' });
+          turn = -1;
+          continue;
+        }
+      }
       break;
     }
 
@@ -2285,7 +2318,7 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   const lastMsg = messages[messages.length - 1];
   const lastIsToolOnly = lastMsg && lastMsg.role === 'tool';
   const hitMaxTurns = lastIsToolOnly;
-  const extra = hitMaxTurns ? '\n\n（系统提示：本轮已达最大工具调用次数（' + maxTurns + '），任务可能未完成。如需继续请回复"继续"接着处理。）' : '';
+  const extra = hitMaxTurns ? '\n\n（系统提示：任务已连续执行 ' + (autoContinues + 1) + ' 段共 ' + (maxTurns * (autoContinues + 1)) + ' 轮工具调用仍未结束，已自动停止。当前进度和已产出内容如上，回复"继续"可接着处理。）' : '';
   _currentAbort = null;
   return { ok: true, text: (finalText || (hitMaxTurns ? '已完成部分操作。' : '')) + extra, usage: totalUsage, messages, hitMaxTurns };
 }
