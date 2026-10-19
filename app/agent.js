@@ -46,7 +46,7 @@ function imageDims(buf, ext) {
   return '';
 }
 
-const MAX_TURNS = 40;           // 单轮对话最多工具调用轮数
+const MAX_TURNS = 100;          // 单轮对话默认工具调用轮数（可在 AI 配置里按模型覆盖 profile.maxToolTurns）
 const SUBAGENT_MAX_TURNS = 20;  // 子代理最多轮数
 const KEEP_RECENT_TURNS = 6;    // 压缩时保留最近 N 条消息
 
@@ -2117,7 +2117,7 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   const ac = new AbortController();
   _currentAbort = ac;
   const system = opts.system || buildSystemPrompt(ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer, ctx.chatId, userText, ctx.memoryEnabled);
-  const maxTurns = opts.maxTurns || MAX_TURNS;
+  const maxTurns = opts.maxTurns || (ctx.profile && ctx.profile.maxToolTurns) || MAX_TURNS;
   const toolList = buildToolList(opts.allowedTools, opts.isSubagent, ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer);
 
   // 接收完整消息历史（含 tool_calls/tool/tool_result），不仅取 role+content；

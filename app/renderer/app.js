@@ -673,6 +673,7 @@ const modelPriceEl = document.getElementById('model-price');
 const localSettingsEl = document.getElementById('local-settings');
 const ctxLenInput = document.getElementById('p-ctxlen');
 const maxTokensInput = document.getElementById('p-maxtokens');
+const maxTurnsInput = document.getElementById('p-maxturns');
 const temperatureInput = document.getElementById('p-temperature');
 // 思考强度：配置面板的多选勾选组（本地模型不支持，整块隐藏）
 const effortSettingsEl = document.getElementById('effort-settings');
@@ -762,6 +763,9 @@ function currentProfileDraft() {
     apiKey: apiKeyInput.value || cachedKey,
     model: modelSel.value,
   };
+  // 任务执行参数（所有模型通用）：单轮工具调用次数（留空 = 系统默认）
+  const mt = parseInt(maxTurnsInput.value, 10);
+  draft.maxToolTurns = Number.isFinite(mt) && mt > 0 ? mt : null;
   // 本地模型：额外保存上下文长度 / 最大输出 / 温度（留空 = 用服务端默认）
   if (p.local) {
     draft.local = true;
@@ -935,6 +939,7 @@ function openEditor(profile) {
   // 本地模型专属参数回填（temperature 允许为 0，故用 typeof 判断）
   ctxLenInput.value = profile && profile.contextLength ? String(profile.contextLength) : '';
   maxTokensInput.value = profile && profile.maxTokens ? String(profile.maxTokens) : '';
+  maxTurnsInput.value = profile && profile.maxToolTurns ? String(profile.maxToolTurns) : '';
   temperatureInput.value = profile && typeof profile.temperature === 'number' ? String(profile.temperature) : '';
   // 思考强度：回填该模型已勾选的档位（本地模型整块隐藏，由 provider change 事件控制）
   effortSettingsEl.classList.toggle('hidden', isLocalProvider());

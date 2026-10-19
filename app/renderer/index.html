@@ -1059,6 +1059,18 @@
                       </div>
                     </div>
 
+                    <!-- 任务执行参数（所有模型通用） -->
+                    <div class="local-settings">
+                      <div class="local-settings-title">任务执行</div>
+                      <div class="form-grid">
+                        <div class="form-cell">
+                          <label>单轮工具调用次数</label>
+                          <input id="p-maxturns" type="number" min="1" step="1" placeholder="100" />
+                          <div class="field-hint">AI 执行一个任务时最多连续调用的工具轮数，用尽后系统会自动续跑。留空 = 默认 100。跑长任务可调大，想控制耗时/成本可调小。</div>
+                        </div>
+                      </div>
+                    </div>
+
                     <!-- 思考强度：勾选该模型实际支持的档位（仅云端模型；本地模型隐藏） -->
                     <div id="effort-settings" class="local-settings hidden">
                       <div class="local-settings-title">思考强度（可多选）</div>
