@@ -1,16 +1,16 @@
 {
-  "version": "0.11.17",
-  "notes": "### 1. AI 配置可设置「单轮工具调用次数」（默认 100）\n\n- 「AI 设置 → AI 配置 → 编辑/新增」弹窗新增「任务执行 → 单轮工具调用次数」，云端与本地模型都可设置，默认 **100**（此前固定 40）。\n- 留空即使用默认值；跑长任务可调大、想控制耗时与成本可调小，每个模型配置独立保存。\n- 该次数用尽后系统会自动续跑（见 v0.11.16），不会把任务交回用户。",
-  "pubDate": "2026-10-20T00:52:56+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.17/AI.Copilot-0.11.17-arm64.dmg",
-  "sha256": "ddd0792d3ede969007a4b1a74d00fb8460f518b3f976091b7e4b4ccb84abea72",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.17/AI.Copilot-0.11.17.zip",
-  "patchSha256": "42f1168690cdc4cdba591239ae40c1e9c034c1f27bb3e29db4687b48e78875fb",
+  "version": "0.11.18",
+  "notes": "### 1. MCP 服务器支持在线更新（含回退）\n\n- 服务器列表在「编辑」前新增「更新」按钮（npx 本地包型服务器可见；远程地址类服务器无需更新，不显示）。\n- 点击弹出更新面板：显示「本地版本 / npm 最新版本」，一键更新到最新版，安装进度逐行实时显示（获取版本 → 清理旧缓存 → 下载安装 → 固定版本 → 重启服务）。\n- 支持**回退到指定历史版本**：下拉选择版本点「回退」即可装回旧版。\n- 更新与回退都会把启动配置固定到具体版本号，行为可预期；之后再点「更新」仍可升到最新版。",
+  "pubDate": "2026-10-20T10:36:27+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.18/AI.Copilot-0.11.18-arm64.dmg",
+  "sha256": "d62c9dd4f4ccfe7731b224c085a7d3ee3a46046fe436489f1a67f16513e1ff7c",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.18/AI.Copilot-0.11.18.zip",
+  "patchSha256": "72d2648b4717c43edbca7a31fa7f59d8c6fb1516d342e056adaca43fd3cdafdf",
   "deltas": [
     {
-      "from": "0.11.16",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.17/AI.Copilot-0.11.17.zip",
-      "sha256": "42f1168690cdc4cdba591239ae40c1e9c034c1f27bb3e29db4687b48e78875fb"
+      "from": "0.11.17",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.18/AI.Copilot-0.11.18.zip",
+      "sha256": "72d2648b4717c43edbca7a31fa7f59d8c6fb1516d342e056adaca43fd3cdafdf"
     }
   ]
 }
