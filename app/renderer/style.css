@@ -2170,6 +2170,23 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   border-color: #2f6fed;
 }
 
+/* MCP 服务器更新：安装进度日志 */
+.mcp-update-log {
+  max-height: 180px;
+  overflow-y: auto;
+  background: #f6f7f9;
+  border: 1px solid #e3e6ec;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #444;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .confirm-head {
   display: flex;
   align-items: flex-start;

@@ -1698,6 +1698,13 @@ function renderMcpList() {
 
     const ops = document.createElement('div');
     ops.className = 'profile-ops';
+    // 「更新」：仅 stdio（npm 包型）服务器显示，置于「编辑」前
+    let updBtn = null;
+    if (s.transport === 'stdio') {
+      updBtn = document.createElement('button');
+      updBtn.textContent = '更新';
+      updBtn.addEventListener('click', () => openMcpUpdateModal(s));
+    }
     const editBtn = document.createElement('button');
     editBtn.textContent = '编辑';
     editBtn.addEventListener('click', () => openMcpEditor(s));
@@ -1713,12 +1720,12 @@ function renderMcpList() {
       const stopBtn = document.createElement('button');
       stopBtn.textContent = '停止服务';
       stopBtn.addEventListener('click', () => toggleMcpServer(s, false));
-      ops.append(editBtn, stopBtn, delBtn);
+      ops.append(...(updBtn ? [updBtn] : []), editBtn, stopBtn, delBtn);
     } else {
       const startBtn = document.createElement('button');
       startBtn.textContent = '启动';
       startBtn.addEventListener('click', () => toggleMcpServer(s, true));
-      ops.append(editBtn, startBtn, delBtn);
+      ops.append(...(updBtn ? [updBtn] : []), editBtn, startBtn, delBtn);
     }
     li.append(main, ops);
     listEl.appendChild(li);
@@ -1737,6 +1744,116 @@ function toggleMcpTransport() {
   $m('m-stdio-fields').classList.toggle('hidden', t !== 'stdio');
   $m('m-sse-fields').classList.toggle('hidden', t !== 'sse');
 }
+
+/* ---- MCP 服务器更新（npm 包型）：检查 / 安装进度 / 回退 ---- */
+const mcpUpdateModal = document.getElementById('mcp-update-modal');
+const muName = document.getElementById('mu-name');
+const muPkg = document.getElementById('mu-pkg');
+const muVersions = document.getElementById('mu-versions');
+const muStatus = document.getElementById('mu-status');
+const muLog = document.getElementById('mu-log');
+const muVersionSel = document.getElementById('mu-version-sel');
+const muRollbackRow = document.getElementById('mu-rollback-row');
+const btnMuUpdate = document.getElementById('btn-mu-update');
+const btnMuRollback = document.getElementById('btn-mu-rollback');
+const btnMuClose = document.getElementById('btn-mu-close');
+let mcpUpdateServer = null;
+let mcpUpdateBusy = false;
+
+function appendMuLog(line) {
+  if (!muLog) return;
+  muLog.classList.remove('hidden');
+  const div = document.createElement('div');
+  div.textContent = line;
+  muLog.appendChild(div);
+  muLog.scrollTop = muLog.scrollHeight;
+}
+
+async function refreshMcpUpdateInfo() {
+  if (!mcpUpdateServer) return;
+  muVersions.textContent = '正在查询版本信息…';
+  muStatus.textContent = '';
+  const r = await window.api.mcpUpdateCheck(mcpUpdateServer.id);
+  if (!r || !r.ok) {
+    muVersions.textContent = '';
+    muStatus.textContent = '查询失败：' + ((r && r.error) || '未知错误');
+    if (btnMuUpdate) btnMuUpdate.disabled = true;
+    if (muRollbackRow) muRollbackRow.style.display = 'none';
+    return;
+  }
+  if (!r.supported) {
+    muVersions.textContent = '';
+    muStatus.textContent = r.reason || '该服务器不支持在线更新';
+    if (btnMuUpdate) btnMuUpdate.disabled = true;
+    if (muRollbackRow) muRollbackRow.style.display = 'none';
+    return;
+  }
+  muPkg.textContent = 'npm 包：' + r.pkg;
+  const cur = r.localVersion || '未知（本机尚未缓存）';
+  muVersions.textContent = `本地版本：${cur}　|　npm 最新：${r.latestVersion}${r.hasUpdate ? '　（有更新）' : '　（已是最新）'}`;
+  muStatus.textContent = r.hasUpdate ? '点击下方「更新到最新版」开始更新；更新后启动配置会固定到具体版本。' : '';
+  muVersionSel.innerHTML = '';
+  (r.versions || []).forEach((v) => {
+    if (r.localVersion && v === r.localVersion) return;
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    muVersionSel.appendChild(opt);
+  });
+  if (muRollbackRow) muRollbackRow.style.display = (r.versions && r.versions.length) ? '' : 'none';
+  if (btnMuUpdate) btnMuUpdate.disabled = false;
+}
+
+function openMcpUpdateModal(s) {
+  mcpUpdateServer = s;
+  mcpUpdateBusy = false;
+  muName.textContent = s.name;
+  muPkg.textContent = ((s.command || '') + ' ' + (s.args || []).join(' ')).trim();
+  muLog.innerHTML = '';
+  muLog.classList.add('hidden');
+  if (btnMuUpdate) btnMuUpdate.disabled = false;
+  if (btnMuRollback) btnMuRollback.disabled = false;
+  mcpUpdateModal.classList.remove('hidden');
+  refreshMcpUpdateInfo();
+}
+
+async function runMcpUpdate(version) {
+  if (!mcpUpdateServer || mcpUpdateBusy) return;
+  mcpUpdateBusy = true;
+  if (btnMuUpdate) btnMuUpdate.disabled = true;
+  if (btnMuRollback) btnMuRollback.disabled = true;
+  muLog.innerHTML = '';
+  appendMuLog(version === 'latest' ? '开始更新到最新版…' : `开始回退到 ${version}…`);
+  const r = await window.api.mcpUpdateInstall({ serverId: mcpUpdateServer.id, version });
+  if (r && r.ok) {
+    appendMuLog('✓ 完成：当前固定版本 ' + r.version);
+    muStatus.textContent = '已更新到 ' + r.version + '，服务已重启。';
+    if (r.servers) { mcpState.servers = r.servers; mcpState.status = r.status; renderMcpList(); }
+  } else {
+    appendMuLog('✗ 失败：' + ((r && r.error) || '未知错误'));
+    muStatus.textContent = '操作失败：' + ((r && r.error) || '');
+  }
+  mcpUpdateBusy = false;
+  if (btnMuUpdate) btnMuUpdate.disabled = false;
+  if (btnMuRollback) btnMuRollback.disabled = false;
+}
+
+if (window.api.onMcpUpdateProgress) {
+  window.api.onMcpUpdateProgress((d) => {
+    if (mcpUpdateServer && d && d.serverId === mcpUpdateServer.id && d.line) appendMuLog(d.line);
+  });
+}
+if (btnMuUpdate) btnMuUpdate.addEventListener('click', () => runMcpUpdate('latest'));
+if (btnMuRollback) btnMuRollback.addEventListener('click', () => {
+  const v = muVersionSel.value;
+  if (v) runMcpUpdate(v);
+});
+if (btnMuClose) btnMuClose.addEventListener('click', () => {
+  if (!mcpUpdateBusy) mcpUpdateModal.classList.add('hidden');
+});
+if (mcpUpdateModal) mcpUpdateModal.addEventListener('click', (e) => {
+  if (e.target === mcpUpdateModal && !mcpUpdateBusy) mcpUpdateModal.classList.add('hidden');
+});
 
 function openMcpEditor(server) {
   mcpState.editing = server || null;

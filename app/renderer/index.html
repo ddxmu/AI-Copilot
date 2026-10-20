@@ -1639,6 +1639,36 @@
     </div>
   </div>
 
+  <!-- MCP 服务器更新 -->
+  <div id="mcp-update-modal" class="modal hidden">
+    <div class="modal-box">
+      <h2>更新 MCP 服务器</h2>
+      <div class="form-row" style="margin-bottom:10px">
+        <label>服务器</label>
+        <div id="mu-name" style="font-size:13px;font-weight:600"></div>
+        <div id="mu-pkg" class="field-hint"></div>
+      </div>
+      <div class="form-row" style="margin-bottom:10px">
+        <label>版本</label>
+        <div id="mu-versions" style="font-size:13px"></div>
+        <div id="mu-status" class="field-hint"></div>
+      </div>
+      <div class="form-row" style="margin-bottom:10px" id="mu-rollback-row">
+        <label>回退到指定版本</label>
+        <div style="display:flex;gap:8px">
+          <select id="mu-version-sel" style="flex:1"></select>
+          <button id="btn-mu-rollback" class="btn ghost">回退</button>
+        </div>
+        <div class="field-hint">更新/回退都会把启动配置固定到所选的具体版本，行为可预期；之后再点「更新」可随时升到最新。</div>
+      </div>
+      <div id="mu-log" class="mcp-update-log hidden"></div>
+      <div class="modal-btns">
+        <button id="btn-mu-close" class="btn ghost">关闭</button>
+        <button id="btn-mu-update" class="btn primary">更新到最新版</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

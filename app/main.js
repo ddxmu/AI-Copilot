@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const net = require('net');
 const { execFile } = require('child_process');
+const { spawn } = require('child_process');
 const { ALL_EXTS, PLAIN_TEXT_SAFE, ZIP_BASED_OFFICE } = require('./filetypes');
 const { processOfficeFile, readZipEntries, LEGACY_OFFICE, replaceInLegacyFile } = require('./office-replace');
 const { BUILTIN_SKILLS, RECOMMENDED_SKILLS, parseSkillMd } = require('./agent');
@@ -1986,6 +1987,166 @@ ipcMain.handle('mcp-test', async (_e, server) => {
     const r = await mcp.testServer(server);
     if (r.status === 'ready') return { ok: true, toolCount: r.toolCount, tools: r.tools };
     return { ok: false, error: r.error || '连接失败' };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+/* ---------------- MCP 服务器更新（npm 包型 stdio 服务器） ---------------- */
+// 仅支持以 npx 启动的 npm 包：解析包名 → npm view 查最新/历史版本 →
+// 预热 npx 缓存下载指定版本（进度逐行推送渲染端）→ 把配置里的包 spec 固化为具体版本 → 重连。
+// 回退 = 安装指定旧版本并同样固化。远程 sse/http 服务器不适用，check 返回 supported:false。
+
+function resolveNpmPkg(server) {
+  if (!server || server.transport !== 'stdio') return null;
+  const cmd = String(server.command || '');
+  if (cmd !== 'npx' && !cmd.endsWith('/npx')) return null;
+  const args = server.args || [];
+  let spec = null;
+  for (const a of args) {
+    const s = String(a);
+    if (s.startsWith('-')) continue;
+    // 匹配 npm 包 spec：name、name@ver、@scope/name、@scope/name@ver
+    if (/^@[\w.-]+\/[\w.-]+(@[\w.^~*><=]+)?$|^[\w][\w.-]*(@[\w.^~*><=]+)?$/.test(s)) { spec = s; break; }
+  }
+  if (!spec) return null;
+  const at = spec.lastIndexOf('@');
+  const name = at > 0 ? spec.slice(0, at) : spec;
+  const version = at > 0 ? (spec.slice(at + 1) || 'latest') : 'latest';
+  if (!name) return null;
+  return { spec, name, version };
+}
+
+function runNpmCmd(args, timeoutMs = 30000) {
+  return new Promise((resolve) => {
+    const p = spawn('npm', args, {
+      env: { ...process.env, PATH: '/usr/local/bin:/opt/homebrew/bin:' + (process.env.PATH || '') },
+    });
+    let out = '', err = '';
+    const t = setTimeout(() => { try { p.kill('SIGKILL'); } catch (e) {} }, timeoutMs);
+    p.stdout.on('data', (d) => { out += d; });
+    p.stderr.on('data', (d) => { err += d; });
+    p.on('close', (code) => { clearTimeout(t); resolve({ code, out: out.trim(), err: err.trim() }); });
+    p.on('error', (e) => { clearTimeout(t); resolve({ code: -1, out, err: String(e && e.message || e) }); });
+  });
+}
+
+// 扫描 npx 缓存（~/.npm/_npx/<hash>/node_modules/<pkg>/package.json）拿本地已装版本
+function findNpxCacheVersion(pkgName) {
+  try {
+    const npxDir = path.join(os.homedir(), '.npm', '_npx');
+    if (!fs.existsSync(npxDir)) return null;
+    for (const h of fs.readdirSync(npxDir)) {
+      const pj = path.join(npxDir, h, 'node_modules', pkgName, 'package.json');
+      if (fs.existsSync(pj)) {
+        try {
+          const v = JSON.parse(fs.readFileSync(pj, 'utf8')).version;
+          if (v) return v;
+        } catch (e) { /* ignore */ }
+      }
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+// 找到该包所在的所有 npx 缓存目录（更新前改名隔离，让 npx 重新下载）
+function isolateNpxCacheDirs(pkgName) {
+  const moved = [];
+  try {
+    const npxDir = path.join(os.homedir(), '.npm', '_npx');
+    if (!fs.existsSync(npxDir)) return moved;
+    for (const h of fs.readdirSync(npxDir)) {
+      const dir = path.join(npxDir, h);
+      const pj = path.join(dir, 'node_modules', pkgName, 'package.json');
+      if (fs.existsSync(pj)) {
+        try { fs.renameSync(dir, dir + '.old-' + Date.now()); moved.push(dir); } catch (e) { /* ignore */ }
+      }
+    }
+  } catch (e) { /* ignore */ }
+  return moved;
+}
+
+ipcMain.handle('mcp-update-check', async (_e, serverId) => {
+  try {
+    const server = aiConfig.getMcpServers().find((s) => s.id === serverId);
+    const pkg = resolveNpmPkg(server);
+    if (!pkg) return { ok: true, supported: false, reason: '仅支持 npx 方式启动的本地 MCP 服务器；远程地址类服务器无需更新' };
+    const latestR = await runNpmCmd(['view', pkg.name, 'version', '--json'], 30000);
+    if (latestR.code !== 0) return { ok: false, error: '查询最新版本失败：' + (latestR.err || latestR.out || '网络错误').slice(0, 200) };
+    let latestVersion = String(latestR.out).replace(/^"|"$/g, '').trim();
+    const versionsR = await runNpmCmd(['view', pkg.name, 'versions', '--json'], 30000);
+    let versions = [];
+    try {
+      const arr = JSON.parse(versionsR.out || '[]');
+      if (Array.isArray(arr)) versions = arr.map(String).slice(-40).reverse();
+    } catch (e) { /* ignore */ }
+    const localVersion = findNpxCacheVersion(pkg.name);
+    return {
+      ok: true, supported: true, pkg: pkg.name, currentSpec: pkg.version,
+      localVersion, latestVersion,
+      hasUpdate: !!(latestVersion && localVersion && latestVersion !== localVersion) || pkg.version === 'latest',
+      versions,
+    };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('mcp-update-install', async (_e, payload) => {
+  const serverId = payload && payload.serverId;
+  const wantVersion = (payload && payload.version) || 'latest';
+  const send = (line) => {
+    try { mainWindow.webContents.send('mcp-update-progress', { serverId, line }); } catch (e) { /* ignore */ }
+  };
+  try {
+    const server = aiConfig.getMcpServers().find((s) => s.id === serverId);
+    if (!server) return { ok: false, error: '找不到该服务器配置' };
+    const pkg = resolveNpmPkg(server);
+    if (!pkg) return { ok: false, error: '该服务器不是 npx 包类型，无法在线更新' };
+    send(`开始获取 ${pkg.name}@${wantVersion} 的确切版本号…`);
+    const verR = await runNpmCmd(['view', `${pkg.name}@${wantVersion}`, 'version', '--json'], 30000);
+    if (verR.code !== 0) return { ok: false, error: '获取版本信息失败：' + (verR.err || verR.out || '网络错误').slice(0, 200) };
+    const fixed = String(verR.out).replace(/^"|"$/g, '').trim();
+    send(`目标版本：${fixed}`);
+    send('清理旧版缓存…');
+    isolateNpxCacheDirs(pkg.name);
+    // 预热：npx -y pkg@fixed --version 会把该确切版本装进 npx 缓存，之后启动秒开
+    send(`下载并安装 ${pkg.name}@${fixed}（可能需要 1~2 分钟，取决于包大小）…`);
+    const warm = await new Promise((resolve) => {
+      const p = spawn('npx', ['-y', `${pkg.name}@${fixed}`, '--version'], {
+        env: { ...process.env, PATH: '/usr/local/bin:/opt/homebrew/bin:' + (process.env.PATH || '') },
+      });
+      let tail = '';
+      const chunk = (d) => {
+        const line = String(d).trim();
+        if (!line) return;
+        tail = (tail + line).slice(-2000);
+        send('  ' + line.split('\n').pop().slice(0, 160));
+      };
+      p.stdout.on('data', chunk);
+      p.stderr.on('data', chunk);
+      const killT = setTimeout(() => { try { p.kill('SIGKILL'); } catch (e) {} }, 600000);
+      p.on('close', (code) => { clearTimeout(killT); resolve({ code, tail }); });
+      p.on('error', (e) => { clearTimeout(killT); resolve({ code: -1, tail: String(e && e.message || e) }); });
+    });
+    if (warm.code !== 0) {
+      send('✗ 安装失败');
+      return { ok: false, error: '安装失败：' + (warm.tail || '未知错误').slice(-300) };
+    }
+    send('✓ 安装完成，正在把配置固定到该版本并重启服务…');
+    // 把配置里的包 spec 固化为 name@fixed（回退即重复此流程装旧版）
+    const newArgs = (server.args || []).map((a) => {
+      const s = String(a);
+      if (s === pkg.spec) return `${pkg.name}@${fixed}`;
+      if (s === pkg.name && pkg.spec === pkg.name) return `${pkg.name}@${fixed}`;
+      return s;
+    });
+    const updated = { ...server, args: newArgs };
+    aiConfig.upsertMcpServer(updated);
+    try { await mcp.connectFromConfig(); } catch (e) { /* ignore */ }
+    const servers = aiConfig.getMcpServers();
+    send(`✓ 已更新到 ${pkg.name}@${fixed} 并重启服务`);
+    return { ok: true, version: fixed, servers: servers, status: mcp.getAllStatus() };
   } catch (err) {
     return { ok: false, error: err.message };
   }
