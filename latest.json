@@ -1,16 +1,16 @@
 {
-  "version": "0.11.18",
-  "notes": "### 1. MCP 服务器支持在线更新（含回退）\n\n- 服务器列表在「编辑」前新增「更新」按钮（npx 本地包型服务器可见；远程地址类服务器无需更新，不显示）。\n- 点击弹出更新面板：显示「本地版本 / npm 最新版本」，一键更新到最新版，安装进度逐行实时显示（获取版本 → 清理旧缓存 → 下载安装 → 固定版本 → 重启服务）。\n- 支持**回退到指定历史版本**：下拉选择版本点「回退」即可装回旧版。\n- 更新与回退都会把启动配置固定到具体版本号，行为可预期；之后再点「更新」仍可升到最新版。",
-  "pubDate": "2026-10-20T10:36:27+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.18/AI.Copilot-0.11.18-arm64.dmg",
-  "sha256": "d62c9dd4f4ccfe7731b224c085a7d3ee3a46046fe436489f1a67f16513e1ff7c",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.18/AI.Copilot-0.11.18.zip",
-  "patchSha256": "72d2648b4717c43edbca7a31fa7f59d8c6fb1516d342e056adaca43fd3cdafdf",
+  "version": "0.11.19",
+  "notes": "### 1. 历史记录显示任务状态\n\n- 会话执行任务时，标题左侧显示**动态转圈**动画；任务结束后显示状态点：**蓝色**=已完成（未查看）、**橙黄色**=已结束但有提示（可能未全部完成）、**红色**=执行出错。\n- 点击该会话查看后状态点自动消失，一眼分清哪些在执行、哪些已完成、哪些有问题。\n- 左侧「历史记录」与右侧「最近」列表都显示该标记，悬停可看文字说明。\n\n### 2. 有新内容的会话自动置顶\n\n- 会话产生新消息或新任务后，会自动移到列表**最前面**（此前位置固定不变，活跃的项目容易被埋到后面）。\n- 仅在该会话有新内容时触发；单纯切换、查看会话不会打乱顺序。已归档会话仍排在「已归档」区。",
+  "pubDate": "2026-10-23T11:36:49+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.19/AI.Copilot-0.11.19-arm64.dmg",
+  "sha256": "8ae5478b1df1964ac93077df3274cf0e18c7b222e3f60c90c80728f730043a19",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.19/AI.Copilot-0.11.19.zip",
+  "patchSha256": "f21e3471037314546e941014745ae53e485844737620f2918d92f33bc6292360",
   "deltas": [
     {
-      "from": "0.11.17",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.18/AI.Copilot-0.11.18.zip",
-      "sha256": "72d2648b4717c43edbca7a31fa7f59d8c6fb1516d342e056adaca43fd3cdafdf"
+      "from": "0.11.18",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.19/AI.Copilot-0.11.19.zip",
+      "sha256": "f21e3471037314546e941014745ae53e485844737620f2918d92f33bc6292360"
     }
   ]
 }
