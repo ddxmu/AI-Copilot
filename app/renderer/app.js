@@ -489,7 +489,7 @@ async function executeReplaceByAI() {
   let runChatId = null;
   if (textFiles.length) {
     runChatId = beginFeatureChat();
-    runningChatId = runChatId;
+    setRunningChat(runChatId);
     resetRunSegments();
   }
   const uiVisible = () => !runChatId || runChatId === activeChatId;
@@ -2572,6 +2572,24 @@ let sending = false;
 let voiceSendPending = false;
 // 正在执行 AI 任务的会话 ID：流式事件 / 结果落库都路由到该会话，切换界面不影响
 let runningChatId = null;
+// 会话任务状态指示：'running'（转圈）| 'done'（蓝点，已完成）| 'notice'（橙点，完成但有提示/可能未全部完成）| 'error'（红点，出错）
+// 用户点击该会话查看后即清除
+const chatRunStates = new Map();
+function setRunningChat(id) {
+  runningChatId = id;
+  if (id) {
+    chatRunStates.set(id, 'running');
+    renderChatList();
+  }
+}
+function markChatRunResult(chatId, r) {
+  if (!chatId) return;
+  let st = 'done';
+  if (!r || !r.ok) st = 'error';
+  else if (r.hitMaxTurns || (Array.isArray(r.todos) && r.todos.length && r.todos.some((t) => t.status !== 'completed'))) st = 'notice';
+  chatRunStates.set(chatId, st);
+  renderChatList();
+}
 // 本次任务的 AI 文本段累积（按工具调用切分；最后一段用于功能任务落库）
 let segOpen = false;
 let curSegText = '';
@@ -2718,7 +2736,9 @@ async function runAiChat(history, text, attachments) {
   thinkingDeep = false;       // 占位标签也重置
   startThinkingHint();
   try {
-    return await window.api.aiChat(history, text, attachments);
+    const r = await window.api.aiChat(history, text, attachments);
+    try { markChatRunResult(runningChatId, r); } catch (e) { /* ignore */ }
+    return r;
   } finally {
     flushTypeText();
     clearThinkingHint();
@@ -2867,6 +2887,11 @@ function switchToChat(chatId) {
   if (chatId === activeChatId) { switchPanel('ai'); return; }
   persistCurrentChat(); // 切换前保存当前会话（含可能正在进行的任务内容）
   activeChatId = chatId;
+  // 用户已查看该会话：清除任务状态点（蓝/橙/红）
+  if (chatRunStates.has(chatId)) {
+    chatRunStates.delete(chatId);
+    renderChatList();
+  }
   // 恢复消息到界面
   chatHistory.length = 0;
   sessionUsage = { input: 0, output: 0 };
@@ -2957,6 +2982,21 @@ function renderChatList(filterQuery = '') {
     const item = document.createElement('div');
     item.className = 'chat-history-item' + (chat.id === activeChatId ? ' active' : '') + (chat.archived ? ' archived' : '');
     item.dataset.chatId = chat.id;
+    // 任务状态标记：运行中转圈；完成蓝点 / 有提示橙点 / 出错红点（点击查看后清除）
+    const runSt = chatRunStates.get(chat.id);
+    if (runSt) {
+      const badge = document.createElement('span');
+      if (runSt === 'running') {
+        badge.className = 'chat-run-spin';
+        badge.title = '任务执行中…';
+      } else {
+        badge.className = 'chat-run-dot dot-' + runSt;
+        badge.title = runSt === 'done' ? '已完成，点击查看'
+          : runSt === 'notice' ? '已结束（有提示，可能未全部完成），点击查看'
+          : '执行出错，点击查看';
+      }
+      item.appendChild(badge);
+    }
     const title = document.createElement('span');
     title.className = 'chat-history-item-title';
     title.textContent = chat.title || '新对话';
@@ -3000,7 +3040,29 @@ function renderRightRecent() {
     const item = document.createElement('div');
     item.className = 'recent-item' + (chat.id === activeChatId ? ' active' : '');
     item.dataset.chatId = chat.id;
-    item.textContent = chat.title || '新对话';
+    // 任务状态标记（与左侧历史列表一致）
+    const runSt = chatRunStates.get(chat.id);
+    if (runSt) {
+      const badge = document.createElement('span');
+      if (runSt === 'running') {
+        badge.className = 'chat-run-spin';
+        badge.title = '任务执行中…';
+      } else {
+        badge.className = 'chat-run-dot dot-' + runSt;
+        badge.title = runSt === 'done' ? '已完成，点击查看'
+          : runSt === 'notice' ? '已结束（有提示，可能未全部完成），点击查看'
+          : '执行出错，点击查看';
+      }
+      item.appendChild(badge);
+      item.style.display = 'flex';
+      item.style.alignItems = 'center';
+    }
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = chat.title || '新对话';
+    titleSpan.style.overflow = 'hidden';
+    titleSpan.style.textOverflow = 'ellipsis';
+    titleSpan.style.whiteSpace = 'nowrap';
+    item.appendChild(titleSpan);
     item.title = chat.title || '';
     item.addEventListener('click', () => switchToChat(chat.id));
     rightRecentListEl.appendChild(item);
@@ -4827,7 +4889,7 @@ async function sendChat() {
 
   ensureActiveChat();
   const runChatId = activeChatId; // 本任务归属会话（结果路由用）
-  runningChatId = runChatId;
+  setRunningChat(runChatId);
   resetRunSegments();
   setSending(true);
   addUserMessage(text, pendingAttachments);
@@ -5398,7 +5460,7 @@ document.getElementById('auto-start').addEventListener('click', async () => {
   switchPanel('ai');
   setSending(true);
   const runChatId = beginFeatureChat(); // 功能任务开独立会话
-  runningChatId = runChatId;
+  setRunningChat(runChatId);
   resetRunSegments();
   addBubble('user', `【文件自动化】按模版 + 规范处理 ${auto.files.length} 个文件`);
   pushToChat(runChatId, { role: 'user', content: prompt });
@@ -5560,7 +5622,7 @@ document.getElementById('auto-ai-convert').addEventListener('click', async () =>
   switchPanel('ai');
   setSending(true);
   const runChatId = beginFeatureChat(); // 功能任务开独立会话
-  runningChatId = runChatId;
+  setRunningChat(runChatId);
   resetRunSegments();
   addBubble('user', `【AI 协助转换】${summary.matched} 个匹配 + ${summary.skipped} 个跳过`);
   pushToChat(runChatId, { role: 'user', content: prompt });
@@ -5826,7 +5888,7 @@ document.getElementById('ppt-ai-save').addEventListener('click', async () => {
   switchPanel('ai');
   setSending(true);
   const runChatId = beginFeatureChat(); // 功能任务开独立会话
-  runningChatId = runChatId;
+  setRunningChat(runChatId);
   resetRunSegments();
   addBubble('user', `【PPT 写手】依据模版编写 ${ppt.files.length} 个 PPT 文件`);
   pushToChat(runChatId, { role: 'user', content: prompt });
@@ -6273,7 +6335,7 @@ async function aiConvertWithSkill(skillName) {
   switchPanel('ai');
   setSending(true);
   const runChatId = beginFeatureChat(); // 功能任务开独立会话
-  runningChatId = runChatId;
+  setRunningChat(runChatId);
   resetRunSegments();
   addBubble('user', `【AI 格式转换 · ${skillName}】${cv.files.length} 个文件 ${srcDesc} → ${dstDesc}`);
   pushToChat(runChatId, { role: 'user', content: prompt });
@@ -6320,7 +6382,7 @@ document.getElementById('conv-ai-start').addEventListener('click', async () => {
   switchPanel('ai');
   setSending(true);
   const runChatId = beginFeatureChat(); // 功能任务开独立会话
-  runningChatId = runChatId;
+  setRunningChat(runChatId);
   resetRunSegments();
   addBubble('user', `【AI 格式转换】${cv.files.length} 个文件 ${srcDesc} → ${dstDesc}`);
   pushToChat(runChatId, { role: 'user', content: prompt });
@@ -6511,7 +6573,7 @@ document.getElementById('wm-ai-analyze').addEventListener('click', async () => {
     switchPanel('ai');
     setSending(true);
     const runChatId = beginFeatureChat(); // 功能任务开独立会话
-    runningChatId = runChatId;
+    setRunningChat(runChatId);
     resetRunSegments();
     addBubble('user', '【PDF去水印】请帮我判断哪些是水印');
     pushToChat(runChatId, { role: 'user', content: prompt });
@@ -6599,7 +6661,7 @@ document.getElementById('wm-ai-remove').addEventListener('click', async () => {
   switchPanel('ai');
   setSending(true);
   const runChatId = beginFeatureChat(); // 功能任务开独立会话
-  runningChatId = runChatId;
+  setRunningChat(runChatId);
   resetRunSegments();
   addBubble('user', `【AI 去水印】${wm.files.length} 个 PDF → ${wm.outputDir}${skillName ? ' · ' + skillName : ''}`);
   pushToChat(runChatId, { role: 'user', content: full });

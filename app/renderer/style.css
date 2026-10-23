@@ -2187,6 +2187,36 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   word-break: break-all;
 }
 
+/* 会话任务状态：运行中转圈 / 状态点（完成蓝 / 提示橙 / 错误红） */
+.chat-run-spin {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border: 2px solid #c9d4e8;
+  border-top-color: #2f6fed;
+  border-radius: 50%;
+  animation: chat-spin-rotate 0.8s linear infinite;
+  align-self: center;
+}
+
+@keyframes chat-spin-rotate {
+  to { transform: rotate(360deg); }
+}
+
+.chat-run-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  align-self: center;
+}
+
+.chat-run-dot.dot-done { background: #2f6fed; }
+.chat-run-dot.dot-notice { background: #f5a623; }
+.chat-run-dot.dot-error { background: #e5484d; }
+
 .confirm-head {
   display: flex;
   align-items: flex-start;
