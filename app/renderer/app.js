@@ -2821,10 +2821,20 @@ function persistCurrentChat() {
   renderChatList();
 }
 
+// 把会话移到列表最前（最近有活动的会话始终排前排）
+function moveChatToTop(chatId) {
+  const idx = chatList.findIndex((c) => c.id === chatId);
+  if (idx <= 0) return; // 不存在或已在最前
+  const [chat] = chatList.splice(idx, 1);
+  chatList.unshift(chat);
+}
+
 // 更新会话标题/时间并刷新列表（不触发保存，由调用方统一 saveChats）
+// 仅在会话产生新内容时调用：新消息 / 新任务，故该会话会自动置顶
 function touchChatMeta(chat) {
   if (!chat.customTitle) chat.title = genChatTitle(chat.messages);
   chat.updatedAt = Date.now();
+  moveChatToTop(chat.id);
   renderChatList();
 }
 
