@@ -3724,6 +3724,11 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   color: #1a7f37;
 }
 
+.skill-item .skill-tag.self {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
 .skill-item .skill-tag.cat {
   background: #fff3e0;
   color: #e65100;
@@ -4361,6 +4366,10 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
 :root.dark .skill-item .skill-tag.ext {
   background: #132e1f;
   color: #4ade80;
+}
+:root.dark .skill-item .skill-tag.self {
+  background: #1e1b4b;
+  color: #a5b4fc;
 }
 :root.dark .skill-item .skill-tag.cat {
   background: #2a1f0a;

@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld('api', {
   skillsList: () => ipcRenderer.invoke('skills-list'),
   skillsDelete: (name) => ipcRenderer.invoke('skills-delete', name),
   skillsInstallMd: (name, content) => ipcRenderer.invoke('skills-install-md', { name, content }),
+  skillsRead: (name) => ipcRenderer.invoke('skills-read', name),
+  skillsSaveSelf: (payload) => ipcRenderer.invoke('skills-save-self', payload),
   skillsScanLocal: (srcDir) => ipcRenderer.invoke('skills-scan-local', srcDir),
   skillsSearchGithub: (keyword) => ipcRenderer.invoke('skills-search-github', keyword),
   skillsInstallGithub: (fullName, defaultBranch) => ipcRenderer.invoke('skills-install-github', { fullName, defaultBranch }),

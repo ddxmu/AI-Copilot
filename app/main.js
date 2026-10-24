@@ -1140,7 +1140,7 @@ function listInstalledSkills() {
     if (!fs.existsSync(f)) continue;
     try {
       const p = parseSkillMd(fs.readFileSync(f, 'utf8'), d.name);
-      out.push({ name: p.name, description: p.description, dir: d.name, source: 'installed' });
+      out.push({ name: p.name, description: p.description, dir: d.name, source: p.source === 'self-built' ? 'self-built' : 'installed', triggers: p.triggers || '' });
     } catch (e) {}
   }
   return out;
@@ -1167,6 +1167,38 @@ ipcMain.handle('skills-install-md', (_e, { name, content }) => {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'SKILL.md'), content, 'utf8');
   return { ok: true, installed: listInstalledSkills() };
+});
+
+// 读取技能 SKILL.md 解析结果（技能页编辑自建技能用）
+ipcMain.handle('skills-read', (_e, name) => {
+  const safe = path.basename(String(name || ''));
+  const f = path.join(SKILLS_DIR, safe, 'SKILL.md');
+  if (!fs.existsSync(f)) return { ok: false, error: '技能不存在' };
+  try {
+    const p = parseSkillMd(fs.readFileSync(f, 'utf8'), safe);
+    return { ok: true, name: p.name, description: p.description, triggers: p.triggers || '', content: p.body, source: p.source || '' };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// 保存自建技能（AI 经用户确认后写入，或技能页编辑器保存）：带 self-built 标记与触发词
+// payload.dir 可选：指定目标文件夹（编辑已有技能时传入原文件夹名，改名不挪目录）
+ipcMain.handle('skills-save-self', (_e, payload) => {
+  try {
+    const dirName = payload && payload.dir
+      ? path.basename(String(payload.dir)).replace(/[^\w一-龥-]/g, '-') || 'skill'
+      : path.basename(String((payload && payload.name) || 'skill')).replace(/[^\w一-龥-]/g, '-').slice(0, 40) || 'skill';
+    const safe = String((payload && payload.name) || dirName).replace(/\r?\n/g, ' ').trim().slice(0, 40) || dirName;
+    const description = String((payload && payload.description) || '').replace(/\r?\n/g, ' ').trim().slice(0, 200);
+    const triggers = String((payload && payload.triggers) || '').replace(/\r?\n/g, ' ').trim().slice(0, 120);
+    const content = String((payload && payload.content) || '').trim();
+    if (!content) return { ok: false, error: '内容不能为空' };
+    ensureSkillsDir();
+    const dir = path.join(SKILLS_DIR, dirName);
+    fs.mkdirSync(dir, { recursive: true });
+    const md = `---\nname: ${safe}\ndescription: ${description}\nsource: self-built\n${triggers ? `triggers: ${triggers}\n` : ''}created: ${new Date().toISOString().slice(0, 10)}\n---\n\n${content}\n`;
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), md, 'utf8');
+    return { ok: true, installed: listInstalledSkills() };
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // 扫描本地 Claude Code 源码包里的技能（bundled/*.ts），提取名称与描述

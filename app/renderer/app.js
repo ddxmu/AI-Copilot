@@ -6710,6 +6710,7 @@ function skillBadge(name) {
 }
 
 const skillListEl = document.getElementById('skill-list');
+const skillSelfListEl = document.getElementById('skill-self-list');
 const skillCountEl = document.getElementById('skill-count');
 
 function makeSkillItem({ badge, name, desc, tag, tagClass, actions }) {
@@ -6733,9 +6734,43 @@ function makeSkillItem({ badge, name, desc, tag, tagClass, actions }) {
   return li;
 }
 
+/* ---- 自建技能：编辑弹窗 ---- */
+const skillEditModal = document.getElementById('skill-edit-modal');
+let editingSkillDir = null;
+async function openSkillEditor(dir) {
+  const r = await window.api.skillsRead(dir);
+  if (!r || !r.ok) { alert('读取技能失败：' + ((r && r.error) || '未知错误')); return; }
+  editingSkillDir = dir;
+  document.getElementById('se-name').value = r.name || '';
+  document.getElementById('se-desc').value = r.description || '';
+  document.getElementById('se-triggers').value = r.triggers || '';
+  document.getElementById('se-content').value = r.content || '';
+  document.getElementById('se-status').textContent = '';
+  skillEditModal.classList.remove('hidden');
+}
+document.getElementById('btn-se-cancel').addEventListener('click', () => {
+  skillEditModal.classList.add('hidden'); editingSkillDir = null;
+});
+document.getElementById('btn-se-save').addEventListener('click', async () => {
+  const name = document.getElementById('se-name').value.trim();
+  const description = document.getElementById('se-desc').value.trim();
+  const triggers = document.getElementById('se-triggers').value.trim();
+  const content = document.getElementById('se-content').value;
+  const status = document.getElementById('se-status');
+  if (!name) { status.textContent = '技能名不能为空'; return; }
+  if (!content.trim()) { status.textContent = '技能内容不能为空'; return; }
+  const res = await window.api.skillsSaveSelf({ name, description, triggers, content, dir: editingSkillDir || undefined });
+  if (!res || !res.ok) { status.textContent = '保存失败：' + ((res && res.error) || '未知错误'); return; }
+  skillEditModal.classList.add('hidden'); editingSkillDir = null;
+  renderSkills();
+});
+
 async function renderSkills() {
   const { builtin, installed } = await window.api.skillsList();
+  const selfBuilt = installed.filter((s) => s.source === 'self-built');
+  const extInstalled = installed.filter((s) => s.source !== 'self-built');
   skillListEl.innerHTML = '';
+  if (skillSelfListEl) skillSelfListEl.innerHTML = '';
   skillCountEl.textContent = builtin.length + installed.length;
   const mkDel = (name) => {
     const btn = document.createElement('button');
@@ -6743,13 +6778,25 @@ async function renderSkills() {
     btn.addEventListener('click', async () => { await window.api.skillsDelete(name); renderSkills(); });
     return btn;
   };
+  const mkEdit = (dir) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn small'; btn.textContent = '编辑';
+    btn.addEventListener('click', () => openSkillEditor(dir));
+    return btn;
+  };
   builtin.forEach((s) => skillListEl.appendChild(makeSkillItem({
     badge: skillBadge(s.name), name: s.name, desc: s.description, tag: s.source === 'preset' ? '预置' : '内置',
   })));
-  installed.forEach((s) => skillListEl.appendChild(makeSkillItem({
-    badge: skillBadge(s.name), name: s.name, desc: s.description, tag: '已安装', tagClass: 'ext', actions: [mkDel(s.name)],
+  extInstalled.forEach((s) => skillListEl.appendChild(makeSkillItem({
+    badge: skillBadge(s.name), name: s.name, desc: s.description, tag: '已安装', tagClass: 'ext', actions: [mkDel(s.dir || s.name)],
   })));
-  if (!builtin.length && !installed.length) {
+  if (skillSelfListEl) {
+    selfBuilt.forEach((s) => skillSelfListEl.appendChild(makeSkillItem({
+      badge: skillBadge(s.name), name: s.name, desc: s.description + (s.triggers ? `（触发词：${s.triggers}）` : ''), tag: '自建', tagClass: 'self', actions: [mkEdit(s.dir || s.name), mkDel(s.dir || s.name)],
+    })));
+    if (!selfBuilt.length) skillSelfListEl.innerHTML = '<p class="empty">暂无自建技能。AI 在任务中总结出可复用的工作流并经你确认后，会自动保存在这里。</p>';
+  }
+  if (!builtin.length && !extInstalled.length) {
     skillListEl.innerHTML = '<p class="empty">暂无技能</p>';
   }
 }

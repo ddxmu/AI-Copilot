@@ -586,9 +586,9 @@ for (const [name, def] of Object.entries(RECOMMENDED_SKILLS)) {
   if (Array.isArray(def.prerequisites)) SKILL_PREREQS[name] = def.prerequisites;
 }
 
-// 解析 SKILL.md：支持 --- name/description --- 头部 + 正文；无头部则首行 # 标题作名
+// 解析 SKILL.md：支持 --- name/description/source/triggers --- 头部 + 正文；无头部则首行 # 标题作名
 function parseSkillMd(content, fallbackName) {
-  let name = fallbackName, description = '', body = content;
+  let name = fallbackName, description = '', body = content, source = '', triggers = '';
   const fm = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (fm) {
     body = fm[2];
@@ -597,13 +597,15 @@ function parseSkillMd(content, fallbackName) {
       if (!m) continue;
       if (m[1] === 'name' && m[2].trim()) name = m[2].trim();
       if (m[1] === 'description') description = m[2].trim();
+      if (m[1] === 'source') source = m[2].trim();
+      if (m[1] === 'triggers') triggers = m[2].trim();
     }
   } else {
     const h = content.match(/^#\s+(.+)$/m);
     if (h && name === fallbackName) name = h[1].trim();
   }
   if (!description) description = body.split(/\r?\n/).map((l) => l.trim()).find((l) => l && !l.startsWith('#')) || name;
-  return { name, description: description.slice(0, 200), body: body.trim() };
+  return { name, description: description.slice(0, 200), body: body.trim(), source, triggers };
 }
 
 // 从目录加载外部技能并合并（外部同名覆盖内置）
@@ -618,7 +620,7 @@ function loadExternalSkills(skillsDir) {
     if (!fs.existsSync(skillFile)) continue;
     try {
       const parsed = parseSkillMd(fs.readFileSync(skillFile, 'utf8'), d.name);
-      SKILLS[parsed.name] = { description: parsed.description, body: parsed.body, external: true };
+      SKILLS[parsed.name] = { description: parsed.description, body: parsed.body, external: true, source: parsed.source || 'installed', triggers: parsed.triggers || '', dir: d.name };
     } catch (e) { /* 跳过损坏技能 */ }
   }
   return SKILLS;
@@ -670,6 +672,14 @@ function buildTaskSkillBoost(userText) {
   const names = new Set();
   for (const [trig, list] of Object.entries(SKILL_TRIGGERS)) {
     if (t.includes(trig.toLowerCase())) list.forEach((n) => { if (SKILLS[n]) names.add(n); });
+  }
+  // 技能自带触发词（自建技能在 SKILL.md 头部声明 triggers），同样自动点亮
+  for (const [n, def] of Object.entries(SKILLS)) {
+    if (!def || !def.triggers) continue;
+    for (const tg of String(def.triggers).split(/[,，、;；\s]+/)) {
+      const w = tg.trim().toLowerCase();
+      if (w && t.includes(w)) { names.add(n); break; }
+    }
   }
   if (!names.size) return '';
   const blocks = [];
@@ -1296,6 +1306,59 @@ const tools = {
     if (!r.ok) return `安装技能「${skill}」失败：${r.error}`;
     loadExternalSkills(ctx.skillsDir);
     return `技能「${skill}」已安装成功！现在可以用 skill 工具调用「${skill}」获取操作指引，然后按指引执行任务。`;
+    },
+  },
+
+  /* ---------- 自建技能：AI 把可复用工作流沉淀为技能（用户确认后保存） ---------- */
+  create_skill: {
+    description: '把本次任务中总结出的可复用工作流/经验保存为「自建技能」，下次遇到同类任务会自动生效。适用于：重复性多步骤流程、用户纠正过做法后想固化正确做法、用户明确要求"把这个流程存成技能"。一次性任务不要保存。',
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '技能名（英文短横线或中文，如 weekly-report-skill）' },
+        description: { type: 'string', description: '一句话描述这个技能做什么、什么时候用（30 字以内）' },
+        triggers: { type: 'string', description: '触发词，逗号分隔（如：周报,汇报,总结）。用户任务里包含这些词时技能自动激活' },
+        content: { type: 'string', description: '技能正文（Markdown 操作手册）：触发条件、执行步骤、注意事项、示例' },
+      },
+      required: ['name', 'description', 'content'],
+    },
+    permission: 'allow',
+    async run(input, ctx) {
+      const safeName = String(input.name || '').trim().replace(/\s+/g, '-').replace(/[^\w一-龥-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+      if (!safeName) return '错误：技能名不合法（只允许中英文、数字、短横线）';
+      const desc = String(input.description || '').trim().replace(/\r?\n/g, ' ').slice(0, 120);
+      if (!desc) return '错误：description 必填，用一句话说明技能用途';
+      const body = String(input.content || '').trim();
+      if (body.length < 30) return '错误：技能内容太短（至少 30 字）。请写清楚触发条件、执行步骤、注意事项';
+      if (body.length > 32 * 1024) return `错误：技能内容过长（${body.length} 字符，上限 32768）。请提炼精华步骤，不要照抄整段对话`;
+      const trig = String(input.triggers || '').trim().replace(/\r?\n/g, ' ').slice(0, 120);
+      if (!ctx.skillsDir) return '错误：未配置技能目录，无法保存';
+      // 防刷：单次任务最多建 3 个自建技能
+      ctx._selfSkillsCreated = (ctx._selfSkillsCreated || 0) + 1;
+      if (ctx._selfSkillsCreated > 3) return '本次任务自建技能已达上限（3 个）。如确需更多，请让用户在「设置 → 智能体技能」手动添加。';
+      const dir = path.join(ctx.skillsDir, safeName);
+      const existed = fs.existsSync(path.join(dir, 'SKILL.md'));
+      // 用户确认（弹选项卡片，展示技能摘要）
+      if (ctx.askUser) {
+        const preview = body.replace(/\s+/g, ' ').slice(0, 120);
+        const ans = await ctx.askUser({
+          question: `AI 请求${existed ? '更新' : '保存'}自建技能「${safeName}」：${desc}（触发词：${trig || '无'}。预览：${preview}…）`,
+          options: [
+            { label: '保存', description: '写入技能库，下个同类任务自动生效' },
+            { label: '不保存', description: '本次不保存，继续当前任务' },
+          ],
+        });
+        if (ans !== '保存') return '用户没有保存该技能。请继续完成当前任务，不要重复请求保存。';
+      }
+      try {
+        const md = `---\nname: ${safeName}\ndescription: ${desc}\nsource: self-built\n${trig ? `triggers: ${trig}\n` : ''}created: ${new Date().toISOString().slice(0, 10)}\n---\n\n${body}\n`;
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'SKILL.md'), md, 'utf8');
+        loadExternalSkills(ctx.skillsDir);
+        return `✅ 自建技能「${safeName}」已${existed ? '更新' : '保存'}${trig ? `，触发词：${trig}` : ''}。后续同类任务会自动激活（也可用 skill 工具手动调用）。可在「设置 → 智能体技能 → 自建技能」查看/编辑。`;
+      } catch (e) {
+        return `保存技能失败：${e.message}`;
+      }
     },
   },
 
@@ -1986,7 +2049,15 @@ function buildSystemPrompt(webAccess, mcpEnabled = true, mcpServer = null, chatI
 - 若 ask_user 返回"用户没有选择（跳过）"或环境不支持提问，就自行选择最合理的默认方案继续做，直到任务完成。
 
 ## 技能包
-${skillList}${recommendedSection}${mcpSection}${memorySection}${taskBoostSection}`;
+${skillList}
+
+### 自建技能（重要）
+你可以用 create_skill 工具把任务中总结出的**可复用工作流**保存为自建技能，让下次同类任务做得更快更好：
+- **值得保存**：重复性的多步骤流程（如某种固定格式的报表/文档处理）、用户纠正过你的做法后正确的做法、用户明确说"记住这个流程/存成技能"。
+- **不要保存**：一次性任务、含用户隐私数据（路径/账号/文件名细节）的内容、与已有技能重复的通用常识。
+- 正文写成操作手册：触发条件 → 执行步骤 → 注意事项，并给 triggers 触发词（用户任务含这些词时自动激活）。
+- 保存前会弹卡片请用户确认；同名技能会覆盖更新。
+${recommendedSection}${mcpSection}${memorySection}${taskBoostSection}`;
 }
 
 async function extractMemoryFacts(profile, apiType, messages) {
