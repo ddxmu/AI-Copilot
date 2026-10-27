@@ -178,6 +178,17 @@ function createWindow() {
     shell.openExternal(url);
     return { action: 'deny' };
   });
+  mainWindow.on('closed', () => { mainWindow = null; });
+}
+
+// 唤回主窗口：点 Dock 图标 / 重新 open 应用时调用。
+// 注意不能用 BrowserWindow.getAllWindows().length === 0 判断——桌宠窗口是常驻窗口，
+// 开了桌宠后该数组永远非空，会导致主窗口最小化或关闭后点 Dock 图标唤不回来。
+function activateMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) { createWindow(); return; }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
 }
 
 // 后台静默检查更新：仅在发现新版本时通知渲染进程，不自动下载。
@@ -239,7 +250,7 @@ app.whenReady().then(() => {
   // 按配置连接 MCP 服务器（后台异步）
   initMcpServers();
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    activateMainWindow();
   });
   // 显示器参数变化时，重新适配遮罩窗口大小
   try {

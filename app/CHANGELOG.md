@@ -1,3 +1,11 @@
+## v0.11.23 — 2026-10-27
+
+### 修复：开启桌宠后，主窗口最小化或关闭就打不开
+
+- 根因：点 Dock 图标唤回窗口用的是 `if (BrowserWindow.getAllWindows().length === 0) createWindow()`——这个数组**会把常驻的桌宠窗口算进去**，开启桌宠后它永远不为空，于是主窗口最小化后不会被恢复、关闭后也不会被重建，表现就是「点了 Dock 图标没反应、App 打不开」。
+- 修复：新增 `activateMainWindow()`，改为按主窗口自身状态判断——已销毁就重建，最小化了就 `restore()`，不可见就 `show()`，最后 `focus()`；同时给主窗口补上 `on('closed')` 置空引用，保证状态判断准确。
+- 沙箱内无法从外部触发 Dock 激活（`open -a` 不触发 Electron 的 activate 事件、osascript 跨进程 AppleEvent 被拦），改为在 App 内部自我模拟两种场景验证：最小化后 activate → 恢复成功（`minimized=false visible=true`）；关闭主窗口后 activate → 重建成功且窗口总数仍为 2（主窗口 + 桌宠，未重复创建）。验证完毕后模拟代码已全部移除。
+
 ## v0.11.22 — 2026-10-27
 
 ### 修复：桌宠点「显示」不出现

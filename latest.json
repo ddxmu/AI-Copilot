@@ -1,16 +1,16 @@
 {
-  "version": "0.11.22",
-  "notes": "### 修复：桌宠点「显示」不出现\n\n- 根因：配置读取函数 `loadState()` 返回的是一份**字段白名单**对象，其中漏掉了 `pet` 与 `sessionEvents` 两个新字段，导致桌宠配置永远读成空对象——开关虽然能写进配置文件，主进程却始终判断为「未开启」，宠物窗口根本不会创建。\n- 修复：在白名单中补回这两个字段（含默认值），桌宠开关、角色、气泡、鼠标穿透、拖动位置现在都能正确持久化；「任务状态外发」开关同样恢复正常（此前也一直读不到开启状态）。\n- 排查手段：给宠物窗口加了临时诊断日志（窗口创建位置、可见性、页面脚本错误），确认修复后窗口正常创建于主屏幕右下角、页面脚本与 4 个角色 SVG 均加载成功；验证完毕后诊断日志已全部移除，未留在代码中。",
-  "pubDate": "2026-10-27T18:54:24+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.22/AI.Copilot-0.11.22-arm64.dmg",
-  "sha256": "aa16e44d822f4f3eebe5d216da4de07e4348eb7aa0b4851e2378fed8c5a9fad4",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.22/AI.Copilot-0.11.22.zip",
-  "patchSha256": "9df499c1474ba2c06320fa6d7590beee41d4d277035f10ecd3d5d63cd42e0f9d",
+  "version": "0.11.23",
+  "notes": "### 修复：开启桌宠后，主窗口最小化或关闭就打不开\n\n- 根因：点 Dock 图标唤回窗口用的是 `if (BrowserWindow.getAllWindows().length === 0) createWindow()`——这个数组**会把常驻的桌宠窗口算进去**，开启桌宠后它永远不为空，于是主窗口最小化后不会被恢复、关闭后也不会被重建，表现就是「点了 Dock 图标没反应、App 打不开」。\n- 修复：新增 `activateMainWindow()`，改为按主窗口自身状态判断——已销毁就重建，最小化了就 `restore()`，不可见就 `show()`，最后 `focus()`；同时给主窗口补上 `on('closed')` 置空引用，保证状态判断准确。\n- 沙箱内无法从外部触发 Dock 激活（`open -a` 不触发 Electron 的 activate 事件、osascript 跨进程 AppleEvent 被拦），改为在 App 内部自我模拟两种场景验证：最小化后 activate → 恢复成功（`minimized=false visible=true`）；关闭主窗口后 activate → 重建成功且窗口总数仍为 2（主窗口 + 桌宠，未重复创建）。验证完毕后模拟代码已全部移除。",
+  "pubDate": "2026-10-27T19:19:39+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.23/AI.Copilot-0.11.23-arm64.dmg",
+  "sha256": "597e1c7130868f76c4cb76a030c60e21b289e9530ff36a158f71339b04b743ba",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.23/AI.Copilot-0.11.23.zip",
+  "patchSha256": "97c62a8963550aaef435ad3a555ce83c5aee1499893af9e6dcbe2a0663fe206f",
   "deltas": [
     {
-      "from": "0.11.21",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.22/AI.Copilot-0.11.22.zip",
-      "sha256": "9df499c1474ba2c06320fa6d7590beee41d4d277035f10ecd3d5d63cd42e0f9d"
+      "from": "0.11.22",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.23/AI.Copilot-0.11.23.zip",
+      "sha256": "97c62a8963550aaef435ad3a555ce83c5aee1499893af9e6dcbe2a0663fe206f"
     }
   ]
 }
