@@ -144,6 +144,39 @@ function getMemoryEnabled() {
   return loadState().memoryEnabled ?? true;
 }
 
+// 任务状态事件流（session-events.jsonl）开关：默认关闭，开启后 AI Copilot 把任务状态
+// 追加写入 userData/session-events.jsonl，供外部桌面陪伴类应用（如 VibeCute）读取。
+// 只写面向用户的可见文本（回答摘要、工具名、提问与结果），不写工具原始结果、系统提示与用户原文。
+function isSessionEventsEnabled() {
+  return loadState().sessionEvents === true;
+}
+
+function setSessionEventsEnabled(enabled) {
+  const state = loadState();
+  state.sessionEvents = !!enabled;
+  saveState(state);
+  return state.sessionEvents;
+}
+
+// 桌面宠物（桌宠显示）配置：{ enabled, character, customImage, bubbleEnabled, clickThrough, x, y }
+// character 为内置角色 key（fox/bot/cat/ghost）；customImage 为自定义图片绝对路径（优先于 character）
+function getPetConfig() {
+  const p = loadState().pet;
+  return p && typeof p === 'object' ? p : {};
+}
+
+function setPetConfig(patch) {
+  const state = loadState();
+  const cur = state.pet && typeof state.pet === 'object' ? state.pet : {};
+  state.pet = Object.assign({}, cur, patch && typeof patch === 'object' ? patch : {});
+  saveState(state);
+  return state.pet;
+}
+
+function setPetPosition(x, y) {
+  return setPetConfig({ x: Math.round(x), y: Math.round(y) });
+}
+
 // 内置 Computer Use（模拟鼠标/键盘操作电脑）总开关
 function isComputerUseEnabled() {
   return loadState().computerUseEnabled === true;
@@ -552,6 +585,11 @@ module.exports = {
   setComputerUseEnabled,
   isSkillAutoUpdateEnabled,
   setSkillAutoUpdate,
+  isSessionEventsEnabled,
+  setSessionEventsEnabled,
+  getPetConfig,
+  setPetConfig,
+  setPetPosition,
   getMcpServers,
   upsertMcpServer,
   deleteMcpServer,

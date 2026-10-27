@@ -11,6 +11,7 @@ const { execFile, exec } = require('child_process');
 const { ALL_EXTS, ZIP_BASED_OFFICE } = require('./filetypes');
 const { LEGACY_OFFICE, replaceInLegacyFile } = require('./office-replace');
 const memory = require('./memory');
+const sessionEvents = require('./session-events');
 
 /* ---------- 图片尺寸解析（纯 JS，无需外部依赖） ---------- */
 function imageDims(buf, ext) {
@@ -773,7 +774,10 @@ const tools = {
         .slice(0, 8);
       if (!question || !opts.length) return '错误：question 与 options（至少 1 个选项）为必填';
       if (!ctx.askUser) return '当前环境不支持交互提问，请自行选择最合理的默认方案继续执行任务，不要停下等待。';
+      const qid = 'q-' + Date.now();
+      sessionEvents.emit({ type: 'question', id: qid, session: ctx.chatId || '', question: sessionEvents.clean(question), options: opts.map((o) => String(o.label)) });
       const answer = await ctx.askUser({ question: String(question).slice(0, 300), options: opts });
+      sessionEvents.emit({ type: 'questionResolved', id: qid, session: ctx.chatId || '', answer: sessionEvents.clean(answer || '') });
       if (!answer) return '用户没有选择（点了「跳过」）。请自行选择最合理的默认方案继续执行，任务不要中断。';
       return `用户选择了：「${answer}」。请严格按该选择继续执行任务。`;
     },
@@ -2293,6 +2297,7 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
       // 停止导致的请求中断（AbortError）或已请求停止 → 直接结束，不算异常
       if (_stopRequested || e.name === 'AbortError') {
         _currentAbort = null;
+        sessionEvents.emit({ type: 'finished', session: ctx.chatId || '', outcome: 'interrupted' });
         return { ok: true, stopped: true, text: (finalText || '') + '\n\n（已按你的要求停止。）', usage: totalUsage, messages };
       }
       throw e;
@@ -2310,6 +2315,9 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
 
     // 每次调用后都记录 assistant 的回复（纯文本回答也必须落库，否则返回的 messages 里只有用户问题、会话历史缺 AI 回答，切回会话后看不到）
     messages.push(r.assistantMessage);
+    // 事件流：本轮 AI 可见回复（只取纯文本，工具调用轮没有文本就不写）
+    const turnText = r.text || streamedText || '';
+    if (turnText.trim()) sessionEvents.emit({ type: 'caption', kind: '回答', session: ctx.chatId || '', text: sessionEvents.clean(turnText) });
 
     if (!r.toolCalls.length) {
       // 输出被长度上限截断（finishReason==='length'）：模型还有话要说但被砍断。
@@ -2347,6 +2355,7 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
       if (_stopRequested) break;
       const entry = toolList.find((t) => t.name === call.name);
       ctx.emit('tool-start', { name: call.name, input: call.input });
+      sessionEvents.emit({ type: 'caption', kind: '工具调用', session: ctx.chatId || '', text: sessionEvents.clean(call.name) });
       let result;
       if (!entry) {
         result = `错误：未知工具 ${call.name}`;
@@ -2391,6 +2400,7 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   const hitMaxTurns = lastIsToolOnly;
   const extra = hitMaxTurns ? '\n\n（系统提示：任务已连续执行 ' + (autoContinues + 1) + ' 段共 ' + (maxTurns * (autoContinues + 1)) + ' 轮工具调用仍未结束，已自动停止。当前进度和已产出内容如上，回复"继续"可接着处理。）' : '';
   _currentAbort = null;
+  sessionEvents.emit({ type: 'finished', session: ctx.chatId || '', outcome: hitMaxTurns ? 'interrupted' : 'completed' });
   return { ok: true, text: (finalText || (hitMaxTurns ? '已完成部分操作。' : '')) + extra, usage: totalUsage, messages, hitMaxTurns };
 }
 
@@ -2460,6 +2470,10 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
   };
   const apiType = profile.type === 'anthropic' ? 'anthropic' : 'openai';
 
+  // 任务状态事件流（默认关闭）：供外部桌面陪伴类应用（如 VibeCute）读取
+  sessionEvents.emit({ type: 'session_meta', session: ctx.chatId || '' });
+  sessionEvents.emit({ type: 'started', session: ctx.chatId || '' });
+
   try {
     const result = await runAgentLoop(profile, apiType, userText, ctx, {});
     // 后台异步提炼长期记忆，不阻塞回复
@@ -2468,6 +2482,7 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
     }
     return { ok: true, stopped: !!result.stopped, usage: result.usage, rules: ctx.rules, todos: ctx.todos, messages: result.messages, hitMaxTurns: result.hitMaxTurns };
   } catch (err) {
+    sessionEvents.emit({ type: 'finished', session: ctx.chatId || '', outcome: 'failed', text: sessionEvents.clean(err && err.message) });
     return { ok: false, error: err.message };
   }
 }

@@ -4955,3 +4955,19 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   background: var(--sidebar-hover);
   color: var(--text);
 }
+
+/* ---------- 桌宠显示设置 ---------- */
+.pet-char-list { display: flex; gap: 10px; flex-wrap: wrap; }
+.pet-char-item {
+  width: 92px; padding: 8px 4px 7px; border-radius: 12px;
+  border: 1.5px solid rgba(0, 0, 0, 0.10); background: rgba(0, 0, 0, 0.03);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  cursor: pointer; font-size: 12px; color: var(--text-dim);
+  transition: border-color .15s ease, background .15s ease;
+}
+.pet-char-item:hover { border-color: rgba(47, 111, 237, 0.45); }
+.pet-char-item.active { border-color: #2f6fed; background: rgba(47, 111, 237, 0.10); color: #2f6fed; }
+.pet-option-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.pet-opt-title { font-size: 13px; font-weight: 500; color: var(--text); }
+:root.dark .pet-char-item { border-color: rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.04); }
+:root.dark .pet-char-item.active { border-color: #6b93f7; background: rgba(107, 147, 247, 0.16); color: #a8c1ff; }

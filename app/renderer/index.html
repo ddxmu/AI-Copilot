@@ -945,6 +945,7 @@
                 <button class="settings-nav active" data-target="settings-appearance">外观</button>
                 <button class="settings-nav" data-target="settings-network">联网</button>
                 <button class="settings-nav" data-target="settings-ai-config">AI配置</button>
+                <button class="settings-nav" data-target="settings-pet">桌宠显示</button>
                 <button class="settings-nav" data-target="settings-memory">记忆</button>
                 <button class="settings-nav" data-target="settings-mcp">MCP服务器</button>
                 <button class="settings-nav" data-target="settings-skills">智能体技能</button>
@@ -1092,6 +1093,63 @@
                 </div>
 
                 <!-- 记忆 -->
+                <!-- 桌宠显示 -->
+                <div class="settings-section" id="settings-pet">
+                  <div class="card">
+                    <div class="card-title-row">
+                      <h2>桌宠显示</h2>
+                      <label class="switch">
+                        <input type="checkbox" id="pet-enabled-toggle" />
+                        <span class="slider"></span>
+                      </label>
+                    </div>
+                    <p class="hint" style="margin: 4px 0 14px">开启后，桌面上会出现一个宠物小窗：AI 思考、调用工具、回答、向你提问、任务完成时，它会换动作并显示字幕气泡。宠物窗口置顶显示，默认鼠标穿透、不挡操作。</p>
+
+                    <div class="skill-section-title">选择宠物</div>
+                    <div id="pet-character-list" class="pet-char-list"></div>
+                    <div class="skill-search-row" style="margin-top:10px">
+                      <input id="pet-custom-path" type="text" readonly placeholder="可选：用自己的图片当宠物形象（PNG / GIF / SVG）" />
+                      <button id="btn-pet-pick-image" class="btn">选择图片</button>
+                      <button id="btn-pet-clear-image" class="btn ghost">清除</button>
+                    </div>
+
+                    <div class="pet-option-row" style="margin-top:16px">
+                      <label class="switch"><input type="checkbox" id="pet-bubble-toggle" /><span class="slider"></span></label>
+                      <div>
+                        <div class="pet-opt-title">显示字幕气泡</div>
+                        <div class="field-hint">气泡里显示 AI 正在做什么（工具名、回答片段、提问内容）</div>
+                      </div>
+                    </div>
+
+                    <div class="pet-option-row">
+                      <label class="switch"><input type="checkbox" id="pet-clickthrough-toggle" /><span class="slider"></span></label>
+                      <div>
+                        <div class="pet-opt-title">鼠标穿透（不挡操作）</div>
+                        <div class="field-hint">开启后宠物不接收鼠标，不影响桌面操作；关闭后可以拖动它换位置</div>
+                      </div>
+                    </div>
+
+                    <div class="btn-group" style="margin-top:16px">
+                      <button id="btn-pet-show" class="btn primary">显示宠物</button>
+                      <button id="btn-pet-hide" class="btn">隐藏宠物</button>
+                      <button id="btn-pet-reset" class="btn ghost">回到默认位置</button>
+                    </div>
+                  </div>
+
+                  <div class="card" style="margin-top:14px">
+                    <div class="card-title-row">
+                      <h2>任务状态外发（给 VibeCute 等桌面陪伴应用）</h2>
+                      <label class="switch">
+                        <input type="checkbox" id="session-events-toggle" />
+                        <span class="slider"></span>
+                      </label>
+                    </div>
+                    <p class="hint" style="margin: 4px 0 12px">开启后，AI Copilot 把同样的任务状态（开始 / 工具调用 / 回答摘要 / 提问 / 完成）追加写入本机事件文件，供 VibeCute 这类桌面陪伴应用读取显示。<strong>默认关闭</strong>；只写面向用户的可见文本，不写工具原始结果、系统提示词与用户原文。</p>
+                    <div id="session-events-path" class="field-hint" style="margin-bottom:10px"></div>
+                    <button id="btn-session-events-clear" class="btn ghost">清空事件文件</button>
+                  </div>
+                </div>
+
                 <div class="settings-section" id="settings-memory">
                   <div class="card">
                     <div class="card-title-row">
@@ -1699,6 +1757,7 @@
     </div>
   </div>
 
+  <script src="pet-characters.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

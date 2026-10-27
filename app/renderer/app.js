@@ -1046,10 +1046,75 @@ async function initAiSettings() {
     });
   }
   initMemorySettings();
+  initPetSettings();
   initVoiceSettings();
   initMcpSettings();
   initComputerUseSettings();
   initSkillAutoUpdateSettings();
+}
+
+/* ================= 桌宠显示设置 ================= */
+function initPetSettings() {
+  const enabled = document.getElementById('pet-enabled-toggle');
+  const bubble = document.getElementById('pet-bubble-toggle');
+  const click = document.getElementById('pet-clickthrough-toggle');
+  const listEl = document.getElementById('pet-character-list');
+  const customInput = document.getElementById('pet-custom-path');
+  if (!enabled || !listEl) return;
+
+  const chars = window.PET_CHARACTERS || {};
+  let cfg = {};
+
+  function renderChars() {
+    listEl.innerHTML = '';
+    Object.keys(chars).forEach((key) => {
+      const item = document.createElement('div');
+      const active = !cfg.customImage && (cfg.character || 'fox') === key;
+      item.className = 'pet-char-item' + (active ? ' active' : '');
+      item.innerHTML = '<svg viewBox="0 0 120 110" width="56" height="56">' + chars[key].render() + '</svg><span>' + chars[key].name + '</span>';
+      item.addEventListener('click', async () => {
+        cfg = await window.api.petSetConfig({ character: key, customImage: '' });
+        sync();
+      });
+      listEl.appendChild(item);
+    });
+  }
+
+  function sync() {
+    enabled.checked = !!cfg.enabled;
+    bubble.checked = cfg.bubbleEnabled !== false;
+    click.checked = cfg.clickThrough !== false;
+    customInput.value = cfg.customImage || '';
+    renderChars();
+  }
+
+  async function patch(p) { cfg = await window.api.petSetConfig(p); sync(); }
+
+  window.api.petGetConfig().then((c) => { cfg = c || {}; sync(); });
+
+  enabled.addEventListener('change', () => patch({ enabled: enabled.checked }));
+  bubble.addEventListener('change', () => patch({ bubbleEnabled: bubble.checked }));
+  click.addEventListener('change', () => patch({ clickThrough: click.checked }));
+
+  const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+  bind('btn-pet-show', () => patch({ enabled: true }));
+  bind('btn-pet-hide', () => patch({ enabled: false }));
+  bind('btn-pet-reset', () => patch({ x: null, y: null }));
+  bind('btn-pet-clear-image', () => patch({ customImage: '' }));
+  bind('btn-pet-pick-image', async () => {
+    const p = await window.api.petPickImage();
+    if (p) await patch({ customImage: p });
+  });
+
+  // 任务状态外发（供 VibeCute 等桌面陪伴应用读取）
+  const seToggle = document.getElementById('session-events-toggle');
+  if (seToggle) {
+    window.api.sessionEventsGet().then((v) => { seToggle.checked = !!v; });
+    seToggle.addEventListener('change', async () => { await window.api.sessionEventsSet(seToggle.checked); });
+  }
+  const sePath = document.getElementById('session-events-path');
+  if (sePath) window.api.sessionEventsPath().then((p) => { sePath.textContent = p ? '事件文件：' + p : ''; });
+  bind('btn-session-events-clear', async () => { await window.api.sessionEventsClear(); });
 }
 
 /* ================= 长期记忆设置 ================= */

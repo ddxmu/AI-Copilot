@@ -13,6 +13,8 @@ const memory = require('./memory');
 const https = require('https');
 const crypto = require('crypto');
 const pdfwm = require('./pdf-watermark');
+const sessionEvents = require('./session-events');
+const petWindow = require('./pet-window');
 
 // 内置 Computer Use MCP 子进程：本进程以 --run-computer-use 启动时，不创建窗口，
 // 直接作为 MCP stdio 服务器运行（模拟鼠标/键盘操作电脑）。由 mcp.js 以
@@ -221,6 +223,9 @@ app.whenReady().then(() => {
   migrateLegacyUserData();
   detectPdfEngines();
   createWindow();
+  // 桌面宠物：注册 IPC 并按上次的开关状态恢复显示
+  petWindow.init(aiConfig);
+  petWindow.applyConfig();
   // 启动静默检查更新（仅在有新版本时通知渲染进程，不自动下载）
   checkUpdatesInBackground(true);
   // 空闲定时检查更新（每 10 分钟自动查询一次 GitHub）
@@ -1921,6 +1926,8 @@ ipcMain.handle('pdf-remove-watermark', (_e, { files, watermarks, outputDir }) =>
 
 /* ---------------- AI 设置 ---------------- */
 const aiConfig = require('./ai-config');
+// 任务状态事件流：默认关闭，开关在「设置 → 任务状态外发」
+sessionEvents.configure(app.getPath('userData'), aiConfig.isSessionEventsEnabled());
 
 ipcMain.handle('ai-get-state', () => aiConfig.getState());
 ipcMain.handle('ai-save-profile', (_e, profile) => aiConfig.upsertProfile(profile));
@@ -2208,6 +2215,36 @@ ipcMain.handle('skill-auto-update-set', async (_e, enabled) => {
   try { return !!aiConfig.setSkillAutoUpdate(enabled); } catch (e) { return false; }
 });
 
+// 任务状态事件流开关：读 / 写 / 查文件路径 / 清空
+ipcMain.handle('session-events-get', async () => {
+  try { return !!aiConfig.isSessionEventsEnabled(); } catch (e) { return false; }
+});
+ipcMain.handle('session-events-set', async (_e, enabled) => {
+  try { return !!sessionEvents.setEnabled(aiConfig.setSessionEventsEnabled(enabled)); } catch (e) { return false; }
+});
+ipcMain.handle('session-events-path', async () => sessionEvents.filePath() || '');
+ipcMain.handle('session-events-clear', async () => { try { sessionEvents.clear(); } catch (e) {} return true; });
+
+// 桌面宠物配置：读 / 写（写入后立即应用显示状态）/ 选择自定义形象图片
+ipcMain.handle('pet-get-config', async () => (aiConfig.getPetConfig() || {}));
+ipcMain.handle('pet-set-config', async (_e, patch) => {
+  try {
+    const c = aiConfig.setPetConfig(patch);
+    petWindow.applyConfig();
+    return c;
+  } catch (e) { return {}; }
+});
+ipcMain.handle('pet-pick-image', async () => {
+  try {
+    const r = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] }],
+    });
+    if (r.canceled || !r.filePaths || !r.filePaths.length) return '';
+    return r.filePaths[0];
+  } catch (e) { return ''; }
+});
+
 /* ---------------- 已安装技能自动更新（GitHub 来源） ---------------- */
 // 防重入标志：自动更新为耗时网络操作，避免并发/周期重叠触发
 let skillAutoUpdateRunning = false;
@@ -2382,6 +2419,20 @@ async function readAttachmentForAi(item) {
   }
 }
 
+// 桌宠字幕节流：AI 流式输出不逐字刷，每 700ms 取最近一段可见文本
+let petTextBuf = '';
+let petTextTimer = null;
+function petFeedText(chunk) {
+  petTextBuf += chunk || '';
+  if (petTextTimer) return;
+  petTextTimer = setTimeout(() => {
+    petTextTimer = null;
+    const t = petTextBuf.replace(/\s+/g, ' ').trim().slice(-80);
+    petTextBuf = '';
+    if (t) petWindow.setState('working', t);
+  }, 700);
+}
+
 ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
   const profile = aiConfig.getActiveProfile();
   if (!profile) return { ok: false, error: '请先在「AI 设置」中添加并启用一个 AI 配置' };
@@ -2395,6 +2446,7 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
     const activeChatId = currentChatId || null;
     // 新一轮对话开始：清空 ComputerUse 的会话级硬停止 / 连续失败计数（需求：连续两次失败才停、新对话必须真正清理）
     try { mcp.resetTool('computeruse'); } catch (e) { /* ComputerUse 未启用时忽略 */ }
+    petWindow.setState('thinking', '开始处理任务…');
     const result = await agent.runAgent(profile, history, text, {
       skillsDir: SKILLS_DIR,
       attachments: resolvedAttachments,
@@ -2403,10 +2455,10 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
       mcpServer: mcpSelectedServer,
       chatId: activeChatId,
       memoryEnabled: aiConfig.getMemoryEnabled(),
-      onText: (t) => wc.send('ai-chat-text', t),
+      onText: (t) => { wc.send('ai-chat-text', t); petFeedText(t); },
       // 深度思考（推理模型的思维链）只通知一次，用于把「思考中…」切成「深度思考中…」
-      onReasoning: () => wc.send('ai-chat-reasoning'),
-      onToolStart: (d) => wc.send('ai-chat-tool-start', d),
+      onReasoning: () => { wc.send('ai-chat-reasoning'); petWindow.setState('thinking', '深度思考中…'); },
+      onToolStart: (d) => { wc.send('ai-chat-tool-start', d); petWindow.setState('working', '调用工具：' + ((d && d.name) || '')); },
       onToolEnd: (d) => wc.send('ai-chat-tool-end', d),
       onConfirm: (payload) => new Promise((resolve) => {
         const type = payload && typeof payload === 'object' ? payload.type : null;
@@ -2434,6 +2486,7 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
           pendingAskUser = null;
         };
         wc.send('ai-chat-ask-user', payload || {});
+        petWindow.setState('question', (payload && payload.question) || '需要你选择一个选项');
       }),
       onTodo: (todos) => wc.send('ai-chat-todo', todos),
       onSubagentStart: (d) => wc.send('ai-chat-subagent-start', d),
@@ -2455,8 +2508,13 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
       getRules: () => sharedRules,
       onRulesChanged: () => wc.send('rules-changed', sharedRules),
     });
+    // 任务结束：桌宠显示完成状态（2.6 秒后自回 idle）
+    clearTimeout(petTextTimer); petTextTimer = null; petTextBuf = '';
+    petWindow.setState('done', result.ok ? '任务完成' : '出错了');
     return { ok: result.ok, error: result.error, usage: result.usage, messages: result.messages || [], todos: result.todos || [], hitMaxTurns: result.hitMaxTurns || false };
   } catch (err) {
+    clearTimeout(petTextTimer); petTextTimer = null; petTextBuf = '';
+    petWindow.setState('idle', '出错了：' + (err && err.message ? err.message.slice(0, 60) : ''));
     return { ok: false, error: err.message };
   }
 });
