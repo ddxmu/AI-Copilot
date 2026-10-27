@@ -1,16 +1,16 @@
 {
-  "version": "0.11.21",
-  "notes": "### 1. 桌宠显示（桌面宠物）\n\n- 设置新增「**桌宠显示**」页（在「AI配置」右侧）：一个开关控制桌面宠物小窗，置顶显示，**默认鼠标穿透**，不挡任何桌面操作。\n- **4 个内置角色**可选：小狐狸 / 小机器人 / 小猫 / 小幽灵（应用自绘 SVG，无外部素材、无版权依赖）；也可以点「选择图片」用自己的 PNG / GIF / SVG 当宠物形象。\n- AI 工作时宠物会换动作并显示字幕气泡：**思考中**（深度思考）→ **调用工具**（显示工具名）→ **回答**（显示最近一段回复）→ **向你提问**（橙色问号，等待你点选）→ **任务完成**（绿色对勾），完成后自动回到待机动作。\n- 气泡可单独关闭；关掉「鼠标穿透」后可以把宠物拖到桌面任意位置，位置自动记住，另有「显示 / 隐藏 / 回到默认位置」按钮。\n\n### 2. 任务状态外发（给 VibeCute 等桌面陪伴应用）\n\n- 同页可开启：把同样的任务状态（开始 / 工具调用 / 回答摘要 / 提问 / 完成）追加写入本机的 `session-events.jsonl`，供 VibeCute 这类桌面陪伴应用读取并显示成它自己的桌面角色。\n- **默认关闭**；只写面向用户的可见文本，不写工具原始结果、系统提示词与用户原文；文件超过 8MB 自动轮转保留 3 份，可一键清空。",
-  "pubDate": "2026-10-27T18:15:12+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.21/AI.Copilot-0.11.21-arm64.dmg",
-  "sha256": "74b9940a3771378c3125f55be0d1928b7314afbc04aa343889d1d2942efb7c22",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.21/AI.Copilot-0.11.21.zip",
-  "patchSha256": "0a615612e75e050b7807341263190ce8482cff087001da964806830fb8d1aa3e",
+  "version": "0.11.22",
+  "notes": "### 修复：桌宠点「显示」不出现\n\n- 根因：配置读取函数 `loadState()` 返回的是一份**字段白名单**对象，其中漏掉了 `pet` 与 `sessionEvents` 两个新字段，导致桌宠配置永远读成空对象——开关虽然能写进配置文件，主进程却始终判断为「未开启」，宠物窗口根本不会创建。\n- 修复：在白名单中补回这两个字段（含默认值），桌宠开关、角色、气泡、鼠标穿透、拖动位置现在都能正确持久化；「任务状态外发」开关同样恢复正常（此前也一直读不到开启状态）。\n- 排查手段：给宠物窗口加了临时诊断日志（窗口创建位置、可见性、页面脚本错误），确认修复后窗口正常创建于主屏幕右下角、页面脚本与 4 个角色 SVG 均加载成功；验证完毕后诊断日志已全部移除，未留在代码中。",
+  "pubDate": "2026-10-27T18:54:24+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.22/AI.Copilot-0.11.22-arm64.dmg",
+  "sha256": "aa16e44d822f4f3eebe5d216da4de07e4348eb7aa0b4851e2378fed8c5a9fad4",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.22/AI.Copilot-0.11.22.zip",
+  "patchSha256": "9df499c1474ba2c06320fa6d7590beee41d4d277035f10ecd3d5d63cd42e0f9d",
   "deltas": [
     {
-      "from": "0.11.20",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.21/AI.Copilot-0.11.21.zip",
-      "sha256": "0a615612e75e050b7807341263190ce8482cff087001da964806830fb8d1aa3e"
+      "from": "0.11.21",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.22/AI.Copilot-0.11.22.zip",
+      "sha256": "9df499c1474ba2c06320fa6d7590beee41d4d277035f10ecd3d5d63cd42e0f9d"
     }
   ]
 }

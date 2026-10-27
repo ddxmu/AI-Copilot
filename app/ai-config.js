@@ -39,6 +39,8 @@ const DEFAULT_STATE = {
   mcpServers: [],
   computerUseEnabled: false, // 内置 Computer Use（鼠标/键盘模拟操作电脑）总开关
   skillAutoUpdate: false, // 已安装技能自动更新（GitHub 来源）总开关
+  sessionEvents: false, // 任务状态外发（session-events.jsonl）开关
+  pet: {}, // 桌面宠物配置：{ enabled, character, customImage, bubbleEnabled, clickThrough, x, y }
   voice: { ...DEFAULT_VOICE },
 };
 
@@ -68,6 +70,8 @@ function loadState() {
       mcpServers: Array.isArray(data.mcpServers) ? data.mcpServers : [],
       computerUseEnabled: data.computerUseEnabled ?? false,
       skillAutoUpdate: data.skillAutoUpdate ?? false,
+      sessionEvents: data.sessionEvents === true,
+      pet: data.pet && typeof data.pet === 'object' ? data.pet : {},
       voice,
     };
   } catch (e) {
