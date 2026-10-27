@@ -28,6 +28,7 @@ if (process.argv.includes('--run-computer-use')) {
 }
 
 let mainWindow = null;
+let isQuitting = false;   // 退出流程已启动（避免与 app.quit() 自身递归）
 let currentChatId = null; // 当前激活的对话 ID（用于对话级记忆）
 
 /* ---------------- Computer Use 光标遮罩（让用户看得见 AI 鼠标） ---------------- */
@@ -178,7 +179,13 @@ function createWindow() {
     shell.openExternal(url);
     return { action: 'deny' };
   });
-  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    // macOS 惯例是「关窗口不退出应用」，但本应用是单窗口应用，且开启桌宠后主窗口关闭
+    // 会残留一个常驻的桌宠窗口、进程也不结束，用户会以为关不掉。因此关闭主窗口时一并
+    // 退出应用；isQuitting 用于避免与 app.quit() 自身流程递归（如 updater 的重启升级）。
+    if (process.platform === 'darwin' && !isQuitting) app.quit();
+  });
 }
 
 // 唤回主窗口：点 Dock 图标 / 重新 open 应用时调用。
@@ -265,7 +272,9 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // 所有窗口都关闭时确保进程退出。macOS 上通常由主窗口 'closed' 先触发 app.quit()，
+  // 此处为兜底；app.quit() 幂等，重复调用无副作用。
+  app.quit();
 });
 
 /* ---------------- 工具函数 ---------------- */
@@ -2321,8 +2330,17 @@ ipcMain.handle('computer-use-abort', async () => {
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
+  // 关键：桌宠窗口与 Computer Use 光标遮罩都是 closable:false 的常驻辅助窗口，
+  // app.quit() 会等所有窗口关闭，不在这里显式销毁会导致退出流程永久挂起
+  // （表现为 Cmd+Q / 菜单「退出」点了没反应，进程一直不结束）。
+  try { petWindow.close(); } catch (e) { /* ignore */ }
+  try {
+    if (cursorOverlay && !cursorOverlay.isDestroyed()) cursorOverlay.destroy();
+    cursorOverlay = null;
+  } catch (e) { /* ignore */ }
   try { mcp.disconnectAll(); } catch (e) { /* ignore */ }
-  stopCursorServer();
+  try { stopCursorServer(); } catch (e) { /* ignore */ }
 });
 
 /* ---------------- AI 助手（智能体） ---------------- */

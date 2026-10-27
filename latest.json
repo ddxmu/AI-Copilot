@@ -1,16 +1,16 @@
 {
-  "version": "0.11.23",
-  "notes": "### 修复：开启桌宠后，主窗口最小化或关闭就打不开\n\n- 根因：点 Dock 图标唤回窗口用的是 `if (BrowserWindow.getAllWindows().length === 0) createWindow()`——这个数组**会把常驻的桌宠窗口算进去**，开启桌宠后它永远不为空，于是主窗口最小化后不会被恢复、关闭后也不会被重建，表现就是「点了 Dock 图标没反应、App 打不开」。\n- 修复：新增 `activateMainWindow()`，改为按主窗口自身状态判断——已销毁就重建，最小化了就 `restore()`，不可见就 `show()`，最后 `focus()`；同时给主窗口补上 `on('closed')` 置空引用，保证状态判断准确。\n- 沙箱内无法从外部触发 Dock 激活（`open -a` 不触发 Electron 的 activate 事件、osascript 跨进程 AppleEvent 被拦），改为在 App 内部自我模拟两种场景验证：最小化后 activate → 恢复成功（`minimized=false visible=true`）；关闭主窗口后 activate → 重建成功且窗口总数仍为 2（主窗口 + 桌宠，未重复创建）。验证完毕后模拟代码已全部移除。",
-  "pubDate": "2026-10-27T19:19:39+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.23/AI.Copilot-0.11.23-arm64.dmg",
-  "sha256": "597e1c7130868f76c4cb76a030c60e21b289e9530ff36a158f71339b04b743ba",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.23/AI.Copilot-0.11.23.zip",
-  "patchSha256": "97c62a8963550aaef435ad3a555ce83c5aee1499893af9e6dcbe2a0663fe206f",
+  "version": "0.11.24",
+  "notes": "### 修复：开启桌宠后，应用关不掉也退不出\n\n- 症状：开启桌宠后 Cmd+Q / 菜单「退出」点了没反应，进程一直不结束；点主窗口红叉关闭后，桌宠仍留在屏幕上，看起来也像没关掉。\n- 根因：`app.quit()` 会等所有窗口关闭，而桌宠窗口是 `closable: false` 的常驻辅助窗口，没有任何地方在退出时销毁它，于是退出流程**永久挂起**（实测调用 `app.quit()` 后 8 秒进程依然存活；手动销毁桌宠窗口后再 quit 才正常走到 `will-quit`）。另外 macOS 惯例是「关窗口不退出应用」，开启桌宠后主窗口关闭会让进程常驻、桌宠继续显示，观感上就是关不掉。\n- 修复：\n  - `before-quit` 中先显式销毁桌宠窗口与 Computer Use 光标遮罩（两者都是常驻辅助窗口），再断开 MCP 与光标 socket，退出流程不再挂起。\n  - 主窗口 `closed` 时在 macOS 上一并 `app.quit()`，关闭主窗口即彻底退出；用 `isQuitting` 标志阻断递归，保证升级流程（`app.relaunch()` + `app.quit()`）不受影响。\n  - `window-all-closed` 兜底确保进程退出；`stopCursorServer()` 补上异常保护。\n- 验证：App 内部模拟两种退出路径——关闭主窗口后进程正常结束、直接调用 `app.quit()` 后进程正常结束；回归确认正常启动时不会被误退出。验证代码已全部移除。",
+  "pubDate": "2026-10-27T19:40:07+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.24/AI.Copilot-0.11.24-arm64.dmg",
+  "sha256": "9813a45bd68382b8a6b7e38d402910af82e742e99621379735c46f664e551403",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.24/AI.Copilot-0.11.24.zip",
+  "patchSha256": "bba7430265721d56bd03c9676fedcbba4ac0fcee72b7a7306ea62f587e2c642b",
   "deltas": [
     {
-      "from": "0.11.22",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.23/AI.Copilot-0.11.23.zip",
-      "sha256": "97c62a8963550aaef435ad3a555ce83c5aee1499893af9e6dcbe2a0663fe206f"
+      "from": "0.11.23",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.24/AI.Copilot-0.11.24.zip",
+      "sha256": "bba7430265721d56bd03c9676fedcbba4ac0fcee72b7a7306ea62f587e2c642b"
     }
   ]
 }
