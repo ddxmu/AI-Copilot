@@ -180,10 +180,8 @@ function createWindow() {
   });
   mainWindow.on('closed', () => {
     mainWindow = null;
-    // 点关闭按钮只关页面、不退出应用（macOS 惯例）。此时把桌宠一并隐藏：
-    // 否则进程仍在、桌宠继续浮在桌面上，会让人误以为应用没关掉。
-    // 点 Dock 图标唤回主窗口时（activateMainWindow）会按配置重新显示桌宠。
-    try { petWindow.hide(); } catch (e) { /* ignore */ }
+    // 点关闭按钮只关页面、不退出应用（macOS 惯例）；开启的桌宠继续显示，
+    // 直到程序退出时随 before-quit 一并销毁。
   });
 }
 
@@ -191,8 +189,6 @@ function createWindow() {
 // 注意不能用 BrowserWindow.getAllWindows().length === 0 判断——桌宠窗口是常驻窗口，
 // 开了桌宠后该数组永远非空，会导致主窗口最小化或关闭后点 Dock 图标唤不回来。
 function activateMainWindow() {
-  // 唤回主窗口时，把随主窗口一起隐藏的桌宠按配置恢复显示
-  try { petWindow.applyConfig(); } catch (e) { /* ignore */ }
   if (!mainWindow || mainWindow.isDestroyed()) { createWindow(); return; }
   if (mainWindow.isMinimized()) mainWindow.restore();
   if (!mainWindow.isVisible()) mainWindow.show();
