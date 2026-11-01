@@ -76,6 +76,7 @@
   const stopBtn = document.getElementById('btn-stop');
   const addMenu = document.getElementById('add-menu');
   const openMenu = document.getElementById('open-menu');
+  const ruleMenu = document.getElementById('rule-menu');
 
   /* ---------------- 小工具 ---------------- */
   function uid(p) { return (p || 'n') + (seq++) + '_' + Math.random().toString(36).slice(2, 6); }
@@ -211,7 +212,13 @@
         d.rules.push({ name: '规则' + (d.rules.length + 1), find: '', replace: '' });
         markDirty(); render();
       });
-      top.appendChild(cnt); top.appendChild(add);
+      const exp = el('button', 'mini', '导出规则');
+      exp.title = '把当前规则导出为 .xlsx / .csv 表格';
+      exp.addEventListener('click', (e) => { e.stopPropagation(); showRuleExportMenu(n, exp); });
+      const imp = el('button', 'mini', '导入规则');
+      imp.title = '从 .xlsx / .csv 表格批量导入规则';
+      imp.addEventListener('click', async (e) => { e.stopPropagation(); await importNodeRules(n); });
+      top.appendChild(cnt); top.appendChild(add); top.appendChild(exp); top.appendChild(imp);
       box.appendChild(top);
       if (!d.rules.length) box.appendChild(el('div', 'rule-empty', '暂无规则'));
       d.rules.forEach((r, i) => {
@@ -642,6 +649,7 @@
   }, { passive: false });
 
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeRuleMenu();
     if (e.key === 'Delete' || e.key === 'Backspace') {
       const t = e.target;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
@@ -683,6 +691,71 @@
     addMenu.classList.remove('hidden');
   }
 
+  /* ---------------- 规则节点的导出 / 导入（.xlsx / .csv） ---------------- */
+  function closeRuleMenu() { if (ruleMenu) ruleMenu.classList.add('hidden'); }
+
+  function showRuleExportMenu(n, anchorBtn) {
+    if (!ruleMenu) return;
+    ruleMenu.innerHTML = '';
+    ruleMenu.appendChild(el('div', 'pop-group', '导出为'));
+    [['xlsx', 'Excel 工作簿（.xlsx）'], ['csv', 'CSV 文件（.csv）']].forEach((f) => {
+      const it = el('div', 'pop-item');
+      it.appendChild(el('span', null, f[1]));
+      it.addEventListener('click', () => { closeRuleMenu(); exportNodeRules(n, f[0]); });
+      ruleMenu.appendChild(it);
+    });
+    const r = anchorBtn.getBoundingClientRect();
+    ruleMenu.style.left = r.left + 'px';
+    ruleMenu.style.top = (r.bottom + 6) + 'px';
+    ruleMenu.classList.remove('hidden');
+  }
+
+  async function exportNodeRules(n, format) {
+    const list = (n.data.rules || []).map((r) => ({
+      name: r.name || '', find: r.find || '', replace: r.replace || '', enabled: true,
+    }));
+    try {
+      const res = await api.rulesExport(list, format, '工作流规则');
+      if (!res || res.canceled) return;
+      if (!res.ok) { setStatus('规则导出失败：' + ((res && res.error) || '未知错误')); return; }
+      setStatus(res.count
+        ? '已导出 ' + res.count + ' 条规则到 ' + res.filePath
+        : '当前没有规则，已导出一份空白模板到 ' + res.filePath + '（填好后可再导入）');
+      try { api.revealInFolder(res.filePath); } catch (_) { /* 忽略 */ }
+    } catch (err) {
+      setStatus('规则导出失败：' + ((err && err.message) || err));
+    }
+  }
+
+  async function importNodeRules(n) {
+    try {
+      const res = await api.rulesImport('工作流规则');
+      if (!res || res.canceled) return;
+      if (!res.ok) { setStatus('规则导入失败：' + ((res && res.error) || '未知错误')); return; }
+      const incoming = res.rules || [];
+      if (!incoming.length) { setStatus('这个文件里没有解析到有效规则（「查找内容」列不能为空）。'); return; }
+      if (!n.data.rules) n.data.rules = [];
+      let replaceAll = false;
+      if (n.data.rules.length && typeof window.confirm === 'function') {
+        replaceAll = window.confirm(
+          '表格里读到 ' + incoming.length + ' 条规则，当前已有 ' + n.data.rules.length + ' 条。\n\n' +
+          '点「确定」＝ 清空现有规则后导入\n' +
+          '点「取消」＝ 保留现有规则，把新规则追加在后面'
+        );
+      }
+      if (replaceAll) n.data.rules = [];
+      incoming.forEach((r) => {
+        n.data.rules.push({ name: r.name || '规则' + (n.data.rules.length + 1), find: r.find, replace: r.replace || '' });
+      });
+      markDirty(); render();
+      const parts = ['已' + (replaceAll ? '替换' : '追加') + '导入 ' + incoming.length + ' 条规则'];
+      if (res.skipped) parts.push('跳过 ' + res.skipped + ' 行空白/无效数据');
+      setStatus(parts.join('，') + '。');
+    } catch (err) {
+      setStatus('规则导入失败：' + ((err && err.message) || err));
+    }
+  }
+
   document.addEventListener('mousedown', (e) => {
     const tg = e.target;
     if (!tg || typeof tg.closest !== 'function') return;
@@ -691,6 +764,9 @@
     }
     if (!openMenu.classList.contains('hidden') && !openMenu.contains(tg) && tg.closest('#btn-open') === null) {
       openMenu.classList.add('hidden');
+    }
+    if (ruleMenu && !ruleMenu.classList.contains('hidden') && !ruleMenu.contains(tg)) {
+      closeRuleMenu();
     }
   });
 
