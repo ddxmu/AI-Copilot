@@ -1,16 +1,16 @@
 {
-  "version": "0.12.3",
-  "notes": "### 新功能：工作流新增「模块自定义」节点\n\n- `＋ 新建` → 任务节点里新增 **模块自定义**：节点内是「信息内容」提示词输入框，自己写要让 AI 做什么。\n- 该节点带 **文件 / 规则 / 技能 / 保存位置** 四个输入端口，全部由连线提供：规则会拼进提示词末尾，技能会以「【技能：xxx】」附加，保存位置决定结果落在哪。\n- 执行时把「提示词 + 规则 + 技能 + 文件」交给 AI（用 AI 设置里启用的配置，连了「AI 模型选择」则用指定模型），AI 的完整输出写成一个 `.md` 文件（默认落在保存位置目录或源文件同级的「自定义输出」文件夹），并作为该节点的输出文件，可继续连给下游任务节点。\n\n### 优化：端口改成框内两边摆放，节点高度按端口数自适应\n\n- 端口不再用固定坐标叠在节点内容上：现在节点框内有一块**端口区**，输入名靠左、输出名靠右（两边摆放），节点左右边缘的圆点与每一行严格对齐。\n- 节点高度按端口行数自动撑开，以前「规则 / 技能 / 保存位置」被挤出框外、标签与说明文字重叠的问题已消除。\n- 行高 24px，端口配色小圆点随行显示（文件蓝 / 规则橙 / 技能紫 / 保存位置绿 / 模型红）；「替换文件」「文件名修改」去掉了冗余说明文字，改为一行功能提示。\n- 「适应画布」改为按节点真实高度计算缩放，不再用固定估值。",
-  "pubDate": "2026-11-01T16:42:07+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.3/AI.Copilot-0.12.3-arm64.dmg",
-  "sha256": "655779cbd05cdb029d8d46241cd34113d7ce074a71198163f73ebcebc4822a65",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.3/AI.Copilot-0.12.3.zip",
-  "patchSha256": "b6db94795aedd9756f83ac3a742420e96c312017c9170d2c84f7b94cdd45945c",
+  "version": "0.12.4",
+  "notes": "### 优化：六个功能模块收进侧边栏「更多」\n\n- 侧边栏精简为：**AI 助手 → 自动化 → 更多 →（历史记录）→ AI 设置**，「更多」就放在「自动化」下面。\n- 「按规则替换文件 / 文件名修改 / 文件格式转换 / PDF去水印 / 文件自动化 / PPT 写手」六个模块收进「更多」里，默认折叠；点「更多」展开（右侧箭头会转向），再点收起。\n- 选中的是当前折叠组里的模块时，「更多」本身也会亮起当前态，收起后仍看得出正在用哪个模块。\n- AI 助手让你跳到某个模块时（例如「去处理替换文件」），若该模块在「更多」里会自动展开，不会出现「切过去了但侧边栏看不到」的情况。",
+  "pubDate": "2026-11-01T16:57:09+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.4/AI.Copilot-0.12.4-arm64.dmg",
+  "sha256": "c7dea6b79da21c2a5df903c55482e33482f5c0d5ce17b1615f34d3da008ffe67",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.4/AI.Copilot-0.12.4.zip",
+  "patchSha256": "9ce610df8112127ddcdc7218954929b9c1878cb9ac4cd426986bf19a4943fa19",
   "deltas": [
     {
-      "from": "0.12.2",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.3/AI.Copilot-0.12.3.zip",
-      "sha256": "b6db94795aedd9756f83ac3a742420e96c312017c9170d2c84f7b94cdd45945c"
+      "from": "0.12.3",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.4/AI.Copilot-0.12.4.zip",
+      "sha256": "9ce610df8112127ddcdc7218954929b9c1878cb9ac4cd426986bf19a4943fa19"
     }
   ]
 }
