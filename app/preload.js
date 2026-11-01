@@ -158,6 +158,18 @@ contextBridge.exposeInMainWorld('api', {
   onUpdateStage: (cb) => ipcRenderer.on('update-stage', (_e, s) => cb(s)),
   onUpdateError: (cb) => ipcRenderer.on('update-error', (_e, m) => cb(m)),
   clearUpdateCache: () => ipcRenderer.invoke('clear-update-cache'),
+  // 自动化工作流（独立窗口，ComfyUI 风格节点画布）
+  openWorkflowWindow: () => ipcRenderer.invoke('workflow-open'),
+  workflowFlowsGet: () => ipcRenderer.invoke('workflow-flows-get'),
+  workflowFlowsSave: (list) => ipcRenderer.invoke('workflow-flows-save', list),
+  wfSelectFiles: () => ipcRenderer.invoke('wf-select-files'),
+  wfSelectFolder: () => ipcRenderer.invoke('wf-select-folder'),
+  wfSelectOutputDir: () => ipcRenderer.invoke('wf-select-output-dir'),
+  wfSaveProjectFile: (payload) => ipcRenderer.invoke('wf-save-project-file', payload),
+  wfOpenProjectFile: () => ipcRenderer.invoke('wf-open-project-file'),
+  // 节点内的 AI 调用（一次性返回全文，不走聊天流式事件）
+  wfAiRun: (payload) => ipcRenderer.invoke('wf-ai-run', payload),
+  onWfAiText: (cb) => ipcRenderer.on('wf-ai-text', (_e, t) => cb(t)),
   // Computer Use 光标遮罩事件
   cursorMove: (cb) => ipcRenderer.on('cursor-move', (_e, d) => cb(d)),
   cursorAction: (cb) => ipcRenderer.on('cursor-action', (_e, d) => cb(d)),

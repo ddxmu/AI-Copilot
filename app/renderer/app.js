@@ -30,6 +30,11 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
       openSettingsModal();
       return;
     }
+    // 自动化：打开独立的「工作流节点画布」窗口，主界面不切换面板
+    if (btn.dataset.panel === 'workflow') {
+      window.api.openWorkflowWindow();
+      return;
+    }
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'));
     document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
     btn.classList.add('active');

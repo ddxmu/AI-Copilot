@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const pdfwm = require('./pdf-watermark');
 const sessionEvents = require('./session-events');
 const petWindow = require('./pet-window');
+const workflowWindow = require('./workflow-window');
 
 // 内置 Computer Use MCP 子进程：本进程以 --run-computer-use 启动时，不创建窗口，
 // 直接作为 MCP stdio 服务器运行（模拟鼠标/键盘操作电脑）。由 mcp.js 以
@@ -241,6 +242,8 @@ app.whenReady().then(() => {
   // 桌面宠物：注册 IPC 并按上次的开关状态恢复显示
   petWindow.init(aiConfig);
   petWindow.applyConfig();
+  // 自动化工作流（独立窗口）：注册窗口与项目持久化 IPC
+  workflowWindow.init();
   // 启动静默检查更新（仅在有新版本时通知渲染进程，不自动下载）
   checkUpdatesInBackground(true);
   // 空闲定时检查更新（每 10 分钟自动查询一次 GitHub）
@@ -2330,6 +2333,7 @@ app.on('before-quit', () => {
   // app.quit() 会等所有窗口关闭，不在这里显式销毁会导致退出流程永久挂起
   // （表现为 Cmd+Q / 菜单「退出」点了没反应，进程一直不结束）。
   try { petWindow.close(); } catch (e) { /* ignore */ }
+  try { workflowWindow.close(); } catch (e) { /* ignore */ }
   try {
     if (cursorOverlay && !cursorOverlay.isDestroyed()) cursorOverlay.destroy();
     cursorOverlay = null;
@@ -2570,6 +2574,46 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments, runId, cha
     pendingConfirms.delete(rid);
     pendingAskUsers.delete(rid);
     pendingInstallSkills.delete(rid);
+    try { agent.clearRun(rid); } catch (e) { /* ignore */ }
+  }
+});
+
+/* ---------------- 自动化工作流：节点内的 AI 调用 ----------------
+ * 工作流窗口不是聊天界面，不需要流式渲染，这里一次性跑完整轮并把全文返回，
+ * 供「PPT 编写」等需要 AI 的节点使用。授权类交互按当前全局权限模式自动应答。
+ */
+ipcMain.handle('wf-ai-run', async (event, { profileId, model, prompt, files }) => {
+  const profile = resolveProfileById(profileId, model) || aiConfig.getActiveProfile();
+  if (!profile) return { ok: false, error: '请先在「AI 设置」中添加并启用一个 AI 配置' };
+  if (!profile.model) return { ok: false, error: '当前 AI 配置未选择模型，请到「AI 设置」拉取并选择模型' };
+  if (!prompt || !String(prompt).trim()) return { ok: false, error: 'AI 节点未填写提示词' };
+  const rid = 'wf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  const wc = event.sender;
+  let text = '';
+  try {
+    const attachments = [];
+    for (const f of (Array.isArray(files) ? files : []).slice(0, 20)) {
+      try { attachments.push(await readAttachmentForAi({ path: f })); } catch (e) { /* 单个附件失败不影响整体 */ }
+    }
+    const result = await agent.runAgent(profile, [], String(prompt), {
+      skillsDir: SKILLS_DIR,
+      attachments,
+      webAccess: aiConfig.getWebAccess(),
+      mcpEnabled: false,
+      mcpServer: null,
+      chatId: null,
+      runId: rid,
+      memoryEnabled: false,
+      onText: (t) => { text += t || ''; try { wc.send('wf-ai-text', t); } catch (e) { /* ignore */ } },
+      onConfirm: () => Promise.resolve(permissionMode === 'trust'),
+      onAskUser: () => Promise.resolve(null),
+      onInstallSkill: () => Promise.resolve(false),
+      getRules: () => sharedRules,
+    });
+    return { ok: result.ok, error: result.error, text: text || (result.error || '') };
+  } catch (err) {
+    return { ok: false, error: err.message, text };
+  } finally {
     try { agent.clearRun(rid); } catch (e) { /* ignore */ }
   }
 });

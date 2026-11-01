@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline';" />
+<title>自动化工作流</title>
+<link rel="stylesheet" href="workflow.css" />
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand"><span class="dot"></span>自动化工作流</div>
+    <div class="proj">
+      <label for="proj-name">项目</label>
+      <input id="proj-name" type="text" placeholder="未命名工作流" spellcheck="false" />
+      <span id="proj-state" class="proj-state">未保存</span>
+    </div>
+    <div class="spacer"></div>
+    <div id="zoom-info">100%</div>
+  </header>
+
+  <div id="main">
+    <aside id="rail">
+      <button class="rail-btn primary" id="btn-add" title="新建节点">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="9" cy="9" r="7.4"/><path d="M9 5.4v7.2M5.4 9h7.2"/></svg>
+        <span class="rl">新建</span>
+      </button>
+      <div class="rail-sep"></div>
+      <button class="rail-btn" id="btn-open" title="打开已保存的项目">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6a2 2 0 0 1 2-2h3.4l1.5 2H15a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></svg>
+        <span class="rl">打开</span>
+      </button>
+      <button class="rail-btn" id="btn-save" title="保存项目（按名字存到本机项目列表）">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h10l2 2v10H3z"/><path d="M6 3v5h7V3"/><rect x="6" y="10" width="6" height="5"/></svg>
+        <span class="rl">保存</span>
+      </button>
+      <button class="rail-btn" id="btn-saveas" title="另存为 .aiflow 文件">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h10l2 2v5"/><path d="M6 3v5h7V3"/><path d="M9.5 11.5v4.5"/><path d="M7.4 14l2.1 2 2.1-2"/></svg>
+        <span class="rl">另存为</span>
+      </button>
+      <button class="rail-btn" id="btn-openfile" title="从 .aiflow 文件打开">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6a2 2 0 0 1 2-2h3.4l1.5 2H15a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/><path d="M9.2 13.4V8.6"/><path d="M7.2 10.6l2-2 2 2"/></svg>
+        <span class="rl">打开文件</span>
+      </button>
+      <div class="rail-sep"></div>
+      <button class="rail-btn" id="btn-fit" title="适应画布">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5v-4h4M15.5 6.5v-4h-4M2.5 11.5v4h4M15.5 11.5v4h-4"/></svg>
+        <span class="rl">适应</span>
+      </button>
+      <button class="rail-btn" id="btn-clear" title="清空画布">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 5h12.8"/><path d="M6.2 5V3.2h5.6V5"/><path d="M4.6 5l.9 10.4h7L13.4 5"/></svg>
+        <span class="rl">清空</span>
+      </button>
+    </aside>
+
+    <div id="canvas">
+      <div id="world">
+        <svg id="edges" width="12000" height="8000"></svg>
+        <div id="nodes"></div>
+      </div>
+      <div id="hint">滚轮缩放 · 空白处拖动平移 · 点端口拉线连接 · Delete 删除选中</div>
+      <button id="btn-stop" class="run-btn stop hidden">■ 停止</button>
+      <button id="btn-run" class="run-btn">▶ 运行</button>
+    </div>
+  </div>
+
+  <footer id="statusbar">
+    <span id="status-text">就绪：点左侧「＋ 新建」添加节点，连线后点右下角「运行」</span>
+    <div id="progress-wrap"><div id="progress-bar"></div></div>
+  </footer>
+</div>
+
+<div id="add-menu" class="popup hidden"></div>
+<div id="open-menu" class="popup hidden"></div>
+
+<script src="workflow.js"></script>
+</body>
+</html>
