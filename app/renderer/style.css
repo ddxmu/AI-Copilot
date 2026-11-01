@@ -162,6 +162,23 @@ body {
   opacity: 1;
 }
 
+/* 「更多」折叠组：收起六个功能模块，点击展开 */
+.nav-more .more-arrow {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sidebar-text-dim);
+  transition: transform 0.18s ease;
+}
+.nav-more .more-arrow svg { width: 13px; height: 13px; color: currentColor; }
+.nav-more.open .more-arrow { transform: rotate(90deg); }
+.nav-more.has-active { color: var(--sidebar-active-text); }
+.nav-more.has-active .nav-icon { opacity: 1; }
+.nav-sub { display: none; }
+.nav-sub.open { display: block; }
+.nav-sub .nav-item { padding-left: 40px; font-size: 13px; }
+
 /* 侧边栏分隔区域标题 */
 .nav-section-label {
   font-size: 11px;

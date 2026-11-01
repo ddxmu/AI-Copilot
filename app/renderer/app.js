@@ -23,9 +23,27 @@ const state = {
 let ruleSeq = 0;
 
 /* ================= 左侧导航 ================= */
+const navMoreBtn = document.getElementById('nav-more-btn');
+const navSubEl = document.getElementById('nav-sub-more');
+
+// 「更多」：展开 / 收起六个功能模块（替换文件 / 文件名修改 / 格式转换 / PDF去水印 / 文件自动化 / PPT 写手）
+function setNavMore(open) {
+  if (!navMoreBtn || !navSubEl) return;
+  navSubEl.classList.toggle('open', !!open);
+  navMoreBtn.classList.toggle('open', !!open);
+}
+function syncNavMoreActive() {
+  if (!navMoreBtn || !navSubEl) return;
+  navMoreBtn.classList.toggle('has-active', !!navSubEl.querySelector('.nav-item.active'));
+}
+
 document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => {
     if (btn.classList.contains('disabled')) return;
+    if (btn.classList.contains('nav-more')) {
+      setNavMore(!navSubEl.classList.contains('open'));
+      return;
+    }
     if (btn.dataset.panel === 'ai-settings') {
       openSettingsModal();
       return;
@@ -39,6 +57,7 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
     document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
+    syncNavMoreActive(); // 选中的若是「更多」里的模块，让「更多」也显示当前态
     autoGrow(); // 切到面板后重新测量输入框高度（AI 面板隐藏时高度未被正确计算）
   });
 });
@@ -559,6 +578,8 @@ function switchPanel(name) {
   document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
   const btn = document.querySelector(`.nav-item[data-panel="${name}"]`);
   if (btn) btn.classList.add('active');
+  if (btn && btn.closest('.nav-sub')) setNavMore(true); // 目标在「更多」里时自动展开，避免切过去看不见
+  syncNavMoreActive();
   document.getElementById('panel-' + name).classList.add('active');
   autoGrow(); // 面板切换后重新测量输入框高度
 }
