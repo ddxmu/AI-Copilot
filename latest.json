@@ -1,16 +1,16 @@
 {
-  "version": "0.11.26",
-  "notes": "### 调整：关闭主窗口后桌宠继续显示（不再跟着隐藏）\n\n- 上一版把「关闭主窗口」做成了连桌宠一起隐藏，改为：点关闭按钮只关页面、程序继续运行，**开启的桌宠继续显示**；程序退出（Cmd+Q / 菜单）时桌宠随 `before-quit` 一并销毁、真正一起退。\n- 验证：关闭主窗口 → 进程存活、桌宠仍在；点 Dock 唤回 → 主窗口重建、桌宠不变；Cmd+Q → 进程与桌宠一起退出。验证代码已全部移除。",
-  "pubDate": "2026-10-28T08:58:23+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.26/AI.Copilot-0.11.26-arm64.dmg",
-  "sha256": "15c3841e6de954cd6528cd2cb9f9047a7fe0ca8bac723862e90385a2a03a3455",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.26/AI.Copilot-0.11.26.zip",
-  "patchSha256": "a2b94b203bd83455e0fb073dc3f22cdd3f316bf6dcdac4e54c0d0358c65c97ea",
+  "version": "0.11.27",
+  "notes": "### 新功能：每个会话（项目）独立运行 + 消息排队\n\n- **每个项目独立运行**：以前全局只能跑一个任务，A 会话在跑时点 B 会话不能启动。现在每个会话各跑各的，互不影响；侧边栏会话名旁仍用转圈标记「本会话正在执行」。\n- **新消息不再中断原任务**：任务运行中回车 / 点发送，新消息**进入队列**排队（旧行为是中断当前任务），显示在输入框上方，任务结束后自动接着跑下一条。\n- **排队消息可操作**：每条排队消息带拖拽手柄（可排序）和三个按钮 ——\n  - `↑` **引导**：消息立刻发给正在跑的任务，但**不打断模型当前这一轮**（与 WorkBuddy 一致）；\n  - `✏️` **编辑**：就地修改内容后再等它发出；\n  - `🗑` **删除**：丢弃这条排队消息。\n- **停止**：输入框右侧新增独立停止按钮（红点，任务运行时才显示），`Esc` 同效；只停当前会话这一个任务，不影响其他会话。\n- 底层改动：主进程推送的每一条 AI 事件都带上 `runId / chatId`，渲染层据此路由（避免并发时把 A 会话的字写进 B 会话）；授权弹条（写文件 / 提问 / 装技能）按任务实例排队，答案不会再答到别的任务头上；Agent 的停止标志与在途请求句柄改为按实例隔离。",
+  "pubDate": "2026-11-01T14:44:21+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.27/AI.Copilot-0.11.27-arm64.dmg",
+  "sha256": "ad56fd5a6202dc6a6dd4b5e1c1410b83cef9160f1325c17122e3ad0c7f8e59e0",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.27/AI.Copilot-0.11.27.zip",
+  "patchSha256": "b13ef9d7374669e87b06876b3a59058ffddc165fc210f9748732f597867ddc58",
   "deltas": [
     {
-      "from": "0.11.25",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.26/AI.Copilot-0.11.26.zip",
-      "sha256": "a2b94b203bd83455e0fb073dc3f22cdd3f316bf6dcdac4e54c0d0358c65c97ea"
+      "from": "0.11.26",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.11.27/AI.Copilot-0.11.27.zip",
+      "sha256": "b13ef9d7374669e87b06876b3a59058ffddc165fc210f9748732f597867ddc58"
     }
   ]
 }
