@@ -127,6 +127,19 @@ function init() {
     }
   });
 
+  // 模块自定义节点：把 AI 产出的文本写成文件（结果作为该节点的输出文件）
+  ipcMain.handle('wf-write-text', async (_e, { filePath, content }) => {
+    try {
+      const p = String(filePath || '');
+      if (!p) return { ok: false, error: '缺少输出路径' };
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, String(content || ''), 'utf8');
+      return { ok: true, filePath: p };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
   // 打开文件：读取 .aiflow / .json 项目文件内容
   ipcMain.handle('wf-open-project-file', async () => {
     const r = await dialog.showOpenDialog(parent(), {

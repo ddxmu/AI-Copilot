@@ -9,9 +9,11 @@
   const SVGNS = 'http://www.w3.org/2000/svg';
 
   const NODE_W = 260;
-  const PORT_TOP = 46;   // 第一个端口距节点顶部
-  const PORT_GAP = 22;
+  const HEAD_H = 30;     // 节点标题栏高度
+  const PORT_GAP = 24;   // 每个端口行高（端口纵向间距 = 行高）
   const PORT_R = 6;
+  // 端口圆点垂直居中于第 i 行：中心 = HEAD_H + i*PORT_GAP + PORT_GAP/2
+  const PORT_TOP = HEAD_H + PORT_GAP / 2 - PORT_R;
 
   const PORT_COLOR = { files: '#4d9cf6', rules: '#f2b544', skill: '#a06bf0', save: '#37c46f', model: '#e8577a' };
   const PORT_LABEL = { files: '文件', rules: '规则', skill: '技能', save: '保存位置', model: '模型' };
@@ -30,9 +32,16 @@
     pdfwm:      { title: 'PDF去水印',   group: 'task', color: '#2f6fed', ins: ['files', 'model', 'save'], outs: ['files'] },
     automation: { title: '文件自动化',  group: 'task', color: '#2f6fed', ins: ['files', 'skill', 'save'], outs: ['files'] },
     ppt:        { title: 'PPT 编写',    group: 'task', color: '#2f6fed', ins: ['files', 'model', 'save'], outs: ['files'] },
+    // 模块自定义：自己写提示词，可接文件 / 规则 / 技能 / 保存位置
+    custom:     { title: '模块自定义',  group: 'task', color: '#2f6fed', ins: ['files', 'rules', 'skill', 'save'], outs: ['files'] },
   };
   const INPUT_ORDER = ['source', 'rules', 'skill', 'output', 'aimodel'];
-  const TASK_ORDER = ['replace', 'rename', 'convert', 'pdfwm', 'automation', 'ppt'];
+  const TASK_ORDER = ['replace', 'rename', 'convert', 'pdfwm', 'automation', 'ppt', 'custom'];
+
+  const TASK_TIP = {
+    replace: '按「规则」批量替换文件内容',
+    rename: '按「规则」批量重命名文件',
+  };
 
   const SRC_FORMATS = [
     { v: 'auto', t: '按文件自动识别' }, { v: 'pdf', t: 'PDF（.pdf）' },
@@ -83,6 +92,11 @@
     return w;
   }
   function dirOf(p) { const s = String(p || ''); const i = s.lastIndexOf('/'); return i > 0 ? s.slice(0, i) : s; }
+  function stamp() {
+    const d = new Date();
+    const p2 = (v) => String(v).padStart(2, '0');
+    return '' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '-' + p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds());
+  }
   function nodeById(id) { return nodes.find((n) => n.id === id) || null; }
   function setStatus(t) { statusEl.textContent = t || ''; }
   function setProgress(pct) {
@@ -114,6 +128,7 @@
       case 'pdfwm': return { marks: '', auto: true };
       case 'automation': return { layout: 'default', template: '' };
       case 'ppt': return { prompt: '' };
+      case 'custom': return { prompt: '' };
       default: return {};
     }
   }
@@ -126,9 +141,34 @@
     p.dataset.dir = dir;
     p.style.top = (PORT_TOP + idx * PORT_GAP) + 'px';
     p.style.background = PORT_COLOR[kind] || '#888';
-    p.title = (dir === 'in' ? '输入：' : '输出：') + (PORT_LABEL[kind] || kind);
-    p.appendChild(el('span', 'port-label', PORT_LABEL[kind] || kind));
+    p.title = '从这里拉线：' + (PORT_LABEL[kind] || kind) + (dir === 'in' ? '（输入）' : '（输出）');
     return p;
+  }
+
+  // 端口行：输入名靠左、输出名靠右，两边摆放在节点框内，行数决定节点高度
+  function makePortRow(kind, dir) {
+    const s = el('span', 'pl ' + dir);
+    const dot = el('i', 'pd');
+    dot.style.background = PORT_COLOR[kind] || '#888';
+    const txt = el('span', 'pt', PORT_LABEL[kind] || kind);
+    if (dir === 'in') { s.appendChild(dot); s.appendChild(txt); }
+    else { s.appendChild(txt); s.appendChild(dot); }
+    return s;
+  }
+
+  function buildPortRows(e, def) {
+    const rows = Math.max((def.ins || []).length, (def.outs || []).length);
+    if (!rows) return;
+    const wrap = el('div', 'node-ports');
+    for (let i = 0; i < rows; i++) {
+      const row = el('div', 'prow');
+      if (def.ins[i]) row.appendChild(makePortRow(def.ins[i], 'in'));
+      else row.appendChild(el('span', 'pl in'));
+      if (def.outs[i]) row.appendChild(makePortRow(def.outs[i], 'out'));
+      else row.appendChild(el('span', 'pl out'));
+      wrap.appendChild(row);
+    }
+    e.appendChild(wrap);
   }
 
   function buildBody(box, n) {
@@ -325,8 +365,20 @@
       return;
     }
 
+    if (n.type === 'custom') {
+      const ta = el('textarea');
+      ta.value = d.prompt || '';
+      ta.placeholder = '写清楚要让 AI 做什么，例如：通读这些文档，输出一份要点清单…';
+      ta.style.minHeight = '78px';
+      ta.addEventListener('input', () => { d.prompt = ta.value; markDirty(); });
+      box.appendChild(field('信息内容（提示词）', ta));
+      const tip = el('div', 'nf-label', '文件 / 规则 / 技能 / 保存位置 由左侧连线提供，结果存为 .md 文件');
+      box.appendChild(tip);
+      return;
+    }
+
     // 纯任务节点：无额外参数
-    box.appendChild(el('div', 'nf-label', '参数由连线提供：文件 / 规则 / 保存位置'));
+    box.appendChild(el('div', 'nf-label', TASK_TIP[n.type] || '参数由左侧连线提供'));
   }
 
   function buildNode(n) {
@@ -345,6 +397,8 @@
     x.addEventListener('click', (ev) => { ev.stopPropagation(); removeNode(n.id); });
     head.appendChild(title); head.appendChild(x);
     e.appendChild(head);
+
+    buildPortRows(e, def);
 
     const body = el('div', 'node-body');
     buildBody(body, n);
@@ -728,8 +782,10 @@
     if (!nodes.length) { view = { x: 40, y: 30, k: 1 }; applyView(); return; }
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     nodes.forEach((n) => {
+      const e = nodesEl.querySelector('.node[data-id="' + n.id + '"]');
+      const h = e ? (e.offsetHeight || 200) + 24 : 200;
       x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y);
-      x1 = Math.max(x1, n.x + NODE_W); y1 = Math.max(y1, n.y + 200);
+      x1 = Math.max(x1, n.x + NODE_W); y1 = Math.max(y1, n.y + h);
     });
     const rect = canvasEl.getBoundingClientRect();
     const pad = 60;
@@ -879,6 +935,30 @@
       }
       return finish(await api.pptSave(inp.files, toDir ? 'output' : 'overwrite', outputDir));
     }
+    if (n.type === 'custom') {
+      let prompt = String(n.data.prompt || '').trim();
+      if (!prompt) throw new Error('请在「信息内容」里填写提示词');
+      if (inp.rules.length) {
+        prompt += '\n\n【替换规则】\n' + inp.rules.map((r) => (r.find || '') + ' → ' + (r.replace || '')).join('\n');
+      }
+      if (inp.skill) prompt = '【技能：' + inp.skill + '】\n' + prompt;
+      setStatus('模块自定义：AI 处理中…');
+      const r = await api.wfAiRun({
+        profileId: inp.model ? inp.model.profileId : '',
+        model: inp.model ? inp.model.model : '',
+        prompt: prompt,
+        files: inp.files.slice(0, 20),
+      });
+      if (!r || !r.ok) throw new Error((r && r.error) || 'AI 调用失败');
+      const text = String((r && r.text) || '').trim();
+      if (!text) throw new Error('AI 没有返回任何内容');
+      const dir = (outputDir || (dirOf(inp.files[0]) + '/自定义输出')).replace(/\/+$/, '');
+      const fp = dir + '/模块自定义-' + stamp() + '.md';
+      const w = await api.wfWriteText({ filePath: fp, content: text });
+      if (!w || !w.ok) throw new Error((w && w.error) || '结果写入失败');
+      const outPath = (w && w.filePath) || fp;
+      return { files: [outPath], baseDir: dir, note: '已生成 ' + outPath.split('/').pop() };
+    }
     throw new Error('未知节点类型');
   }
 
@@ -886,7 +966,7 @@
     if (running) return;
     const tasks = nodes.filter((n) => DEFS[n.type].group === 'task');
     if (!tasks.length) {
-      setStatus('请先添加一个任务节点（替换文件 / 文件名修改 / 格式转换 / PDF去水印 / 文件自动化 / PPT 编写）');
+      setStatus('请先添加一个任务节点（替换文件 / 文件名修改 / 格式转换 / PDF去水印 / 文件自动化 / PPT 编写 / 模块自定义）');
       return;
     }
     const order = topoOrder(tasks);

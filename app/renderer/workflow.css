@@ -97,7 +97,21 @@ body {
 .node-x:hover { background: rgba(0,0,0,.28); color: #fff; }
 .node-body { padding: 8px 10px 10px; background: var(--node2); border-radius: 0 0 8px 8px; }
 
-/* 端口 */
+/* 端口行：输入在框内左侧、输出在框内右侧（两边摆放），行数决定节点高度 */
+.node-ports { padding: 0; background: var(--node); }
+.prow {
+  height: 24px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 9px; gap: 8px;
+}
+.pl {
+  display: flex; align-items: center; gap: 5px; min-width: 0; flex: 1 1 0;
+  font-size: 11px; color: var(--muted); white-space: nowrap;
+}
+.pl.out { justify-content: flex-end; }
+.pl .pd { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.pl .pt { overflow: hidden; text-overflow: ellipsis; }
+
+/* 端口圆点（节点左右边缘，纵向与端口行一一对应） */
 .port {
   position: absolute; width: 12px; height: 12px; border-radius: 50%;
   border: 2px solid #17191f; cursor: crosshair; z-index: 3;
@@ -105,11 +119,6 @@ body {
 .port.in { left: -7px; }
 .port.out { right: -7px; }
 .port:hover { transform: scale(1.25); }
-.port-label {
-  position: absolute; top: -4px; font-size: 10px; color: var(--muted); white-space: nowrap; pointer-events: none;
-}
-.port.in .port-label { left: 16px; }
-.port.out .port-label { right: 16px; }
 
 /* 节点内表单 */
 .nf { margin-bottom: 7px; }

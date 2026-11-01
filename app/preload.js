@@ -169,6 +169,8 @@ contextBridge.exposeInMainWorld('api', {
   wfOpenProjectFile: () => ipcRenderer.invoke('wf-open-project-file'),
   // 节点内的 AI 调用（一次性返回全文，不走聊天流式事件）
   wfAiRun: (payload) => ipcRenderer.invoke('wf-ai-run', payload),
+  // 模块自定义节点：把 AI 产出的文本写成文件
+  wfWriteText: (payload) => ipcRenderer.invoke('wf-write-text', payload),
   onWfAiText: (cb) => ipcRenderer.on('wf-ai-text', (_e, t) => cb(t)),
   // Computer Use 光标遮罩事件
   cursorMove: (cb) => ipcRenderer.on('cursor-move', (_e, d) => cb(d)),
