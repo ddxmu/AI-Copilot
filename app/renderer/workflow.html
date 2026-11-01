@@ -74,6 +74,28 @@
 <div id="open-menu" class="popup hidden"></div>
 <div id="rule-menu" class="popup hidden"></div>
 
+<!-- 模块自定义：AI 授权确认框 -->
+<div id="mask" class="mask hidden"></div>
+<div id="confirm-dlg" class="dlg hidden">
+  <div class="dlg-title" id="confirm-title">授权确认</div>
+  <div class="dlg-desc" id="confirm-desc"></div>
+  <div class="dlg-actions">
+    <button class="dlg-btn" id="confirm-no">拒绝</button>
+    <button class="dlg-btn primary" id="confirm-yes">允许</button>
+  </div>
+</div>
+<!-- 模块自定义：AI 提问 / 需要回复 -->
+<div id="ask-dlg" class="dlg hidden">
+  <div class="dlg-title">AI 需要你的回复</div>
+  <div class="dlg-desc" id="ask-question"></div>
+  <div class="dlg-ask-opts hidden" id="ask-opts"></div>
+  <textarea id="ask-input" spellcheck="false" placeholder="写下你的回复或下一步指示…"></textarea>
+  <div class="dlg-actions">
+    <button class="dlg-btn" id="ask-skip">跳过</button>
+    <button class="dlg-btn primary" id="ask-send">发送回复</button>
+  </div>
+</div>
+
 <script src="workflow.js"></script>
 </body>
 </html>

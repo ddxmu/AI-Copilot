@@ -52,6 +52,18 @@
   ];
   const DST_FORMATS = SRC_FORMATS.filter((f) => f.v !== 'auto');
 
+  // 模块自定义节点：结果文件的保存格式（最后一项为自定义扩展名）
+  const OUT_FORMATS = ['md', 'jpg', 'xlsm', 'xml', 'ppt', 'pptx', 'png', 'xlsx', 'xls', 'docx', 'doc'];
+  const OUT_CUSTOM = '__custom__';
+  function normExt(v) {
+    const s = String(v == null ? '' : v).trim().toLowerCase().replace(/^\.+/, '').replace(/[\\/:*?"<>|\s]+/g, '');
+    return s || 'md';
+  }
+  function outExtOf(d) {
+    const dd = d || {};
+    return dd.ext === OUT_CUSTOM ? normExt(dd.customExt) : normExt(dd.ext || 'md');
+  }
+
   /* ---------------- 状态 ---------------- */
   let nodes = [];
   let edges = [];
@@ -62,6 +74,10 @@
   let stopFlag = false;
   let skillCache = null;
   let modelCache = null;
+  let curRunId = null;       // 当前正在跑的 AI 调用 id（点「停止」时用它中断）
+  let curCustomData = null;  // 当前「模块自定义」节点的数据（AI 提问时用它预填回复）
+  let pendingConfirm = null; // { runId } 正在等用户点「允许 / 拒绝」
+  let pendingAsk = null;     // { runId } 正在等用户填回复
 
   const canvasEl = document.getElementById('canvas');
   const worldEl = document.getElementById('world');
@@ -129,7 +145,7 @@
       case 'pdfwm': return { marks: '', auto: true };
       case 'automation': return { layout: 'default', template: '' };
       case 'ppt': return { prompt: '' };
-      case 'custom': return { prompt: '' };
+      case 'custom': return { prompt: '', reply: '', ext: 'md', customExt: '' };
       default: return {};
     }
   }
@@ -379,7 +395,31 @@
       ta.style.minHeight = '78px';
       ta.addEventListener('input', () => { d.prompt = ta.value; markDirty(); });
       box.appendChild(field('信息内容（提示词）', ta));
-      const tip = el('div', 'nf-label', '文件 / 规则 / 技能 / 保存位置 由左侧连线提供，结果存为 .md 文件');
+
+      const rp = el('textarea');
+      rp.value = d.reply || '';
+      rp.placeholder = 'AI 中途提问时用它当默认回复，也可以写下一步指示…';
+      rp.style.minHeight = '54px';
+      rp.addEventListener('input', () => { d.reply = rp.value; markDirty(); });
+      box.appendChild(field('回复 / 下一步指示（可选）', rp));
+
+      const fsel = el('select');
+      OUT_FORMATS.forEach((x) => { const o = el('option'); o.value = x; o.textContent = '.' + x; fsel.appendChild(o); });
+      const co = el('option'); co.value = OUT_CUSTOM; co.textContent = '自定义格式…'; fsel.appendChild(co);
+      fsel.value = OUT_FORMATS.indexOf(d.ext) >= 0 ? d.ext : (d.ext ? OUT_CUSTOM : 'md');
+      fsel.addEventListener('change', () => { d.ext = fsel.value; markDirty(); render(); });
+      box.appendChild(field('结果保存格式', fsel));
+      if (fsel.value === OUT_CUSTOM) {
+        const ci = el('input');
+        ci.type = 'text';
+        ci.value = d.customExt || '';
+        ci.placeholder = '填扩展名，例如 txt / json / html';
+        ci.addEventListener('input', () => { d.customExt = ci.value; markDirty(); });
+        box.appendChild(field('自定义扩展名', ci));
+      }
+
+      const tip = el('div', 'nf-label',
+        '文件 / 规则 / 技能 / AI 模型选择 / 保存位置 由左侧连线提供，结果存为 .' + outExtOf(d) + ' 文件');
       box.appendChild(tip);
       return;
     }
@@ -649,7 +689,12 @@
   }, { passive: false });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeRuleMenu();
+    if (e.key === 'Escape') {
+      // Esc 关掉等待中的授权 / 回复框时按「拒绝 / 跳过」处理，避免 AI 一直挂起
+      if (pendingConfirm) { closeConfirm(false); return; }
+      if (pendingAsk) { closeAsk(false); return; }
+      closeRuleMenu();
+    }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       const t = e.target;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
@@ -689,6 +734,71 @@
     addMenu.style.left = (r.right + 8) + 'px';
     addMenu.style.top = r.top + 'px';
     addMenu.classList.remove('hidden');
+  }
+
+  /* ---------------- 模块自定义：授权确认框 / AI 回复框 ----------------
+   * 「模块自定义」节点跑 AI 时，凡是写文件、执行命令这类需要授权的动作，
+   * 以及 AI 主动提问，都会在这里弹框交给用户决定，不再按全局权限自动放行。
+   */
+  const maskEl = document.getElementById('mask');
+  const confirmDlg = document.getElementById('confirm-dlg');
+  const confirmTitleEl = document.getElementById('confirm-title');
+  const confirmDescEl = document.getElementById('confirm-desc');
+  const askDlg = document.getElementById('ask-dlg');
+  const askQuestionEl = document.getElementById('ask-question');
+  const askOptsEl = document.getElementById('ask-opts');
+  const askInputEl = document.getElementById('ask-input');
+
+  function syncMask() {
+    if (!maskEl) return;
+    const any = (confirmDlg && !confirmDlg.classList.contains('hidden'))
+      || (askDlg && !askDlg.classList.contains('hidden'));
+    maskEl.classList.toggle('hidden', !any);
+  }
+
+  function showConfirm(data) {
+    if (!confirmDlg) return;
+    pendingConfirm = { runId: data.runId };
+    confirmTitleEl.textContent = data.title || '授权确认';
+    confirmDescEl.textContent = data.desc || '';
+    confirmDlg.classList.remove('hidden');
+    syncMask();
+    setStatus('等待你授权：' + (data.title || '确认'));
+  }
+  function closeConfirm(allow) {
+    const p = pendingConfirm;
+    pendingConfirm = null;
+    if (confirmDlg) confirmDlg.classList.add('hidden');
+    syncMask();
+    if (p && api.wfConfirmReply) api.wfConfirmReply({ runId: p.runId, allow: !!allow });
+  }
+
+  function showAsk(data) {
+    if (!askDlg) return;
+    pendingAsk = { runId: data.runId };
+    askQuestionEl.textContent = data.question || '需要你回复一下';
+    const opts = Array.isArray(data.options) ? data.options : [];
+    askOptsEl.innerHTML = '';
+    opts.forEach((o) => {
+      const b = el('div', 'opt', String(o));
+      b.addEventListener('click', () => { askInputEl.value = String(o); askInputEl.focus(); });
+      askOptsEl.appendChild(b);
+    });
+    askOptsEl.classList.toggle('hidden', !opts.length);
+    // 用节点里「回复 / 下一步指示」的内容预填，省得每次重复敲
+    askInputEl.value = String((curCustomData && curCustomData.reply) || '');
+    askDlg.classList.remove('hidden');
+    syncMask();
+    try { askInputEl.focus(); } catch (e) { /* ignore */ }
+    setStatus('AI 在等你回复：' + String(data.question || '').replace(/\s+/g, ' ').slice(0, 80));
+  }
+  function closeAsk(send) {
+    const p = pendingAsk;
+    pendingAsk = null;
+    const t = askInputEl ? askInputEl.value : '';
+    if (askDlg) askDlg.classList.add('hidden');
+    syncMask();
+    if (p && api.wfAskUserReply) api.wfAskUserReply({ runId: p.runId, text: send ? t : '' });
   }
 
   /* ---------------- 规则节点的导出 / 导入（.xlsx / .csv） ---------------- */
@@ -1018,18 +1128,36 @@
         prompt += '\n\n【替换规则】\n' + inp.rules.map((r) => (r.find || '') + ' → ' + (r.replace || '')).join('\n');
       }
       if (inp.skill) prompt = '【技能：' + inp.skill + '】\n' + prompt;
+      const replyText = String(n.data.reply || '').trim();
+      if (replyText) prompt += '\n\n【补充指示】\n' + replyText;
       setStatus('模块自定义：AI 处理中…');
-      const r = await api.wfAiRun({
-        profileId: inp.model ? inp.model.profileId : '',
-        model: inp.model ? inp.model.model : '',
-        prompt: prompt,
-        files: inp.files.slice(0, 20),
-      });
+      const rid = 'wf-' + n.id + '-' + Date.now();
+      curRunId = rid;
+      curCustomData = n.data;
+      let r = null;
+      try {
+        r = await api.wfAiRun({
+          profileId: inp.model ? inp.model.profileId : '',
+          model: inp.model ? inp.model.model : '',
+          prompt: prompt,
+          files: inp.files.slice(0, 20),
+          runId: rid,
+          interactive: true,
+        });
+      } finally {
+        curRunId = null;
+        curCustomData = null;
+        // 万一还有没关掉的弹框，按「拒绝 / 跳过」收尾，避免主进程一直挂着
+        if (pendingConfirm) closeConfirm(false);
+        if (pendingAsk) closeAsk(false);
+      }
+      if (stopFlag) return { files: [], baseDir: '', note: '已停止' };
       if (!r || !r.ok) throw new Error((r && r.error) || 'AI 调用失败');
       const text = String((r && r.text) || '').trim();
       if (!text) throw new Error('AI 没有返回任何内容');
       const dir = (outputDir || (dirOf(inp.files[0]) + '/自定义输出')).replace(/\/+$/, '');
-      const fp = dir + '/模块自定义-' + stamp() + '.md';
+      const ext = outExtOf(n.data);
+      const fp = dir + '/模块自定义-' + stamp() + '.' + ext;
       const w = await api.wfWriteText({ filePath: fp, content: text });
       if (!w || !w.ok) throw new Error((w && w.error) || '结果写入失败');
       const outPath = (w && w.filePath) || fp;
@@ -1109,11 +1237,29 @@
   document.getElementById('btn-fit').addEventListener('click', fitView);
   document.getElementById('btn-clear').addEventListener('click', clearAll);
   runBtn.addEventListener('click', runWorkflow);
-  stopBtn.addEventListener('click', () => { stopFlag = true; setStatus('正在停止…（当前节点结束后停止）'); });
+  // 停止：① 中断正在跑的 AI 调用（含卡在工具里的）② 关掉等待中的授权 / 回复框 ③ 后续节点不再执行
+  stopBtn.addEventListener('click', () => {
+    stopFlag = true;
+    if (curRunId && api.wfAiStop) { try { api.wfAiStop(curRunId); } catch (e) { /* ignore */ } }
+    if (pendingConfirm) closeConfirm(false);
+    if (pendingAsk) closeAsk(false);
+    setStatus('正在停止…');
+  });
   nameEl.addEventListener('input', markDirty);
+
+  const yesBtn = document.getElementById('confirm-yes');
+  const noBtn = document.getElementById('confirm-no');
+  const sendBtn = document.getElementById('ask-send');
+  const skipBtn = document.getElementById('ask-skip');
+  if (yesBtn) yesBtn.addEventListener('click', () => closeConfirm(true));
+  if (noBtn) noBtn.addEventListener('click', () => closeConfirm(false));
+  if (sendBtn) sendBtn.addEventListener('click', () => closeAsk(true));
+  if (skipBtn) skipBtn.addEventListener('click', () => closeAsk(false));
 
   if (api.onModuleProgress) api.onModuleProgress((d) => { if (d && d.pct != null) setProgress(d.pct); });
   if (api.onWfAiText) api.onWfAiText((t) => { if (t) setStatus('AI：' + String(t).replace(/\s+/g, ' ').slice(0, 90)); });
+  if (api.onWfConfirm) api.onWfConfirm((d) => { if (d) showConfirm(d); });
+  if (api.onWfAskUser) api.onWfAskUser((d) => { if (d) showAsk(d); });
 
   /* ---------------- 启动 ---------------- */
   (async function boot() {

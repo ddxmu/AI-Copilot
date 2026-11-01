@@ -2579,15 +2579,19 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments, runId, cha
 });
 
 /* ---------------- 自动化工作流：节点内的 AI 调用 ----------------
- * 工作流窗口不是聊天界面，不需要流式渲染，这里一次性跑完整轮并把全文返回，
- * 供「PPT 编写」等需要 AI 的节点使用。授权类交互按当前全局权限模式自动应答。
+ * 工作流窗口不是聊天界面，不需要流式渲染，这里一次性跑完整轮并把全文返回。
+ * interactive=true（目前只有「模块自定义」节点）时，授权确认 / AI 提问会发事件给工作流窗口，
+ * 由窗口弹框等用户点「允许 / 拒绝」或填写回复；其余节点保持原来「按全局权限模式自动应答」。
  */
-ipcMain.handle('wf-ai-run', async (event, { profileId, model, prompt, files }) => {
+const wfConfirms = new Map(); // runId -> (allow) => void
+const wfAskUsers = new Map(); // runId -> (answer) => void
+
+ipcMain.handle('wf-ai-run', async (event, { profileId, model, prompt, files, runId, interactive }) => {
   const profile = resolveProfileById(profileId, model) || aiConfig.getActiveProfile();
   if (!profile) return { ok: false, error: '请先在「AI 设置」中添加并启用一个 AI 配置' };
   if (!profile.model) return { ok: false, error: '当前 AI 配置未选择模型，请到「AI 设置」拉取并选择模型' };
   if (!prompt || !String(prompt).trim()) return { ok: false, error: 'AI 节点未填写提示词' };
-  const rid = 'wf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  const rid = runId || ('wf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6));
   const wc = event.sender;
   let text = '';
   try {
@@ -2605,8 +2609,29 @@ ipcMain.handle('wf-ai-run', async (event, { profileId, model, prompt, files }) =
       runId: rid,
       memoryEnabled: false,
       onText: (t) => { text += t || ''; try { wc.send('wf-ai-text', t); } catch (e) { /* ignore */ } },
-      onConfirm: () => Promise.resolve(permissionMode === 'trust'),
-      onAskUser: () => Promise.resolve(null),
+      onConfirm: interactive
+        ? (payload) => new Promise((resolve) => {
+            const data = {
+              type: (payload && payload.type) || '',
+              title: (payload && payload.title) || '授权确认',
+              desc: (payload && payload.desc) || (typeof payload === 'string' ? payload : ''),
+            };
+            wfConfirms.set(rid, (allow) => { wfConfirms.delete(rid); resolve(!!allow); });
+            try { wc.send('wf-confirm', Object.assign({ runId: rid }, data)); }
+            catch (e) { wfConfirms.delete(rid); resolve(false); }
+          })
+        : () => Promise.resolve(permissionMode === 'trust'),
+      onAskUser: interactive
+        ? (payload) => new Promise((resolve) => {
+            const data = {
+              question: (payload && payload.question) || '需要你回复一下',
+              options: (payload && payload.options) || [],
+            };
+            wfAskUsers.set(rid, (answer) => { wfAskUsers.delete(rid); resolve(answer == null ? null : String(answer)); });
+            try { wc.send('wf-ask-user', Object.assign({ runId: rid }, data)); }
+            catch (e) { wfAskUsers.delete(rid); resolve(null); }
+          })
+        : () => Promise.resolve(null),
       onInstallSkill: () => Promise.resolve(false),
       getRules: () => sharedRules,
     });
@@ -2614,8 +2639,31 @@ ipcMain.handle('wf-ai-run', async (event, { profileId, model, prompt, files }) =
   } catch (err) {
     return { ok: false, error: err.message, text };
   } finally {
+    wfConfirms.delete(rid);
+    wfAskUsers.delete(rid);
     try { agent.clearRun(rid); } catch (e) { /* ignore */ }
   }
+});
+
+// 工作流：停止正在跑的 AI 调用（同时取消可能卡住的 computer-use 工具）
+ipcMain.handle('wf-ai-stop', (_e, { runId } = {}) => {
+  try { mcp.cancelTool('computeruse'); } catch (e) { /* ignore */ }
+  try { agent.requestStop(runId || null); } catch (e) { /* ignore */ }
+  return { ok: true };
+});
+
+// 工作流：授权确认框回执（allow=true 放行）
+ipcMain.handle('wf-confirm-reply', (_e, { runId, allow } = {}) => {
+  const fn = runId ? wfConfirms.get(runId) : null;
+  if (fn) fn(allow);
+  return { ok: !!fn };
+});
+
+// 工作流：AI 提问的回复（text 为空视为「跳过」）
+ipcMain.handle('wf-ask-user-reply', (_e, { runId, text } = {}) => {
+  const fn = runId ? wfAskUsers.get(runId) : null;
+  if (fn) fn(text);
+  return { ok: !!fn };
 });
 
 // 引导（steer）：把排队中的消息插进正在跑的任务（消息发出，但不中断当前轮）

@@ -169,9 +169,16 @@ contextBridge.exposeInMainWorld('api', {
   wfOpenProjectFile: () => ipcRenderer.invoke('wf-open-project-file'),
   // 节点内的 AI 调用（一次性返回全文，不走聊天流式事件）
   wfAiRun: (payload) => ipcRenderer.invoke('wf-ai-run', payload),
+  // 停止当前节点里正在跑的 AI 调用（带 runId）
+  wfAiStop: (runId) => ipcRenderer.invoke('wf-ai-stop', { runId }),
+  // 模块自定义节点：授权确认框 / AI 提问框的回执
+  wfConfirmReply: (payload) => ipcRenderer.invoke('wf-confirm-reply', payload),
+  wfAskUserReply: (payload) => ipcRenderer.invoke('wf-ask-user-reply', payload),
   // 模块自定义节点：把 AI 产出的文本写成文件
   wfWriteText: (payload) => ipcRenderer.invoke('wf-write-text', payload),
   onWfAiText: (cb) => ipcRenderer.on('wf-ai-text', (_e, t) => cb(t)),
+  onWfConfirm: (cb) => ipcRenderer.on('wf-confirm', (_e, d) => cb(d)),
+  onWfAskUser: (cb) => ipcRenderer.on('wf-ask-user', (_e, d) => cb(d)),
   // Computer Use 光标遮罩事件
   cursorMove: (cb) => ipcRenderer.on('cursor-move', (_e, d) => cb(d)),
   cursorAction: (cb) => ipcRenderer.on('cursor-action', (_e, d) => cb(d)),
