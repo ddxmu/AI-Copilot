@@ -2457,17 +2457,23 @@ function petFeedText(chunk) {
   }, 700);
 }
 
-ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
+ipcMain.handle('ai-chat', async (event, { history, text, attachments, runId, chatId }) => {
   const profile = aiConfig.getActiveProfile();
   if (!profile) return { ok: false, error: '请先在「AI 设置」中添加并启用一个 AI 配置' };
   if (!profile.model) return { ok: false, error: '当前 AI 配置未选择模型，请到「AI 设置」拉取并选择模型' };
   const wc = event.sender;
+  // 多会话并发（v0.11.27）：每个任务实例带自己的 runId / chatId，所有推送事件都回传这两个字段，
+  // 渲染进程据此把事件路由到对应会话（否则并发时会把 A 会话的字写进 B 会话）。
+  const rid = runId || ('run-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6));
+  const cid = chatId || currentChatId || null;
+  const meta = { runId: rid, chatId: cid };
+  const send = (ch, payload) => { try { wc.send(ch, payload, meta); } catch (e) { /* ignore */ } };
   try {
     let resolvedAttachments = [];
     if (Array.isArray(attachments) && attachments.length) {
       resolvedAttachments = await Promise.all(attachments.map((a) => readAttachmentForAi(a)));
     }
-    const activeChatId = currentChatId || null;
+    const activeChatId = cid;
     // 新一轮对话开始：清空 ComputerUse 的会话级硬停止 / 连续失败计数（需求：连续两次失败才停、新对话必须真正清理）
     try { mcp.resetTool('computeruse'); } catch (e) { /* ComputerUse 未启用时忽略 */ }
     petWindow.setState('thinking', '开始处理任务…');
@@ -2478,12 +2484,13 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
       mcpEnabled: mcpEnabledMode,
       mcpServer: mcpSelectedServer,
       chatId: activeChatId,
+      runId: rid,
       memoryEnabled: aiConfig.getMemoryEnabled(),
-      onText: (t) => { wc.send('ai-chat-text', t); petFeedText(t); },
+      onText: (t) => { send('ai-chat-text', t); petFeedText(t); },
       // 深度思考（推理模型的思维链）只通知一次，用于把「思考中…」切成「深度思考中…」
-      onReasoning: () => { wc.send('ai-chat-reasoning'); petWindow.setState('thinking', '深度思考中…'); },
-      onToolStart: (d) => { wc.send('ai-chat-tool-start', d); petWindow.setState('working', '调用工具：' + ((d && d.name) || '')); },
-      onToolEnd: (d) => wc.send('ai-chat-tool-end', d),
+      onReasoning: () => { send('ai-chat-reasoning'); petWindow.setState('thinking', '深度思考中…'); },
+      onToolStart: (d) => { send('ai-chat-tool-start', d); petWindow.setState('working', '调用工具：' + ((d && d.name) || '')); },
+      onToolEnd: (d) => send('ai-chat-tool-end', d),
       onConfirm: (payload) => new Promise((resolve) => {
         const type = payload && typeof payload === 'object' ? payload.type : null;
         const data = {
@@ -2496,33 +2503,36 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
         if (permissionMode === 'trust') { resolve(true); return; }
         // 本次会话已勾选「不再询问」的同类操作，直接放行
         if (type && sessionApproved.has(type)) { resolve(true); return; }
-        pendingConfirm = (ok, remember) => {
+        // 并发：按 runId 登记回调，多个任务同时请求授权时互不覆盖
+        pendingConfirms.set(rid, (ok, remember) => {
           if (ok && remember && type) sessionApproved.add(type);
+          pendingConfirms.delete(rid);
           resolve(ok);
-          pendingConfirm = null;
-        };
-        wc.send('ai-chat-confirm', data);
+        });
+        send('ai-chat-confirm', data);
       }),
       // ask_user 工具：向渲染端展示选择题卡片，等用户点击后把选项文本回传（null=跳过）
       onAskUser: (payload) => new Promise((resolve) => {
-        pendingAskUser = (answer) => {
+        pendingAskUsers.set(rid, (answer) => {
+          pendingAskUsers.delete(rid);
           resolve(answer);
-          pendingAskUser = null;
-        };
-        wc.send('ai-chat-ask-user', payload || {});
+        });
+        send('ai-chat-ask-user', payload || {});
         petWindow.setState('question', (payload && payload.question) || '需要你选择一个选项');
       }),
-      onTodo: (todos) => wc.send('ai-chat-todo', todos),
-      onSubagentStart: (d) => wc.send('ai-chat-subagent-start', d),
-      onSubagentEnd: (d) => wc.send('ai-chat-subagent-end', d),
-      onCompact: () => wc.send('ai-chat-compact'),
+      // 引导消息被注入到正在跑的任务时回执（供界面给一条提示）
+      onSteer: (d) => send('ai-chat-steer-ack', d || {}),
+      onTodo: (todos) => send('ai-chat-todo', todos),
+      onSubagentStart: (d) => send('ai-chat-subagent-start', d),
+      onSubagentEnd: (d) => send('ai-chat-subagent-end', d),
+      onCompact: () => send('ai-chat-compact'),
       onInstallSkill: (info) => new Promise((resolve) => {
         // 安装技能始终需要用户确认（即使 trust 模式也不自动放行）
-        pendingInstallSkill = (ok) => {
+        pendingInstallSkills.set(rid, (ok) => {
+          pendingInstallSkills.delete(rid);
           resolve(ok);
-          pendingInstallSkill = null;
-        };
-        wc.send('ai-chat-install-skill', info);
+        });
+        send('ai-chat-install-skill', info);
       }),
       // 仓库型推荐技能：由主进程从 GitHub 下载安装（供 install_skill 工具调用）
       installSkillFromUrl: async (repo, branch, name) => {
@@ -2540,7 +2550,27 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments }) => {
     clearTimeout(petTextTimer); petTextTimer = null; petTextBuf = '';
     petWindow.setState('idle', '出错了：' + (err && err.message ? err.message.slice(0, 60) : ''));
     return { ok: false, error: err.message };
+  } finally {
+    // 本实例结束：清掉可能没被取走的授权回调（对面对话框已被关掉等），避免 Map 泄漏
+    pendingConfirms.delete(rid);
+    pendingAskUsers.delete(rid);
+    pendingInstallSkills.delete(rid);
+    try { agent.clearRun(rid); } catch (e) { /* ignore */ }
   }
+});
+
+// 引导（steer）：把排队中的消息插进正在跑的任务（消息发出，但不中断当前轮）
+ipcMain.handle('ai-chat-steer', (_e, { runId, text } = {}) => {
+  try { return { ok: !!agent.pushSteer(runId, text) }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+// 只停止「指定任务实例」：并发下不会连坐其他会话正在跑的任务
+ipcMain.handle('ai-chat-abort-run', (_e, { runId } = {}) => {
+  let ok = false;
+  try { ok = mcp.cancelTool('computeruse'); } catch (e) { /* ignore */ }
+  try { agent.requestStop(runId || null); } catch (e) { /* ignore */ }
+  return !!ok;
 });
 
 // 本次会话已授权过的操作类型（勾选「不再询问」后记录）
@@ -2567,21 +2597,33 @@ ipcMain.handle('set-mcp-server', (_e, name) => {
   return mcpSelectedServer;
 });
 
-let pendingConfirm = null;
-ipcMain.handle('ai-chat-confirm-reply', (_e, ok, remember) => {
-  if (pendingConfirm) { pendingConfirm(!!ok, !!remember); }
+// 并发（v0.11.27）：授权类回调改为「按任务实例 runId」登记，多个会话同时请求授权不会互相覆盖。
+// 渲染端回复时带上 runId；没有 runId（旧版 / 兜底）且此时只有一个等待中的请求时，取那一个。
+const pendingConfirms = new Map();
+const pendingInstallSkills = new Map();
+const pendingAskUsers = new Map();
+
+function takePending(map, runId) {
+  if (runId && map.has(runId)) { const fn = map.get(runId); map.delete(runId); return fn; }
+  if (map.size === 1) { const k = map.keys().next().value; const fn = map.get(k); map.delete(k); return fn; }
+  return null;
+}
+
+ipcMain.handle('ai-chat-confirm-reply', (_e, ok, remember, runId) => {
+  const fn = takePending(pendingConfirms, runId);
+  if (fn) fn(!!ok, !!remember);
 });
 
 // 技能安装授权回调
-let pendingInstallSkill = null;
-ipcMain.handle('ai-chat-install-skill-reply', (_e, ok) => {
-  if (pendingInstallSkill) { pendingInstallSkill(!!ok); }
+ipcMain.handle('ai-chat-install-skill-reply', (_e, ok, runId) => {
+  const fn = takePending(pendingInstallSkills, runId);
+  if (fn) fn(!!ok);
 });
 
 // ask_user 选择题回答回调（answer=选项文本；null=用户跳过）
-let pendingAskUser = null;
-ipcMain.handle('ai-chat-ask-user-reply', (_e, answer) => {
-  if (pendingAskUser) { pendingAskUser(answer === undefined ? null : answer); }
+ipcMain.handle('ai-chat-ask-user-reply', (_e, answer, runId) => {
+  const fn = takePending(pendingAskUsers, runId);
+  if (fn) fn(answer === undefined ? null : answer);
 });
 
 /* ---------------- 文件自动化：编写规范预设持久化 ---------------- */

@@ -1577,22 +1577,66 @@ const tools = {
 /* ================= 协议适配 ================= */
 
 /* ================= 硬停止（需求 #1：点「停止」立即取消 Agent 循环 + 在途模型请求） ================= */
-// 用模块级标志 + AbortController 切断正在飞的 HTTP 请求；ComputerUse 子进程的中断由 main.js 的
+// 用标志 + AbortController 切断正在飞的 HTTP 请求；ComputerUse 子进程的中断由 main.js 的
 // computer-use-abort IPC 另行触发（杀在途 osascript）。两者合力覆盖「停止」语义的全部维度。
-let _stopRequested = false;
-let _currentAbort = null; // 当前轮次的 AbortController
+//
+// 多会话并发（v0.11.27）：停止标志 / AbortController 必须按「任务实例 runId」隔离，
+// 否则停止 A 会话的任务会连坐正在跑的 B 会话（旧实现是模块级单例，全局只能跑一个任务）。
+let _stopRequested = false;   // 兼容旧调用：不带 runId 时的全局停止
+let _currentAbort = null;     // 兼容旧调用
+const runControls = new Map(); // runId -> { stopRequested, abort }
 
-function requestStop() {
-  _stopRequested = true;
-  if (_currentAbort && typeof _currentAbort.abort === 'function') {
-    try { _currentAbort.abort(); } catch (e) { /* ignore */ }
-  }
+function _ctrl(runId) {
+  let c = runControls.get(runId);
+  if (!c) { c = { stopRequested: false, abort: null }; runControls.set(runId, c); }
+  return c;
 }
-function clearStop() {
+// 判断「本次循环」是否被请求停止（子代理会继承 ctx.runId，故停止主任务也会停止其子代理）
+function isStop(ctx) {
+  if (ctx && ctx.runId && runControls.has(ctx.runId)) return !!runControls.get(ctx.runId).stopRequested;
+  return _stopRequested;
+}
+function _abortCtrl(c) {
+  if (c && c.abort && typeof c.abort.abort === 'function') { try { c.abort.abort(); } catch (e) { /* ignore */ } }
+}
+// runId 为空 = 停止全部在跑的任务（兼容旧调用）
+function requestStop(runId) {
+  if (runId) { const c = _ctrl(runId); c.stopRequested = true; _abortCtrl(c); return; }
+  _stopRequested = true;
+  _abortCtrl({ abort: _currentAbort });
+  for (const c of runControls.values()) { c.stopRequested = true; _abortCtrl(c); }
+}
+function clearStop(runId) {
+  if (runId) { runControls.delete(runId); return; }
   _stopRequested = false;
   _currentAbort = null;
 }
 function isStopRequested() { return _stopRequested; }
+
+/* ================= 引导（steer）：把消息插进正在跑的任务，但不打断当前轮 ================= */
+// 与「排队」配合：用户点排队消息的上箭头 → 文本进入这里 → 下一轮模型调用前注入为 user 消息，
+// 当前轮正在生成的回复不会被中断（对应提示「消息将被发出但模型不会中断」）。
+const steerQueues = new Map(); // runId -> string[]
+function pushSteer(runId, text) {
+  if (!runId || !text) return false;
+  let q = steerQueues.get(runId);
+  if (!q) { q = []; steerQueues.set(runId, q); }
+  q.push(text);
+  return true;
+}
+function takeSteers(runId) {
+  if (!runId) return [];
+  const q = steerQueues.get(runId);
+  if (!q || !q.length) return [];
+  steerQueues.delete(runId);
+  return q;
+}
+// 任务结束：清掉该实例的停止控制与未消费的引导消息，防止 runControls 无限增长
+function clearRun(runId) {
+  if (!runId) return;
+  runControls.delete(runId);
+  steerQueues.delete(runId);
+}
 
 function httpPostJson(urlStr, headers, body, timeoutMs = 300000, signal = null) {
   return new Promise((resolve, reject) => {
@@ -2189,8 +2233,14 @@ function sanitizeMessages(messages, apiType) {
 // opts: { system, allowedTools, maxTurns, isSubagent }
 async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   // 本轮 AbortController：停止时中断正在飞的模型 HTTP 请求
+  // 并发：按 runId 注册；子代理不抢占主任务的句柄（否则子代理结束会把主任务的 abort 清成 null）
   const ac = new AbortController();
-  _currentAbort = ac;
+  const setAbort = (v) => {
+    if (opts.isSubagent) return;
+    if (ctx.runId) _ctrl(ctx.runId).abort = v;
+    else _currentAbort = v;
+  };
+  setAbort(ac);
   const system = opts.system || buildSystemPrompt(ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer, ctx.chatId, userText, ctx.memoryEnabled);
   const maxTurns = opts.maxTurns || (ctx.profile && ctx.profile.maxToolTurns) || MAX_TURNS;
   const toolList = buildToolList(opts.allowedTools, opts.isSubagent, ctx.webAccess, ctx.mcpEnabled, ctx.mcpServer);
@@ -2239,9 +2289,15 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   let undoneContinues = 0;     // 「输出文本但 todo 未完成」的自动续跑次数
   const MAX_UNDONE_CONTINUE = 2;
   for (let turn = 0; ; turn++) {
+    // 引导（steer）：被「引导」的排队消息在这里注入 —— 消息发出，但不打断当前轮正在生成的内容
+    const steers = takeSteers(ctx.runId);
+    for (const s of steers) {
+      messages.push({ role: 'user', content: s });
+      ctx.emit('steer', { text: s });
+    }
     // 需求 #1：停止后不再发起任何模型请求、不再执行工具、不再进入下一轮
-    if (_stopRequested) {
-      _currentAbort = null;
+    if (isStop(ctx)) {
+      setAbort(null);
       return { ok: true, stopped: true, text: (finalText || '') + '\n\n（已按你的要求停止。）', usage: totalUsage, messages };
     }
     // 需求：任务没完成不能停——本段工具轮数用尽时自动续跑（不抛回给用户说"继续"）
@@ -2295,8 +2351,8 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
       });
     } catch (e) {
       // 停止导致的请求中断（AbortError）或已请求停止 → 直接结束，不算异常
-      if (_stopRequested || e.name === 'AbortError') {
-        _currentAbort = null;
+      if (isStop(ctx) || e.name === 'AbortError') {
+        setAbort(null);
         sessionEvents.emit({ type: 'finished', session: ctx.chatId || '', outcome: 'interrupted' });
         return { ok: true, stopped: true, text: (finalText || '') + '\n\n（已按你的要求停止。）', usage: totalUsage, messages };
       }
@@ -2352,7 +2408,7 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
     const pendingImages = []; // view_image 收集的待注入视觉输入
     for (const call of r.toolCalls) {
       // 停止后不再执行后续工具（不截图、不点击、不输入）
-      if (_stopRequested) break;
+      if (isStop(ctx)) break;
       const entry = toolList.find((t) => t.name === call.name);
       ctx.emit('tool-start', { name: call.name, input: call.input });
       sessionEvents.emit({ type: 'caption', kind: '工具调用', session: ctx.chatId || '', text: sessionEvents.clean(call.name) });
@@ -2399,7 +2455,7 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   const lastIsToolOnly = lastMsg && lastMsg.role === 'tool';
   const hitMaxTurns = lastIsToolOnly;
   const extra = hitMaxTurns ? '\n\n（系统提示：任务已连续执行 ' + (autoContinues + 1) + ' 段共 ' + (maxTurns * (autoContinues + 1)) + ' 轮工具调用仍未结束，已自动停止。当前进度和已产出内容如上，回复"继续"可接着处理。）' : '';
-  _currentAbort = null;
+  setAbort(null);
   sessionEvents.emit({ type: 'finished', session: ctx.chatId || '', outcome: hitMaxTurns ? 'interrupted' : 'completed' });
   return { ok: true, text: (finalText || (hitMaxTurns ? '已完成部分操作。' : '')) + extra, usage: totalUsage, messages, hitMaxTurns };
 }
@@ -2408,8 +2464,9 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
 // profile: AI 配置；chatHistory: UI 层简版历史 [{role, content}]; userText: 本轮输入
 // callbacks: { onText, onToolStart, onToolEnd, onConfirm, onTodo, onSubagentStart, onSubagentEnd, onCompact, getRules, onRulesChanged }
 async function runAgent(profile, chatHistory, userText, callbacks) {
-  // 新一轮对话开始：清掉上一次可能残留的停止标志 / AbortController
-  clearStop();
+  // 新一轮对话开始：只清掉「本实例」可能残留的停止标志 / AbortController
+  // （并发下绝不能清全局，否则会把其他会话正在跑的任务一起清掉）
+  clearStop(callbacks.runId || null);
   // 动态加载外部技能（userData/skills/*/SKILL.md），合并进技能表
   if (callbacks.skillsDir) {
     CURRENT_SKILLS_DIR = callbacks.skillsDir;
@@ -2450,6 +2507,7 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
     skillsDir: callbacks.skillsDir || null,
     attachments: callbacks.attachments || [],  // 本轮拖入对话框的附件（图片 base64 / 文档文本）
     chatId: callbacks.chatId || null,          // 当前对话 ID（用于对话级记忆）
+    runId: callbacks.runId || null,            // 本次任务实例 ID（并发下用于隔离停止 / 引导）
     memoryEnabled: callbacks.memoryEnabled === true, // 是否自动生成对话记忆
     onInstallSkill: callbacks.onInstallSkill || null,
     installSkillFromUrl: callbacks.installSkillFromUrl || null,
@@ -2463,6 +2521,7 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
         'subagent-start': callbacks.onSubagentStart,
         'subagent-end': callbacks.onSubagentEnd,
         compact: callbacks.onCompact,
+        steer: callbacks.onSteer,
       };
       if (map[event]) map[event](data);
     },
@@ -2484,7 +2543,9 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
   } catch (err) {
     sessionEvents.emit({ type: 'finished', session: ctx.chatId || '', outcome: 'failed', text: sessionEvents.clean(err && err.message) });
     return { ok: false, error: err.message };
+  } finally {
+    clearRun(ctx.runId);
   }
 }
 
-module.exports = { runAgent, sanitizeMessages, SKILLS, BUILTIN_SKILLS, RECOMMENDED_SKILLS, loadExternalSkills, parseSkillMd, getContextWindow, getCompactThreshold, requestStop, clearStop, isStopRequested };
+module.exports = { runAgent, sanitizeMessages, SKILLS, BUILTIN_SKILLS, RECOMMENDED_SKILLS, loadExternalSkills, parseSkillMd, getContextWindow, getCompactThreshold, requestStop, clearStop, isStopRequested, pushSteer, clearRun };

@@ -2621,6 +2621,8 @@ function initAccent() {
 const chatMessagesEl = document.getElementById('chat-messages');
 const chatInput = document.getElementById('chat-input');
 const btnSend = document.getElementById('btn-send');
+const btnStopRun = document.getElementById('btn-stop-run');
+const queuedListEl = document.getElementById('queued-list');
 const chatStatusEl = document.getElementById('chat-status');
 const chatUsageEl = document.getElementById('chat-usage');
 const confirmBar = document.getElementById('confirm-bar');
@@ -2635,8 +2637,20 @@ let currentAssistantBubble = null;
 let sending = false;
 // 标记「本次发送来自麦克风语音输入」：仅此路触发的消息才会激活 AI 语音回复
 let voiceSendPending = false;
-// 正在执行 AI 任务的会话 ID：流式事件 / 结果落库都路由到该会话，切换界面不影响
+// 正在执行 AI 任务的会话 ID（兼容旧逻辑，仅用于展示；事件路由已改用 meta.chatId）
 let runningChatId = null;
+
+/* ===== 多会话并发：每个会话独立运行 + 消息队列（v0.11.27） =====
+ * 旧实现是全局单任务：sending 为真时新消息被丢弃 / 回车变成中断。
+ * 现在：chatRuns 记录「会话 -> 运行实例」，同一会话在跑时新消息进 run.queue（排队），
+ * 不同会话可以同时各跑各的；任务结束后自动消费该会话队列里的下一条。   */
+const chatRuns = new Map();   // chatId -> { runId, queue: [{id, text, attachments}], deep }
+let queueSeq = 0;
+function getChatRun(chatId) { return chatId ? chatRuns.get(chatId) || null : null; }
+function isChatRunning(chatId) { return !!chatId && chatRuns.has(chatId); }
+function anyRunning() { return chatRuns.size > 0; }
+function genRunId() { return 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6); }
+
 // 会话任务状态指示：'running'（转圈）| 'done'（蓝点，已完成）| 'notice'（橙点，完成但有提示/可能未全部完成）| 'error'（红点，出错）
 // 用户点击该会话查看后即清除
 const chatRunStates = new Map();
@@ -2656,10 +2670,19 @@ function markChatRunResult(chatId, r) {
   renderChatList();
 }
 // 本次任务的 AI 文本段累积（按工具调用切分；最后一段用于功能任务落库）
-let segOpen = false;
-let curSegText = '';
+// 并发：必须按 runId 分开累积，否则两个会话的文本会互相污染
+const runSegments = new Map(); // runId -> { open, cur, last }
+function segStateOf(runId) {
+  let s = runSegments.get(runId);
+  if (!s) { s = { open: false, cur: '', last: '' }; runSegments.set(runId, s); }
+  return s;
+}
+function resetRunSegments(runId) { runSegments.set(runId || '__legacy__', { open: false, cur: '', last: '' }); }
+function lastSegTextOf(runId) { const s = runSegments.get(runId); return s ? s.last : ''; }
+function clearRunSegments(runId) { runSegments.delete(runId); }
+// 兼容量：功能面板（替换/自动化/PPT/转换/去水印）走的是「一次一任务」的老路径，
+// runAiChat 结束时把该实例累积的最后一段文本镜像到这里，老代码无需改动。
 let lastSegText = '';
-function resetRunSegments() { segOpen = false; curSegText = ''; lastSegText = ''; }
 
 /* ========== 流式输出平滑：逐字打字机 + 「思考中…」占位 ========== */
 // 本地模型每 ~800ms 才推 2~6 个字，整片直接刷出体感就是「一段一段蹦」。
@@ -2742,11 +2765,8 @@ function stepType(now) {
   if (n > typeQueue.length) n = typeQueue.length;
   const out = typeQueue.slice(0, n);
   typeQueue = typeQueue.slice(n);
-  // 只在「本任务属于当前会话」时渲染；否则丢弃，避免把 A 会话的字写进 B 会话
-  if (!currentAssistantBubble) {
-    if (runningChatId && activeChatId !== runningChatId) { typeQueue = ''; return; }
-    currentAssistantBubble = addBubble('assistant', '');
-  }
+  // 并发：只有属于当前会话的事件才会进到这里（非当前会话在事件入口已 return），直接渲染
+  if (!currentAssistantBubble) currentAssistantBubble = addBubble('assistant', '');
   currentAssistantBubble.textContent += out;
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
   if (typeQueue) typeRaf = requestAnimationFrame(stepType);
@@ -2776,11 +2796,8 @@ function flushTypeText() {
   const out = typeQueue;
   typeQueue = '';
   typeAcc = 0;
-  // 只在「本任务属于当前会话」时渲染；否则丢弃，避免把 A 会话的字写进 B 会话
-  if (!currentAssistantBubble) {
-    if (runningChatId && activeChatId !== runningChatId) return;
-    currentAssistantBubble = addBubble('assistant', '');
-  }
+  // 并发：只有属于当前会话的事件才会进到这里（非当前会话在事件入口已 return），直接渲染
+  if (!currentAssistantBubble) currentAssistantBubble = addBubble('assistant', '');
   currentAssistantBubble.textContent += out;
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 }
@@ -2795,20 +2812,185 @@ function resetTypewriter() {
 }
 
 // 统一包裹一次 AI 调用：开始前插「思考中」占位，结束（含异常）时把队列吐完并撤掉占位
-async function runAiChat(history, text, attachments) {
+// opts: { runId, chatId } —— 并发下每个任务实例自带标识
+async function runAiChat(history, text, attachments, opts = {}) {
   resetTypewriter();         // 每轮重新测速率，避免上一轮（可能是快速云端流）的估值带过来
-  runReasoningStarted = false; // 新一轮运行，深度思考状态重置
-  thinkingDeep = false;       // 占位标签也重置
-  startThinkingHint();
+  const rid = opts.runId || genRunId(); // 没传 runId（功能面板老路径）时随机一个，避免并发共用同一段累积
+  resetRunSegments(rid);     // 本实例的文本段累积归零（不影响其他并行实例）
+  thinkingDeep = false;      // 占位标签也重置
+  const run = getChatRun(opts.chatId);
+  if (run) run.deep = false;
+  // 只有「当前正在看的会话」才插占位气泡；后台会话的任务不占用界面
+  const visible = !opts.chatId || opts.chatId === activeChatId;
+  if (visible) startThinkingHint();
   try {
-    const r = await window.api.aiChat(history, text, attachments);
-    try { markChatRunResult(runningChatId, r); } catch (e) { /* ignore */ }
+    const r = await window.api.aiChat(history, text, attachments, { runId: opts.runId, chatId: opts.chatId });
+    try { markChatRunResult(opts.chatId, r); } catch (e) { /* ignore */ }
     return r;
   } finally {
-    flushTypeText();
-    clearThinkingHint();
+    // 后台会话的任务结束时不能动界面：占位气泡 / 打字机队列属于「正在看的那个会话」
+    if (visible) { flushTypeText(); clearThinkingHint(); }
+    lastSegText = lastSegTextOf(rid);   // 镜像给老路径（功能面板）使用
+    if (!opts.runId) clearRunSegments(rid);
   }
 }
+/* ==================== 排队消息：会话运行中输入的消息（对齐 WorkBuddy） ====================
+ * 当前会话在跑任务时，新消息不再中断任务、也不再被丢弃，而是排在输入框上方等待：
+ *   ↑ 引导 —— 消息立刻发给正在跑的任务，但不打断模型当前这一轮
+ *   ✏️ 编辑 —— 就地改内容       🗑 删除 —— 丢弃这条排队消息
+ * 任务结束后自动取出队首继续跑下一条。                                                  */
+const Q_ICON_STEER = '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 3.5 19.5 12H15v8.5H9V12H4.5z"/></svg>';
+const Q_ICON_EDIT = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+const Q_ICON_DELETE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M9 3h6l1 2h4v2H4V5h4l1-2zM6 8h12l-1 13H7L6 8zm3 2v9h2v-9H9zm4 0v9h2v-9h-2z"/></svg>';
+const Q_ICON_DRAG = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><circle cx="5" cy="3" r="1.4"/><circle cx="11" cy="3" r="1.4"/><circle cx="5" cy="8" r="1.4"/><circle cx="11" cy="8" r="1.4"/><circle cx="5" cy="13" r="1.4"/><circle cx="11" cy="13" r="1.4"/></svg>';
+
+let editingQueueId = null;
+
+function enqueueMessage(chatId, text, attachments) {
+  const run = getChatRun(chatId);
+  if (!run) return false;
+  run.queue.push({ id: ++queueSeq, text, attachments: attachments || [] });
+  chatRunStates.set(chatId, 'running');
+  renderChatList();
+  if (chatId === activeChatId) renderQueuedMessages();
+  return true;
+}
+
+function removeQueued(chatId, itemId) {
+  const run = getChatRun(chatId);
+  if (!run) return;
+  const i = run.queue.findIndex((q) => q.id === itemId);
+  if (i < 0) return;
+  run.queue.splice(i, 1);
+  if (chatId === activeChatId) renderQueuedMessages();
+}
+
+// 引导：把这条排队消息立刻发给正在跑的任务（模型当前这轮不会被打断）
+function steerQueued(chatId, itemId) {
+  const run = getChatRun(chatId);
+  if (!run) return;
+  const i = run.queue.findIndex((q) => q.id === itemId);
+  if (i < 0) return;
+  const [item] = run.queue.splice(i, 1);
+  if (chatId === activeChatId) renderQueuedMessages();
+  const restore = () => {
+    run.queue.unshift(item); // 失败则放回队首，不让用户的消息丢失
+    if (chatId === activeChatId) renderQueuedMessages();
+  };
+  Promise.resolve(window.api.aiChatSteer(run.runId, item.text))
+    .then((r) => {
+      if (r && r.ok) {
+        if (chatId === activeChatId) addEventLine('➤ 已引导到正在运行的任务：' + item.text);
+      } else restore();
+    })
+    .catch(restore);
+}
+
+function mkQBtn(html, cls, onClick) {
+  const b = document.createElement('button');
+  b.className = cls;
+  b.innerHTML = html;
+  b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+  return b;
+}
+
+function buildQueueItem(chatId, item) {
+  const row = document.createElement('div');
+  row.className = 'qmsg';
+
+  if (editingQueueId === item.id) {
+    const ta = document.createElement('textarea');
+    ta.className = 'qmsg-edit';
+    ta.rows = 2;
+    ta.value = item.text || '';
+    row.appendChild(ta);
+    const acts = document.createElement('div');
+    acts.className = 'qmsg-acts';
+    acts.append(
+      mkQBtn('保存', 'qmsg-btn primary', () => {
+        const v = ta.value.trim();
+        if (v) item.text = v;
+        editingQueueId = null;
+        renderQueuedMessages();
+      }),
+      mkQBtn('取消', 'qmsg-btn ghost', () => { editingQueueId = null; renderQueuedMessages(); }),
+    );
+    row.appendChild(acts);
+    setTimeout(() => ta.focus(), 0);
+    return row;
+  }
+
+  const drag = document.createElement('span');
+  drag.className = 'qmsg-drag';
+  drag.draggable = true;
+  drag.title = '排队中（可拖动排序）';
+  drag.innerHTML = Q_ICON_DRAG;
+  drag.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/qmsg', String(item.id)); });
+
+  const txt = document.createElement('span');
+  txt.className = 'qmsg-text';
+  txt.textContent = item.text || '（附件）';
+  txt.title = item.text || '';
+
+  const acts = document.createElement('div');
+  acts.className = 'qmsg-acts';
+  const steer = mkQBtn(Q_ICON_STEER, 'qmsg-btn steer', () => steerQueued(chatId, item.id));
+  steer.title = '引导会话，消息将被发出但模型不会中断';
+  steer.dataset.tip = steer.title;
+  const edit = mkQBtn(Q_ICON_EDIT, 'qmsg-btn', () => { editingQueueId = item.id; renderQueuedMessages(); });
+  edit.title = '修改这条排队消息';
+  edit.dataset.tip = edit.title;
+  const del = mkQBtn(Q_ICON_DELETE, 'qmsg-btn danger', () => removeQueued(chatId, item.id));
+  del.title = '删除这条排队消息';
+  del.dataset.tip = del.title;
+  acts.append(steer, edit, del);
+
+  row.append(drag, txt, acts);
+  row.addEventListener('dragover', (e) => e.preventDefault());
+  row.addEventListener('drop', (e) => {
+    const srcId = Number(e.dataTransfer.getData('text/qmsg'));
+    if (!srcId || srcId === item.id) return;
+    e.preventDefault();
+    reorderQueued(chatId, srcId, item.id);
+  });
+  return row;
+}
+
+function reorderQueued(chatId, srcId, targetId) {
+  const run = getChatRun(chatId);
+  if (!run) return;
+  const from = run.queue.findIndex((q) => q.id === srcId);
+  const to = run.queue.findIndex((q) => q.id === targetId);
+  if (from < 0 || to < 0) return;
+  const [it] = run.queue.splice(from, 1);
+  run.queue.splice(to, 0, it);
+  renderQueuedMessages();
+}
+
+function renderQueuedMessages() {
+  if (!queuedListEl) return;
+  const run = getChatRun(activeChatId);
+  const items = run ? run.queue : [];
+  queuedListEl.innerHTML = '';
+  if (!items.length) { queuedListEl.classList.add('hidden'); return; }
+  queuedListEl.classList.remove('hidden');
+  items.forEach((item) => queuedListEl.appendChild(buildQueueItem(activeChatId, item)));
+}
+
+// 停止「指定会话」的任务；并发下不影响其他会话正在跑的任务
+function abortRun(chatId) {
+  const run = getChatRun(chatId);
+  if (!run) return;
+  try { window.api.aiChatAbortRun(run.runId); } catch (e) { /* ignore */ }
+  if (chatId === activeChatId) appendSystemLine('已发送停止指令，正在中断当前任务…');
+}
+
+// 停止按钮 / 排队列表跟随「当前会话」状态刷新
+function updateRunControls() {
+  if (btnStopRun) btnStopRun.classList.toggle('hidden', !isChatRunning(activeChatId));
+  renderQueuedMessages();
+}
+
 // 待发送附件（拖入对话框、尚未发送的文件）
 let pendingAttachments = [];
 let attachmentSeq = 0;
@@ -2982,15 +3164,18 @@ function switchToChat(chatId) {
       renderHistoryMessage(m);
     });
   }
-  // 如果切回正在运行 AI 的会话，恢复进行中的占位或已吐出的文字
-  if (runningChatId && chatId === runningChatId && sending) {
-    if (lastSegText && lastSegText.trim()) {
-      currentAssistantBubble = addBubble('assistant', lastSegText);
+  // 切回正在跑任务的会话：恢复该实例已吐出的文字，或重新插上「思考中」占位
+  const backRun = getChatRun(chatId);
+  if (backRun) {
+    const prev = lastSegTextOf(backRun.runId);
+    if (prev && prev.trim()) {
+      currentAssistantBubble = addBubble('assistant', prev);
     } else {
-      thinkingDeep = runReasoningStarted;
+      thinkingDeep = !!backRun.deep;
       startThinkingHint();
     }
   }
+  updateRunControls(); // 停止按钮 / 排队列表跟随当前会话切换
   removeEmptyAssistantBubbles();
   renderChatList();
   saveChats();
@@ -3246,18 +3431,21 @@ const modelNameEl = document.getElementById('model-name');
 const modelIcoImgEl = modelInfoEl.querySelector('.model-ico-img');
 const sendIconEl = document.getElementById('send-icon');
 
-// 发送按钮：空闲=箭头图标；AI 运行中（等待）=「运行」图标 + 脉冲光圈
+// 发送按钮：并发下恒为「发送」——运行中回车/点发送 = 排队，不再中断任务；
+// 停止改用独立停止按钮 + Esc。sending 由「是否还有会话在跑」推导，供功能面板门禁使用。
 function setSending(v) {
-  sending = v;
-  // 发送中保持按钮可点击：点击它（或按 Esc）即中断 Computer Use / AI 在途操作
+  // 无参：sending 由「是否还有会话在跑」推导（聊天并发路径）
+  // 传 true/false：功能面板（替换/自动化/PPT/转换/去水印）仍是一次一任务的老语义
+  sending = (typeof v === 'boolean') ? v : anyRunning();
   btnSend.disabled = false;
-  btnSend.classList.toggle('running', v);
+  btnSend.classList.remove('running');
   if (sendIconEl) {
-    sendIconEl.src = v ? 'assets/icon-running.png' : 'assets/icon-send.png';
-    sendIconEl.alt = v ? '运行中（点击停止）' : '发送';
+    sendIconEl.src = 'assets/icon-send.png';
+    sendIconEl.alt = '发送';
   }
-  btnSend.dataset.tip = v ? 'AI 正在运行，点击或按 Esc 停止' : '发送（Enter）';
-  btnSend.title = v ? 'AI 正在运行，点击或按 Esc 停止' : '发送';
+  btnSend.dataset.tip = '发送（Enter）';
+  btnSend.title = '发送（Enter）';
+  updateRunControls();
 }
 
 // 文本框自动增高（面板 display:none 时 scrollHeight 为 0，不能把高度压成 0）
@@ -4153,32 +4341,47 @@ function toolSummary(name, input) {
   return (p || JSON.stringify(input).slice(0, 80)) + extra;
 }
 
-// 智能体事件
-window.api.onAiText((t) => {
+// 智能体事件（并发：每条事件都带 meta = { runId, chatId }，非当前会话的任务只落库、不渲染）
+// 事件是否属于「当前正在看的会话」：没有 meta 时按旧行为放行
+function isActiveRun(meta) {
+  return !meta || !meta.chatId || meta.chatId === activeChatId;
+}
+function runIdOf(meta) { return (meta && meta.runId) || '__legacy__'; }
+
+window.api.onAiText((t, meta) => {
   // 文本段累积（与界面解耦，切走会话后内容仍能正确落库）
-  if (!segOpen) { segOpen = true; curSegText = ''; }
+  // 并发：按 runId 分开累积，避免两个会话的文本互相污染
+  const s = segStateOf(runIdOf(meta));
+  if (!s.open) { s.open = true; s.cur = ''; }
   // 流式下每片只是模型回复的一小段，必须直接拼接；插 \n 会让每片独占一行（气泡被压成竖条）
-  curSegText += t;
-  lastSegText = curSegText;
-  // 用户已切到其他会话：只累积内容，不往当前界面渲染（隔离）
-  if (runningChatId && activeChatId !== runningChatId) return;
+  s.cur += t;
+  s.last = s.cur;
+  // 用户已切到其他会话 / 这是别的会话的任务：只累积内容，不往当前界面渲染（隔离）
+  if (!isActiveRun(meta)) return;
   clearThinkingHint(); // 首字到达：撤掉「思考中…」占位
   if (!currentAssistantBubble) currentAssistantBubble = addBubble('assistant', '');
   enqueueTypeText(t);  // 入队后由打字机匀速吐出，而不是整片一次刷出
 });
 
+// 引导消息已被注入到正在跑的任务（下一轮生效，当前轮不中断）
+window.api.onAiSteerAck((d, meta) => {
+  if (!isActiveRun(meta)) return;
+  addEventLine('➤ 已引导到正在运行的任务：' + ((d && d.text) || ''));
+});
+
 // 模型进入深度思考（推 reasoning_content）：占位立刻切成「深度思考中…」
-window.api.onAiReasoning(() => {
-  if (runningChatId && activeChatId !== runningChatId) return;
+window.api.onAiReasoning((meta) => {
+  if (!isActiveRun(meta)) return;
+  const run = getChatRun(meta && meta.chatId);
+  if (run) run.deep = true;
   if (!thinkingWrap || thinkingDeep) return;
-  runReasoningStarted = true;   // 本轮运行已进入深度思考（切回时恢复标签用）
   thinkingDeep = true;
   renderThinkingLabel();
 });
 
-window.api.onAiToolStart(({ name, input }) => {
-  segOpen = false; // 工具调用打断当前文本段
-  if (runningChatId && activeChatId !== runningChatId) return;
+window.api.onAiToolStart(({ name, input }, meta) => {
+  segStateOf(runIdOf(meta)).open = false; // 工具调用打断当前文本段
+  if (!isActiveRun(meta)) return;
   flushTypeText(); // 先把队列里没吐完的字补上，否则下面判空会把有内容的气泡误删
   // 助手只调用工具没出文字时，把空文字气泡清掉，避免留下空条
   if (currentAssistantBubble && !currentAssistantBubble.textContent.trim()) {
@@ -4189,8 +4392,8 @@ window.api.onAiToolStart(({ name, input }) => {
   addToolLine(name, toolSummary(name, input));
 });
 
-window.api.onAiToolEnd(({ name, input, result }) => {
-  if (runningChatId && activeChatId !== runningChatId) return;
+window.api.onAiToolEnd(({ name, input, result }, meta) => {
+  if (!isActiveRun(meta)) return;
   addToolLine(name + ' ✓', result.slice(0, 200) + (result.length > 200 ? '…' : ''));
   captureWorkItem(name, input, result);
 });
@@ -4588,8 +4791,24 @@ if (btnClearWork) btnClearWork.addEventListener('click', () => {
   saveWorkItems();
 });
 
+/* ---- 授权 / 提问弹条：并发下多个任务可能同时请求，按先后顺序排队展示 ---- */
+// 每条弹条记住自己属于哪个 runId，回答时带回去，避免答到别的任务头上。
+let promptQueue = [];    // [{ kind, payload, runId, chatId }]
+let activePrompt = null; // 当前展示的那一条
+function pushPrompt(p) { promptQueue.push(p); showNextPrompt(); }
+function showNextPrompt() {
+  if (activePrompt || !promptQueue.length) return;
+  const p = promptQueue.shift();
+  activePrompt = p;
+  if (p.kind === 'confirm') showConfirmBar(p.payload);
+  else if (p.kind === 'ask') showAskBar(p.payload);
+  else if (p.kind === 'install') showInstallBar(p.payload);
+}
+function closeActivePrompt() { activePrompt = null; showNextPrompt(); }
+function activePromptRunId() { return activePrompt ? activePrompt.runId : undefined; }
+
 const CONFIRM_ICONS = { 'write': '✍️', 'edit': '✏️', 'batch': '🔁', 'open-file': '📂', 'open-url': '🌐', 'mcp': '🔌', 'install_dependency': '📦' };
-window.api.onAiConfirm((payload) => {
+function showConfirmBar(payload) {
   const type = payload && typeof payload === 'object' ? payload.type : null;
   const title = (payload && payload.title) || '需要授权';
   const desc = (payload && payload.desc) || (typeof payload === 'string' ? payload : '');
@@ -4598,6 +4817,9 @@ window.api.onAiConfirm((payload) => {
   confirmText.textContent = desc;
   rememberBox.checked = false;
   confirmBar.classList.remove('hidden');
+}
+window.api.onAiConfirm((payload, meta) => {
+  pushPrompt({ kind: 'confirm', payload, runId: meta && meta.runId, chatId: meta && meta.chatId });
 });
 
 // 用户选择题（ask_user 工具）：展示问题+选项，用户点击后把选择回传给主进程
@@ -4610,10 +4832,11 @@ function answerAskUser(text) {
   if (!askUserBar) return;
   askUserBar.classList.add('hidden');
   if (askUserCustomInput) askUserCustomInput.value = '';
-  window.api.aiAskUserReply(text);
+  window.api.aiAskUserReply(text, activePromptRunId());
+  closeActivePrompt();
 }
 
-window.api.onAiAskUser((payload) => {
+function showAskBar(payload) {
   if (!askUserBar) return;
   askUserQuestionEl.textContent = (payload && payload.question) || '请选择';
   askUserOptionsEl.innerHTML = '';
@@ -4642,6 +4865,9 @@ window.api.onAiAskUser((payload) => {
   });
   askUserBar.classList.remove('hidden');
   if (chatMessagesEl) chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+window.api.onAiAskUser((payload, meta) => {
+  pushPrompt({ kind: 'ask', payload, runId: meta && meta.runId, chatId: meta && meta.chatId });
 });
 const btnAskSkip = document.getElementById('btn-ask-skip');
 if (btnAskSkip) btnAskSkip.addEventListener('click', () => answerAskUser(null));
@@ -4657,7 +4883,8 @@ if (askUserCustomInput) askUserCustomInput.addEventListener('keydown', (e) => {
 // Todo 任务清单
 const todoPanel = document.getElementById('todo-panel');
 const todoListEl = document.getElementById('todo-list');
-window.api.onAiTodo((todos) => {
+window.api.onAiTodo((todos, meta) => {
+  if (!isActiveRun(meta)) return; // 后台会话的 todo 不覆盖当前界面的清单
   lastTodos = Array.isArray(todos) ? todos.slice() : [];
   if (!todos.length) { todoPanel.classList.add('hidden'); return; }
   todoPanel.classList.remove('hidden');
@@ -4684,34 +4911,41 @@ function addEventLine(text) {
   chatMessagesEl.appendChild(div);
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 }
-window.api.onAiSubagentStart((d) => addEventLine(`⟶ 启动子代理「${d.description}」（${d.type === 'explore' ? '只读探索' : '通用'}）`));
-window.api.onAiSubagentEnd((d) => addEventLine(`⟵ 子代理「${d.description}」完成`));
-window.api.onAiCompact(() => addEventLine('⟲ 对话过长，已自动压缩历史'));
+window.api.onAiSubagentStart((d, meta) => { if (isActiveRun(meta)) addEventLine(`⟶ 启动子代理「${d.description}」（${d.type === 'explore' ? '只读探索' : '通用'}）`); });
+window.api.onAiSubagentEnd((d, meta) => { if (isActiveRun(meta)) addEventLine(`⟵ 子代理「${d.description}」完成`); });
+window.api.onAiCompact((meta) => { if (isActiveRun(meta)) addEventLine('⟲ 对话过长，已自动压缩历史'); });
 
 document.getElementById('btn-confirm-yes').addEventListener('click', () => {
   const remember = rememberBox.checked;
   confirmBar.classList.add('hidden');
-  window.api.aiConfirmReply(true, remember);
+  window.api.aiConfirmReply(true, remember, activePromptRunId());
+  closeActivePrompt();
 });
 document.getElementById('btn-confirm-no').addEventListener('click', () => {
   confirmBar.classList.add('hidden');
-  window.api.aiConfirmReply(false, false);
+  window.api.aiConfirmReply(false, false, activePromptRunId());
+  closeActivePrompt();
 });
 
 // 技能安装授权
 const installSkillBar = document.getElementById('install-skill-bar');
 const installSkillText = document.getElementById('install-skill-text');
-window.api.onAiInstallSkill((info) => {
+function showInstallBar(info) {
   installSkillText.textContent = `AI 助手请求安装技能「${info.name}」（${info.description}）`;
   installSkillBar.classList.remove('hidden');
+}
+window.api.onAiInstallSkill((info, meta) => {
+  pushPrompt({ kind: 'install', payload: info, runId: meta && meta.runId, chatId: meta && meta.chatId });
 });
 document.getElementById('btn-install-skill-yes').addEventListener('click', () => {
   installSkillBar.classList.add('hidden');
-  window.api.aiInstallSkillReply(true);
+  window.api.aiInstallSkillReply(true, activePromptRunId());
+  closeActivePrompt();
 });
 document.getElementById('btn-install-skill-no').addEventListener('click', () => {
   installSkillBar.classList.add('hidden');
-  window.api.aiInstallSkillReply(false);
+  window.api.aiInstallSkillReply(false, activePromptRunId());
+  closeActivePrompt();
 });
 
 // AI 改了替换规则时，刷新替换框架界面
@@ -4949,7 +5183,7 @@ async function sendChat() {
   const fromVoice = voiceSendPending;
   voiceSendPending = false;
   // 允许「仅有附件、无文字」发送；文字和附件都没有则忽略
-  if ((!text && pendingAttachments.length === 0) || sending) return;
+  if (!text && pendingAttachments.length === 0) return;
   const attachmentsMeta = pendingAttachments.map((a) => ({ name: a.name, path: a.path, kind: a.kind, mime: a.mime, size: a.size }));
   chatInput.value = '';
   autoGrow();
@@ -4964,14 +5198,45 @@ async function sendChat() {
 
   ensureActiveChat();
   const runChatId = activeChatId; // 本任务归属会话（结果路由用）
+  // 该会话正在跑任务：新消息进队列排队，不再中断当前任务（与 WorkBuddy 一致）
+  if (isChatRunning(runChatId) && enqueueMessage(runChatId, text, attachmentsMeta)) {
+    pendingAttachments = [];
+    renderAttachmentPreview();
+    chatInput.focus();
+    return;
+  }
+  await startChatRun(runChatId, text, attachmentsMeta, { fromVoice });
+}
+
+// 真正发起一次任务（调用前该会话必须没在跑）；任务结束后自动消费该会话队列里的下一条
+async function startChatRun(runChatId, text, attachmentsMeta, opts = {}) {
+  const fromVoice = !!opts.fromVoice;
+  pendingAttachments = [];
+  renderAttachmentPreview();
+
+  const runId = genRunId();
+  const queue = [];
+  chatRuns.set(runChatId, { runId, queue, deep: false });
   setRunningChat(runChatId);
-  resetRunSegments();
-  setSending(true);
-  addUserMessage(text, pendingAttachments);
+  resetRunSegments(runId);
+  setSending();
+
+  const visible = runChatId === activeChatId;
+  if (visible) {
+    addUserMessage(text, attachmentsMeta);
+    chatStatusEl.innerHTML = '<span class="agent-working">智能体工作中…</span>';
+  }
   // 存完整消息（含 tool_calls/tool）以便下次续接；初版是简版文本
-  chatHistory.push({ role: 'user', content: text, attachments: attachmentsMeta });
+  let baseHistory;
+  if (visible) {
+    chatHistory.push({ role: 'user', content: text, attachments: attachmentsMeta });
+    baseHistory = chatHistory.slice(0, -1);
+  } else {
+    // 后台会话（排队消息自动续跑时用户已切走）：用它自己落库的消息当历史，不污染当前会话
+    const chat = chatList.find((c) => c.id === runChatId);
+    baseHistory = chat && Array.isArray(chat.messages) ? chat.messages.slice() : [];
+  }
   currentAssistantBubble = null;
-  chatStatusEl.innerHTML = '<span class="agent-working">智能体工作中…</span>';
 
   // 「继续」智能注入：如有未完成的任务，把当前 todo 列表拼成上下文
   let augmentedText = text;
@@ -4984,13 +5249,18 @@ async function sendChat() {
   }
 
   // 传完整历史（含 tool_calls/tool）；agent loop 会正确清洗；本轮附件随附发送
-  const r = await runAiChat(chatHistory.slice(0, -1), augmentedText, attachmentsMeta);
+  const r = await runAiChat(baseHistory, augmentedText, attachmentsMeta, { runId, chatId: runChatId });
 
-  chatStatusEl.textContent = '';
+  // 本实例收尾：先取回累积文本，再清实例状态
+  const segFallback = lastSegTextOf(runId);
+  chatRuns.delete(runChatId);
+  clearRunSegments(runId);
+  if (visible) chatStatusEl.textContent = '';
   const stillActive = runChatId === activeChatId; // 运行期间用户可能切去了别的会话
-  if (!r.ok) {
-    if (stillActive) addBubble('assistant', '出错了：' + (r.error || '未知错误'));
-    pushToChat(runChatId, { role: 'assistant', content: '出错了：' + (r.error || '未知错误') });
+  if (!r || !r.ok) {
+    const errText = '出错了：' + ((r && r.error) || '未知错误');
+    if (stillActive) addBubble('assistant', errText);
+    pushToChat(runChatId, { role: 'assistant', content: errText });
   } else if (r.messages && r.messages.length) {
     // 完整消息回传：用整轮 messages 覆盖发起会话的历史（去掉末尾注入的 augmentedText）
     // 找到原始 user text 位置，保留其之前的全部历史 + 完整 agent 输出
@@ -5006,20 +5276,18 @@ async function sendChat() {
     const cleaned = sanitizeHistoryForAttachments(finalMessages, attachmentsMeta);
     replaceChatMessages(runChatId, cleaned);
   } else {
-    // 兜底：用本次累积的 AI 文本段
-    pushToChat(runChatId, { role: 'assistant', content: lastSegText });
+    // 兜底：用本实例累积的 AI 文本段
+    pushToChat(runChatId, { role: 'assistant', content: segFallback });
   }
 
-  if (r.usage) {
+  if (r && r.usage) {
     sessionUsage.input += r.usage.input;
     sessionUsage.output += r.usage.output;
     if (stillActive) chatUsageEl.textContent = `本次会话 token：输入 ${sessionUsage.input.toLocaleString()} / 输出 ${sessionUsage.output.toLocaleString()}`;
   }
   currentAssistantBubble = null;
-  runningChatId = null;
-  pendingAttachments = [];
-  renderAttachmentPreview();
-  setSending(false);
+  if (runningChatId === runChatId) runningChatId = null;
+  setSending();
   if (stillActive) removeEmptyAssistantBubbles();
   saveChats();
   chatInput.focus();
@@ -5036,8 +5304,16 @@ async function sendChat() {
         }
       }
     }
-    if (!replyText && lastSegText) replyText = lastSegText;
+    if (!replyText && segFallback) replyText = segFallback;
     if (replyText) speakText(replyText);
+  }
+
+  // 队列里还有消息：任务结束后自动接着跑下一条（排队消息按序执行）
+  if (queue.length) {
+    const next = queue.shift();
+    await startChatRun(runChatId, next.text, next.attachments || [], {});
+  } else {
+    renderQueuedMessages();
   }
 }
 
@@ -5080,27 +5356,28 @@ function handleSlashCommand(text) {
 btnSend.addEventListener('click', () => {
   // 录音中点击发送：停止录音并触发语音识别（识别后文字入框并自动发送）
   if (isRecording) { finalizeRecording(); return; }
-  // AI 在途时点击 = 中断 Computer Use / 当前操作（Esc 同效）
-  if (sending) { abortCurrent(); return; }
+  // 并发：运行中点击发送 = 排队（不再中断当前任务）；停止走停止按钮 / Esc
   sendChat();
 });
 
-// 中断当前 AI / Computer Use 在途操作
+// 停止按钮：只停当前会话这个任务
+if (btnStopRun) btnStopRun.addEventListener('click', () => abortRun(activeChatId));
+
+// 中断当前 AI / Computer Use 在途操作（只影响当前会话的任务实例）
 function abortCurrent() {
-  try { window.api.computerUseAbort(); } catch (e) { /* ignore */ }
-  appendSystemLine('已发送停止指令，正在中断 Computer Use 在途操作…');
+  abortRun(activeChatId);
 }
 
-// Esc 全局中断：窗口聚焦且 AI 在途时，按 Esc 停止当前操作（等价于点击停止按钮）
+// Esc 全局中断：当前会话有任务在跑时，按 Esc 停止它（不影响其他会话）
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && sending) {
+  if (e.key === 'Escape' && isChatRunning(activeChatId)) {
     e.preventDefault();
-    abortCurrent();
+    abortRun(activeChatId);
   }
 });
 
 window.api.onComputerUseAborted(() => {
-  if (sending) setSending(false);
+  setSending(); // sending 由「是否还有会话在跑」推导，这里只刷新界面
   appendSystemLine('Computer Use 操作已中断。');
 });
 
@@ -5108,7 +5385,7 @@ chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     if (isRecording) { finalizeRecording(); return; }
-    if (sending) { abortCurrent(); return; }
+    // 并发：运行中回车 = 排队（不再中断当前任务）
     sendChat();
   }
 });

@@ -2403,6 +2403,112 @@ input[type="range"]#voice-minimax-speed::-moz-range-thumb {
   100% { box-shadow: 0 0 0 0 rgba(31,35,40,0); }
 }
 
+/* 停止当前任务按钮（并发：只停当前会话这一个任务） */
+.composer-stop {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: var(--danger, #e5484d);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.composer-stop:hover { transform: scale(1.08); }
+
+/* 排队消息：当前会话任务未结束时，新消息排在输入框上方（对齐 WorkBuddy） */
+.queued-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.qmsg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  padding: 7px 8px 7px 6px;
+  box-shadow: var(--shadow-sm);
+}
+
+.qmsg-drag {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  color: var(--text-light, #9aa0a6);
+  cursor: grab;
+}
+
+.qmsg-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text, #1f2328);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 54px;
+  overflow: hidden;
+}
+
+.qmsg-acts {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.qmsg-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim, #656d76);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.qmsg-btn:hover { background: var(--primary-bg, #eef3ff); color: var(--primary, #2f6fed); }
+.qmsg-btn.danger:hover { background: #fdecec; color: var(--danger, #e5484d); }
+.qmsg-btn.steer { background: var(--primary-bg, #eef3ff); color: var(--primary, #2f6fed); }
+.qmsg-btn.steer:hover { background: var(--primary, #2f6fed); color: #fff; }
+.qmsg-btn.ghost { width: auto; padding: 0 10px; font-size: 12px; }
+.qmsg-btn.primary { width: auto; padding: 0 10px; font-size: 12px; background: var(--primary, #2f6fed); color: #fff; }
+.qmsg-btn.primary:hover { opacity: 0.9; color: #fff; }
+
+.qmsg-edit {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.45;
+  color: var(--text, #1f2328);
+  resize: vertical;
+  outline: none;
+}
+
+.qmsg-edit:focus { border-color: var(--primary, #2f6fed); }
+
 /* 语音监听中 */
 .composer-icon.listening {
   background: var(--danger);

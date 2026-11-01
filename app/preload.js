@@ -95,7 +95,13 @@ contextBridge.exposeInMainWorld('api', {
   mcpTest: (server) => ipcRenderer.invoke('mcp-test', server),
   onMcpStatusChanged: (cb) => ipcRenderer.on('mcp-status-changed', (_e, s) => cb(s)),
   // AI 助手（智能体对话）
-  aiChat: (history, text, attachments) => ipcRenderer.invoke('ai-chat', { history, text, attachments }),
+  // opts: { runId, chatId } —— 并发下每个任务实例自带标识，事件回传时据此路由到对应会话
+  aiChat: (history, text, attachments, opts) =>
+    ipcRenderer.invoke('ai-chat', { history, text, attachments, runId: opts && opts.runId, chatId: opts && opts.chatId }),
+  // 引导（steer）：把排队消息插进正在跑的任务，不中断当前轮
+  aiChatSteer: (runId, text) => ipcRenderer.invoke('ai-chat-steer', { runId, text }),
+  // 只停止指定任务实例（并发下不影响其他会话）
+  aiChatAbortRun: (runId) => ipcRenderer.invoke('ai-chat-abort-run', { runId }),
   // 聊天框「＋」选文件 / 文件夹发给 AI
   pickAttachments: () => ipcRenderer.invoke('pick-attachments'),
   // 剪贴板粘贴图片落临时文件，返回路径
@@ -104,8 +110,8 @@ contextBridge.exposeInMainWorld('api', {
   readImageThumb: (filePath) => ipcRenderer.invoke('read-image-thumb', filePath),
   // 拖拽 / 粘贴得到的 File 对象取真实磁盘路径（Electron 32+ 移除了 File.path，须用 webUtils）
   getPathForFile: (file) => { try { return webUtils.getPathForFile(file) || ''; } catch (e) { return ''; } },
-  aiConfirmReply: (ok, remember) => ipcRenderer.invoke('ai-chat-confirm-reply', ok, remember),
-  aiAskUserReply: (answer) => ipcRenderer.invoke('ai-chat-ask-user-reply', answer),
+  aiConfirmReply: (ok, remember, runId) => ipcRenderer.invoke('ai-chat-confirm-reply', ok, remember, runId),
+  aiAskUserReply: (answer, runId) => ipcRenderer.invoke('ai-chat-ask-user-reply', answer, runId),
   mcpUpdateCheck: (serverId) => ipcRenderer.invoke('mcp-update-check', serverId),
   mcpUpdateInstall: (payload) => ipcRenderer.invoke('mcp-update-install', payload),
   onMcpUpdateProgress: (cb) => ipcRenderer.on('mcp-update-progress', (_e, d) => cb(d)),
@@ -128,18 +134,21 @@ contextBridge.exposeInMainWorld('api', {
   // 对话历史持久化
   chatLoad: () => ipcRenderer.invoke('chat-load'),
   chatSave: (chats, activeId) => ipcRenderer.invoke('chat-save', { chats, activeId }),
-  onAiText: (cb) => ipcRenderer.on('ai-chat-text', (_e, t) => cb(t)),
-  onAiReasoning: (cb) => ipcRenderer.on('ai-chat-reasoning', () => cb()),
-  onAiToolStart: (cb) => ipcRenderer.on('ai-chat-tool-start', (_e, d) => cb(d)),
-  onAiToolEnd: (cb) => ipcRenderer.on('ai-chat-tool-end', (_e, d) => cb(d)),
-  onAiConfirm: (cb) => ipcRenderer.on('ai-chat-confirm', (_e, payload) => cb(payload)),
-  onAiAskUser: (cb) => ipcRenderer.on('ai-chat-ask-user', (_e, payload) => cb(payload)),
-  onAiTodo: (cb) => ipcRenderer.on('ai-chat-todo', (_e, todos) => cb(todos)),
-  onAiSubagentStart: (cb) => ipcRenderer.on('ai-chat-subagent-start', (_e, d) => cb(d)),
-  onAiSubagentEnd: (cb) => ipcRenderer.on('ai-chat-subagent-end', (_e, d) => cb(d)),
-  onAiCompact: (cb) => ipcRenderer.on('ai-chat-compact', () => cb()),
-  onAiInstallSkill: (cb) => ipcRenderer.on('ai-chat-install-skill', (_e, info) => cb(info)),
-  aiInstallSkillReply: (ok) => ipcRenderer.invoke('ai-chat-install-skill-reply', ok),
+  // 并发（v0.11.27）：所有 AI 事件第二参数为 meta = { runId, chatId }，
+  // 渲染端据此判断这条事件属于哪个会话的任务（非当前会话只落库、不渲染）。
+  onAiText: (cb) => ipcRenderer.on('ai-chat-text', (_e, t, meta) => cb(t, meta)),
+  onAiReasoning: (cb) => ipcRenderer.on('ai-chat-reasoning', (_e, meta) => cb(meta)),
+  onAiToolStart: (cb) => ipcRenderer.on('ai-chat-tool-start', (_e, d, meta) => cb(d, meta)),
+  onAiToolEnd: (cb) => ipcRenderer.on('ai-chat-tool-end', (_e, d, meta) => cb(d, meta)),
+  onAiConfirm: (cb) => ipcRenderer.on('ai-chat-confirm', (_e, payload, meta) => cb(payload, meta)),
+  onAiAskUser: (cb) => ipcRenderer.on('ai-chat-ask-user', (_e, payload, meta) => cb(payload, meta)),
+  onAiTodo: (cb) => ipcRenderer.on('ai-chat-todo', (_e, todos, meta) => cb(todos, meta)),
+  onAiSubagentStart: (cb) => ipcRenderer.on('ai-chat-subagent-start', (_e, d, meta) => cb(d, meta)),
+  onAiSubagentEnd: (cb) => ipcRenderer.on('ai-chat-subagent-end', (_e, d, meta) => cb(d, meta)),
+  onAiCompact: (cb) => ipcRenderer.on('ai-chat-compact', (_e, meta) => cb(meta)),
+  onAiInstallSkill: (cb) => ipcRenderer.on('ai-chat-install-skill', (_e, info, meta) => cb(info, meta)),
+  onAiSteerAck: (cb) => ipcRenderer.on('ai-chat-steer-ack', (_e, d, meta) => cb(d, meta)),
+  aiInstallSkillReply: (ok, runId) => ipcRenderer.invoke('ai-chat-install-skill-reply', ok, runId),
   onRulesChanged: (cb) => ipcRenderer.on('rules-changed', (_e, rules) => cb(rules)),
   // 自动更新
   checkUpdate: () => ipcRenderer.invoke('check-update'),
