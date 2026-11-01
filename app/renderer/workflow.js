@@ -16,7 +16,7 @@
   const PORT_TOP = HEAD_H + PORT_GAP / 2 - PORT_R;
 
   const PORT_COLOR = { files: '#4d9cf6', rules: '#f2b544', skill: '#a06bf0', save: '#37c46f', model: '#e8577a' };
-  const PORT_LABEL = { files: '文件', rules: '规则', skill: '技能', save: '保存位置', model: '模型' };
+  const PORT_LABEL = { files: '文件', rules: '规则', skill: '技能', save: '保存位置', model: 'AI 模型选择' };
 
   /* ---------------- 节点定义 ---------------- */
   const DEFS = {
@@ -26,14 +26,14 @@
     output:     { title: '保存位置',    group: 'input', color: '#2a9c5c', ins: [], outs: ['save'] },
     aimodel:    { title: 'AI 模型选择', group: 'input', color: '#c2435f', ins: [], outs: ['model'] },
 
-    replace:    { title: '替换文件',    group: 'task', color: '#2f6fed', ins: ['files', 'rules', 'skill', 'save'], outs: ['files'] },
-    rename:     { title: '文件名修改',  group: 'task', color: '#2f6fed', ins: ['files', 'rules', 'save'], outs: ['files'] },
-    convert:    { title: '格式转换',    group: 'task', color: '#2f6fed', ins: ['files', 'save'], outs: ['files'] },
+    replace:    { title: '替换文件',    group: 'task', color: '#2f6fed', ins: ['files', 'rules', 'skill', 'model', 'save'], outs: ['files'] },
+    rename:     { title: '文件名修改',  group: 'task', color: '#2f6fed', ins: ['files', 'rules', 'model', 'save'], outs: ['files'] },
+    convert:    { title: '格式转换',    group: 'task', color: '#2f6fed', ins: ['files', 'model', 'save'], outs: ['files'] },
     pdfwm:      { title: 'PDF去水印',   group: 'task', color: '#2f6fed', ins: ['files', 'model', 'save'], outs: ['files'] },
-    automation: { title: '文件自动化',  group: 'task', color: '#2f6fed', ins: ['files', 'skill', 'save'], outs: ['files'] },
+    automation: { title: '文件自动化',  group: 'task', color: '#2f6fed', ins: ['files', 'skill', 'model', 'save'], outs: ['files'] },
     ppt:        { title: 'PPT 编写',    group: 'task', color: '#2f6fed', ins: ['files', 'model', 'save'], outs: ['files'] },
-    // 模块自定义：自己写提示词，可接文件 / 规则 / 技能 / 保存位置
-    custom:     { title: '模块自定义',  group: 'task', color: '#2f6fed', ins: ['files', 'rules', 'skill', 'save'], outs: ['files'] },
+    // 模块自定义：自己写提示词，可接文件 / 规则 / 技能 / AI 模型 / 保存位置
+    custom:     { title: '模块自定义',  group: 'task', color: '#2f6fed', ins: ['files', 'rules', 'skill', 'model', 'save'], outs: ['files'] },
   };
   const INPUT_ORDER = ['source', 'rules', 'skill', 'output', 'aimodel'];
   const TASK_ORDER = ['replace', 'rename', 'convert', 'pdfwm', 'automation', 'ppt', 'custom'];
