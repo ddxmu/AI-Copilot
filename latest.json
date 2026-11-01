@@ -1,16 +1,16 @@
 {
-  "version": "0.12.6",
-  "notes": "- 自动化工作流：「规则」节点在「＋ 添加规则」旁新增 **导出规则 / 导入规则**\n  - 导出：点「导出规则」弹出菜单，可选 Excel 工作簿（.xlsx）或 CSV 文件（.csv），与功能面板的规则表格格式完全一致（规则名称 / 查找内容 / 替换内容 / 启用），导出后在访达中显示\n  - 导入：点「导入规则」选 .xlsx / .xlsm / .csv 批量导入；已有规则时可选择「清空后导入」或「追加在后面」，空行自动跳过",
-  "pubDate": "2026-11-01T17:44:41+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.6/AI.Copilot-0.12.6-arm64.dmg",
-  "sha256": "7d2d60f110fbbdc9d48b0df966d6238864e4d64629f6f270bec3071387bd7b45",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.6/AI.Copilot-0.12.6.zip",
-  "patchSha256": "ecbf6ffc2870dbc52fe06fcb78573867b134928df405ce8d8f92b661ee7d9fc7",
+  "version": "0.12.7",
+  "notes": "### 优化：工作流「模块自定义」节点（仅改这一个节点，其它功能模块不变）\n\n- **结果保存格式**：新增下拉，可选 `.md / .jpg / .xlsm / .xml / .ppt / .pptx / .png / .xlsx / .xls / .docx / .doc`，最后一项「自定义格式…」可手写任意扩展名（自动去掉多余的点号和非法字符）。节点底部提示文字会跟着所选格式实时变化。\n- **回复 / 下一步指示**：提示词下面新增一个输入框。写在这里的内容会作为「补充指示」拼进给 AI 的提示词，同时在 AI 中途提问时作为弹框的默认回复（省得每次重复敲）。\n- **授权确认框**：AI 执行「写文件 / 改文件 / 批量替换 / 格式转换 / 执行终端命令」这类动作时，弹出确认框让你点「允许 / 拒绝」，不再按全局权限静默放行。\n- **AI 提问框**：AI 主动提问时弹出输入框，可直接打字回复或「跳过」；若 AI 给了选项，点一下即可填入。\n- **停止**：点右下角「停止」会立刻中断正在跑的 AI 调用（含卡在工具里的）、把等待中的授权 / 回复框按「拒绝 / 跳过」收掉、后续节点不再执行。此前停止只在本节点结束后才生效，看起来像没反应。",
+  "pubDate": "2026-11-01T19:29:40+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.7/AI.Copilot-0.12.7-arm64.dmg",
+  "sha256": "1bb80d2b7f3cdb2e88532782abca20f47a180910c09e21c71f28658a6b2a045a",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.7/AI.Copilot-0.12.7.zip",
+  "patchSha256": "14482f5cc8607f23d6996516d989ad5b0ea8022dc4f82838933387da71d71058",
   "deltas": [
     {
-      "from": "0.12.5",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.6/AI.Copilot-0.12.6.zip",
-      "sha256": "ecbf6ffc2870dbc52fe06fcb78573867b134928df405ce8d8f92b661ee7d9fc7"
+      "from": "0.12.6",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.7/AI.Copilot-0.12.7.zip",
+      "sha256": "14482f5cc8607f23d6996516d989ad5b0ea8022dc4f82838933387da71d71058"
     }
   ]
 }
