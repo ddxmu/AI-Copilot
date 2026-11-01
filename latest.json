@@ -1,16 +1,16 @@
 {
-  "version": "0.12.5",
-  "notes": "- 自动化工作流：7 个任务节点（替换文件 / 文件名修改 / 格式转换 / PDF去水印 / 文件自动化 / PPT 编写 / 模块自定义）**全部补上红色「AI 模型选择」输入端口**，可把「AI 模型选择」节点的模型接给任意任务节点\n- 端口标签由「模型」改为「AI 模型选择」，颜色保持红色 #e8577a，与其它端口类型（文件/规则/技能/保存位置）区分",
-  "pubDate": "2026-11-01T17:07:48+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.5/AI.Copilot-0.12.5-arm64.dmg",
-  "sha256": "97cf93399ec894ba218567dc587e64e5d70fde32a54929be6806fc902c1dd574",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.5/AI.Copilot-0.12.5.zip",
-  "patchSha256": "38d0f1ac6c709057651d5c352867a27bde019fe982b6e6f31c38138cd269c914",
+  "version": "0.12.6",
+  "notes": "- 自动化工作流：「规则」节点在「＋ 添加规则」旁新增 **导出规则 / 导入规则**\n  - 导出：点「导出规则」弹出菜单，可选 Excel 工作簿（.xlsx）或 CSV 文件（.csv），与功能面板的规则表格格式完全一致（规则名称 / 查找内容 / 替换内容 / 启用），导出后在访达中显示\n  - 导入：点「导入规则」选 .xlsx / .xlsm / .csv 批量导入；已有规则时可选择「清空后导入」或「追加在后面」，空行自动跳过",
+  "pubDate": "2026-11-01T17:44:41+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.6/AI.Copilot-0.12.6-arm64.dmg",
+  "sha256": "7d2d60f110fbbdc9d48b0df966d6238864e4d64629f6f270bec3071387bd7b45",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.6/AI.Copilot-0.12.6.zip",
+  "patchSha256": "ecbf6ffc2870dbc52fe06fcb78573867b134928df405ce8d8f92b661ee7d9fc7",
   "deltas": [
     {
-      "from": "0.12.4",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.5/AI.Copilot-0.12.5.zip",
-      "sha256": "38d0f1ac6c709057651d5c352867a27bde019fe982b6e6f31c38138cd269c914"
+      "from": "0.12.5",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.6/AI.Copilot-0.12.6.zip",
+      "sha256": "ecbf6ffc2870dbc52fe06fcb78573867b134928df405ce8d8f92b661ee7d9fc7"
     }
   ]
 }
