@@ -1025,6 +1025,9 @@ activeProfileSel.addEventListener('change', async () => {
   if (!activeProfileSel.value) return;
   const state = await window.api.aiSetActive(activeProfileSel.value, null);
   aiState.activeId = state.activeId;
+  aiState.profiles = state.profiles;
+  saveChatCfg({ profileId: state.activeId, model: null }); // 设置页改配置也同步给当前会话
+  updateModelInfo();
   renderProfiles();
 });
 
@@ -2661,6 +2664,12 @@ function setRunningChat(id) {
     renderChatList();
   }
 }
+// 展示用的任务状态：只要该会话还有任务在跑就恒显示「转圈」，
+// 不受 chatRunStates 里已完成状态点被用户查看清除的影响（v0.11.28）
+function chatRunStateOf(chatId) {
+  if (isChatRunning(chatId)) return 'running';
+  return chatRunStates.get(chatId) || null;
+}
 function markChatRunResult(chatId, r) {
   if (!chatId) return;
   let st = 'done';
@@ -2680,6 +2689,74 @@ function segStateOf(runId) {
 function resetRunSegments(runId) { runSegments.set(runId || '__legacy__', { open: false, cur: '', last: '' }); }
 function lastSegTextOf(runId) { const s = runSegments.get(runId); return s ? s.last : ''; }
 function clearRunSegments(runId) { runSegments.delete(runId); }
+
+/* ===== 离屏渲染：后台会话继续产出内容，切回来立刻可见（v0.11.28） =====
+ * 用户切走「正在跑任务的会话」时，把可视区整段内容搬进该 run 的离屏容器；
+ * 期间该会话继续产出的文本 / 工具行 / 事件行照样写进容器，切回来整段搬回可视区。
+ * 这样「运行中切到别的项目再回来、或程序最小化再打开」都能马上看到进行中的全部内容。 */
+const runHosts = new Map();      // runId -> { el, bubble, thinking }
+const VISIBLE_HOST = { visible: true };
+let renderHost = null;           // 非空 = 当前渲染落到离屏容器而不是可视区
+function offHost(runId) {
+  let h = runHosts.get(runId);
+  if (!h) {
+    const el = document.createElement('div');
+    el.className = 'msg-host';
+    h = { el, bubble: null, thinking: null };
+    runHosts.set(runId, h);
+  }
+  return h;
+}
+function dropHost(runId) { runHosts.delete(runId); }
+function msgEl() { return renderHost ? renderHost.el : chatMessagesEl; }
+function getCurBubble() { return renderHost ? renderHost.bubble : currentAssistantBubble; }
+function setCurBubble(b) { if (renderHost) renderHost.bubble = b; else currentAssistantBubble = b; }
+// 事件该渲染到哪：可见会话 -> 可视区；后台会话 -> 它自己的离屏容器；null = 不渲染
+function resolveTarget(meta) {
+  const rid = (meta && meta.runId) || null;
+  if (!rid) return isActiveRun(meta) ? VISIBLE_HOST : null;   // 老路径（功能面板）
+  const arun = getChatRun(activeChatId);
+  if (arun && arun.runId === rid && !arun.offscreen) return VISIBLE_HOST;
+  return runHosts.get(rid) || null;
+}
+function withTarget(t, fn) {
+  if (!t) return;
+  const prev = renderHost;
+  renderHost = (t === VISIBLE_HOST) ? null : t;
+  try { fn(); } finally { renderHost = prev; }
+}
+
+// 离开当前会话：它还在跑任务就把可视区整段内容搬进离屏容器，之后产出继续往里写
+function parkRunningView() {
+  const run = getChatRun(activeChatId);
+  if (!run || run.offscreen) return;
+  const h = offHost(run.runId);
+  run.offscreen = true;
+  h.bubble = (currentAssistantBubble && currentAssistantBubble.isConnected) ? currentAssistantBubble : null;
+  if (thinkingWrap && thinkingWrap.isConnected) h.thinking = thinkingWrap;
+  while (chatMessagesEl.firstChild) h.el.appendChild(chatMessagesEl.firstChild);
+  if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = 0; }
+  thinkingWrap = null;
+  thinkingDeep = false;
+  currentAssistantBubble = null;
+}
+
+// 切回后台运行的会话：把离屏容器里的内容（离开前的 + 期间新增的）整段搬回可视区
+// 返回 false 表示没有离屏容器（如任务已结束），走正常历史重建
+function restoreRunView(run) {
+  const h = runHosts.get(run.runId);
+  if (!h) { run.offscreen = false; return false; }
+  while (h.el.firstChild) chatMessagesEl.appendChild(h.el.firstChild);
+  run.offscreen = false;
+  currentAssistantBubble = (h.bubble && h.bubble.isConnected) ? h.bubble : null;
+  if (h.thinking && h.thinking.isConnected) {
+    thinkingWrap = h.thinking;
+    if (!thinkingTimer) { thinkingTimer = setInterval(renderThinkingLabel, 100); renderThinkingLabel(); }
+  }
+  h.thinking = null;
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  return true;
+}
 // 兼容量：功能面板（替换/自动化/PPT/转换/去水印）走的是「一次一任务」的老路径，
 // runAiChat 结束时把该实例累积的最后一段文本镜像到这里，老代码无需改动。
 let lastSegText = '';
@@ -2728,8 +2805,8 @@ function startThinkingHint() {
   label.textContent = '思考中…';
   b.append(dots, label);
   wrap.appendChild(b);
-  chatMessagesEl.appendChild(wrap);
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  msgEl().appendChild(wrap);
+  msgEl().scrollTop = msgEl().scrollHeight;
   thinkingWrap = wrap;
   thinkingStartAt = Date.now();
   thinkingTimer = setInterval(renderThinkingLabel, 100);
@@ -2766,9 +2843,10 @@ function stepType(now) {
   const out = typeQueue.slice(0, n);
   typeQueue = typeQueue.slice(n);
   // 并发：只有属于当前会话的事件才会进到这里（非当前会话在事件入口已 return），直接渲染
-  if (!currentAssistantBubble) currentAssistantBubble = addBubble('assistant', '');
-  currentAssistantBubble.textContent += out;
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  let b = getCurBubble();
+  if (!b) { b = addBubble('assistant', ''); setCurBubble(b); }
+  b.textContent += out;
+  msgEl().scrollTop = msgEl().scrollHeight;
   if (typeQueue) typeRaf = requestAnimationFrame(stepType);
 }
 
@@ -2797,9 +2875,10 @@ function flushTypeText() {
   typeQueue = '';
   typeAcc = 0;
   // 并发：只有属于当前会话的事件才会进到这里（非当前会话在事件入口已 return），直接渲染
-  if (!currentAssistantBubble) currentAssistantBubble = addBubble('assistant', '');
-  currentAssistantBubble.textContent += out;
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  let b = getCurBubble();
+  if (!b) { b = addBubble('assistant', ''); setCurBubble(b); }
+  b.textContent += out;
+  msgEl().scrollTop = msgEl().scrollHeight;
 }
 
 // 切换会话时彻底重置打字机状态（队列里没吐完的字直接丢弃，不做跨会话渲染）
@@ -2814,17 +2893,23 @@ function resetTypewriter() {
 // 统一包裹一次 AI 调用：开始前插「思考中」占位，结束（含异常）时把队列吐完并撤掉占位
 // opts: { runId, chatId } —— 并发下每个任务实例自带标识
 async function runAiChat(history, text, attachments, opts = {}) {
-  resetTypewriter();         // 每轮重新测速率，避免上一轮（可能是快速云端流）的估值带过来
   const rid = opts.runId || genRunId(); // 没传 runId（功能面板老路径）时随机一个，避免并发共用同一段累积
   resetRunSegments(rid);     // 本实例的文本段累积归零（不影响其他并行实例）
-  thinkingDeep = false;      // 占位标签也重置
   const run = getChatRun(opts.chatId);
   if (run) run.deep = false;
   // 只有「当前正在看的会话」才插占位气泡；后台会话的任务不占用界面
   const visible = !opts.chatId || opts.chatId === activeChatId;
-  if (visible) startThinkingHint();
+  // 打字机队列 / 思考占位都属于「正在看的那个会话」，后台任务启动时绝不能动它们
+  if (visible) {
+    resetTypewriter();       // 每轮重新测速率，避免上一轮（可能是快速云端流）的估值带过来
+    thinkingDeep = false;    // 占位标签也重置
+    startThinkingHint();
+  }
   try {
-    const r = await window.api.aiChat(history, text, attachments, { runId: opts.runId, chatId: opts.chatId });
+    // 会话级配置随任务下发：权限 / MCP / 模型各会话独立，并发下不会互相覆盖
+    const r = await window.api.aiChat(history, text, attachments, {
+      runId: opts.runId, chatId: opts.chatId, cfg: opts.cfg || null,
+    });
     try { markChatRunResult(opts.chatId, r); } catch (e) { /* ignore */ }
     return r;
   } finally {
@@ -3033,6 +3118,7 @@ async function loadChats() {
   const r = await window.api.chatLoad();
   chatList = r.chats || [];
   activeChatId = r.activeId || null;
+  chatCfgReady = true;
   // 恢复活跃对话
   if (activeChatId) {
     const chat = chatList.find((c) => c.id === activeChatId);
@@ -3055,6 +3141,67 @@ function saveChats() {
   saveChatsTimer = setTimeout(async () => {
     await window.api.chatSave(chatList, activeChatId);
   }, 500);
+}
+
+/* ===== 会话级配置：模型 / 权限 / MCP 每个会话各自独立保存（v0.11.28） =====
+ * chat.cfg = { profileId, model, perm, mcpEnabled, mcpServer }
+ * 会话 A 选模型 1、信任模式、开 MCP；切到会话 B 可以是模型 2、默认权限、关 MCP，互不干扰。
+ * 切换会话时整套恢复并同步给主进程；发起任务时随 runId 一起下发，并发下不会串。 */
+function defaultChatCfg() {
+  const p = aiState.profiles.find((x) => x.id === aiState.activeId);
+  return {
+    profileId: (p && p.id) || null,
+    model: (p && p.model) || null,
+    perm: permEl && permEl.dataset && permEl.dataset.mode ? permEl.dataset.mode : 'ask',
+    mcpEnabled: !!mcpEnabled,
+    mcpServer: mcpSelectedServer || null,
+  };
+}
+function chatCfgOf(chatId) {
+  const chat = chatList.find((c) => c.id === chatId);
+  if (!chat) return null;
+  if (!chat.cfg || typeof chat.cfg !== 'object') chat.cfg = defaultChatCfg();
+  return chat.cfg;
+}
+// 改当前会话的配置并落盘（patch 只含要改的字段）
+// 启动初始化期间（还没载入会话、或正在套用某会话配置）不写，避免把当时的临时值塞进会话
+let chatCfgReady = false;
+let applyingCfg = false;
+function saveChatCfg(patch) {
+  if (!chatCfgReady || applyingCfg) return;
+  const cfg = chatCfgOf(activeChatId);
+  if (!cfg || !patch) return;
+  Object.assign(cfg, patch);
+  saveChats();
+}
+
+// 切到某个会话：恢复它自己的模型 / 权限 / MCP（每个会话配置独立）
+async function applyChatCfg(chatId) {
+  const cfg = chatCfgOf(chatId);
+  if (!cfg) return;
+  applyingCfg = true;
+  try {
+    setPermMode(cfg.perm || 'ask', true);
+    mcpSelectedServer = cfg.mcpServer || null;
+    setMcpEnabled(!!cfg.mcpEnabled, true);
+    if (mcpServerSelect && mcpSelectedServer) mcpServerSelect.value = mcpSelectedServer;
+    if (window.api.setMcpServer) window.api.setMcpServer(mcpSelectedServer);
+    // 模型：与该会话保存的不一致时才切（aiSetActive 会写全局配置）
+    const p = aiState.profiles.find((x) => x.id === aiState.activeId);
+    const needSwitch = cfg.profileId && cfg.profileId !== aiState.activeId
+      ? true
+      : !!(cfg.model && p && p.model !== cfg.model);
+    if (needSwitch) {
+      try {
+        const st = await window.api.aiSetActive(cfg.profileId || aiState.activeId, cfg.model || null);
+        aiState.profiles = st.profiles;
+        aiState.activeId = st.activeId;
+      } catch (e) { /* 配置已删等情况忽略 */ }
+    }
+  } finally {
+    applyingCfg = false;
+  }
+  updateModelInfo();
 }
 
 // 将当前对话状态同步到 chatList
@@ -3115,6 +3262,8 @@ function beginFeatureChat() {
 // 新建对话
 function createNewChat() {
   persistCurrentChat(); // 先保存当前会话（含可能正在进行的任务内容），避免丢失
+  parkRunningView();    // 当前会话还在跑任务：内容搬进离屏容器，任务继续在后台跑
+  const prevCfg = chatCfgOf(activeChatId); // 新会话继承当前这套模型/权限/MCP 配置
   const chat = {
     id: genChatId(),
     title: '新对话',
@@ -3123,6 +3272,7 @@ function createNewChat() {
     updatedAt: Date.now(),
     archived: false,
     customTitle: false,
+    cfg: prevCfg ? Object.assign({}, prevCfg) : defaultChatCfg(),
   };
   chatList.unshift(chat);
   activeChatId = chat.id;
@@ -3143,9 +3293,11 @@ function switchToChat(chatId) {
   if (!chat) return;
   if (chatId === activeChatId) { switchPanel('ai'); return; }
   persistCurrentChat(); // 切换前保存当前会话（含可能正在进行的任务内容）
+  parkRunningView();    // 当前会话还在跑任务：把可视区整段搬进离屏容器，继续在后台渲染
   activeChatId = chatId;
-  // 用户已查看该会话：清除任务状态点（蓝/橙/红）
-  if (chatRunStates.has(chatId)) {
+  applyChatCfg(chatId); // 每个会话自己的模型 / 权限 / MCP 配置，切过去就整套恢复
+  // 用户已查看该会话：清除任务状态点（蓝/橙/红）；但正在跑任务的会话要一直保留转圈
+  if (chatRunStates.has(chatId) && !isChatRunning(chatId)) {
     chatRunStates.delete(chatId);
     renderChatList();
   }
@@ -3158,14 +3310,24 @@ function switchToChat(chatId) {
   chatMessagesEl.innerHTML = '';
   todoPanel.classList.add('hidden');
   chatUsageEl.textContent = '';
+  const backRun = getChatRun(chatId);
+  // 切回后台运行中的会话：离屏容器里已有完整内容（含离开前 + 期间新增），整段搬回即可
+  if (backRun && backRun.offscreen && restoreRunView(backRun)) {
+    // 界面已从离屏容器恢复，这里只补内存里的历史（供续接请求用），不再重复渲染
+    (chat.messages || []).forEach((m) => chatHistory.push(m));
+    updateRunControls(); // 停止按钮 / 排队列表跟随当前会话切换
+    renderChatList();
+    saveChats();
+    switchPanel('ai');
+    return;
+  }
   if (chat.messages && chat.messages.length) {
     chat.messages.forEach((m) => {
       chatHistory.push(m);
       renderHistoryMessage(m);
     });
   }
-  // 切回正在跑任务的会话：恢复该实例已吐出的文字，或重新插上「思考中」占位
-  const backRun = getChatRun(chatId);
+  // 切回正在跑任务的会话（没有离屏容器时）：恢复该实例已吐出的文字，或重新插上「思考中」占位
   if (backRun) {
     const prev = lastSegTextOf(backRun.runId);
     if (prev && prev.trim()) {
@@ -3243,7 +3405,7 @@ function renderChatList(filterQuery = '') {
     item.className = 'chat-history-item' + (chat.id === activeChatId ? ' active' : '') + (chat.archived ? ' archived' : '');
     item.dataset.chatId = chat.id;
     // 任务状态标记：运行中转圈；完成蓝点 / 有提示橙点 / 出错红点（点击查看后清除）
-    const runSt = chatRunStates.get(chat.id);
+    const runSt = chatRunStateOf(chat.id);
     if (runSt) {
       const badge = document.createElement('span');
       if (runSt === 'running') {
@@ -3301,7 +3463,7 @@ function renderRightRecent() {
     item.className = 'recent-item' + (chat.id === activeChatId ? ' active' : '');
     item.dataset.chatId = chat.id;
     // 任务状态标记（与左侧历史列表一致）
-    const runSt = chatRunStates.get(chat.id);
+    const runSt = chatRunStateOf(chat.id);
     if (runSt) {
       const badge = document.createElement('span');
       if (runSt === 'running') {
@@ -3888,11 +4050,12 @@ const permMenu = document.getElementById('perm-menu');
 const permLabel = document.getElementById('perm-label');
 const PERM_LABELS = { ask: '默认权限', trust: '信任此会话', deny: '只读模式' };
 
-function setPermMode(mode) {
+function setPermMode(mode, silent) {
   permLabel.textContent = PERM_LABELS[mode] || '默认权限';
   permEl.dataset.mode = mode;
   document.querySelectorAll('.perm-item').forEach((it) => it.classList.toggle('active', it.dataset.mode === mode));
   if (window.api.setPermissionMode) window.api.setPermissionMode(mode);
+  if (!silent) saveChatCfg({ perm: mode }); // 权限是会话级配置，随当前会话保存
 }
 
 permTrigger.addEventListener('click', (e) => { e.stopPropagation(); permMenu.classList.toggle('hidden'); });
@@ -3904,7 +4067,7 @@ permMenu.addEventListener('click', (e) => {
   permMenu.classList.add('hidden');
 });
 document.addEventListener('click', () => permMenu.classList.add('hidden'));
-setPermMode('ask'); // 默认：每次询问（同步给主进程）
+setPermMode('ask', true); // 默认：每次询问（同步给主进程；初始化不写会话配置）
 
 // MCP 外部工具开关（会话级，默认关闭；开启后可单选一个已连接的 MCP 服务器）
 const mcpToggle = document.getElementById('mcp-toggle');
@@ -3933,6 +4096,7 @@ async function refreshMcpServerSelect() {
     mcpServerSelect.disabled = true;
     mcpSelectedServer = null;
     if (window.api.setMcpServer) window.api.setMcpServer(null);
+    saveChatCfg({ mcpServer: null });
     return;
   }
   mcpServerSelect.disabled = false;
@@ -3949,10 +4113,11 @@ async function refreshMcpServerSelect() {
     mcpSelectedServer = servers[0];
     mcpServerSelect.value = mcpSelectedServer;
     if (window.api.setMcpServer) window.api.setMcpServer(mcpSelectedServer);
+    saveChatCfg({ mcpServer: mcpSelectedServer });
   }
 }
 
-function setMcpEnabled(v) {
+function setMcpEnabled(v, silent) {
   mcpEnabled = !!v;
   mcpToggle.classList.toggle('on', mcpEnabled);
   mcpToggle.classList.toggle('off', !mcpEnabled);
@@ -3962,9 +4127,13 @@ function setMcpEnabled(v) {
   mcpToggle.title = tip;
   if (mcpServerSelect) mcpServerSelect.classList.toggle('hidden', !mcpEnabled);
   if (window.api.setMcpEnabled) window.api.setMcpEnabled(mcpEnabled);
+  if (!silent) saveChatCfg({ mcpEnabled }); // MCP 开关也是会话级配置
   if (mcpEnabled) refreshMcpServerSelect();
 }
-mcpToggle.addEventListener('click', () => setMcpEnabled(!mcpEnabled));
+mcpToggle.addEventListener('click', () => {
+  setMcpEnabled(!mcpEnabled);
+  saveChatCfg({ mcpServer: mcpSelectedServer });
+});
 if (mcpServerSelect) {
   mcpServerSelect.addEventListener('change', () => {
     mcpSelectedServer = mcpServerSelect.value || null;
@@ -3972,6 +4141,7 @@ if (mcpServerSelect) {
     const tip = 'MCP 外部工具：开' + (mcpSelectedServer ? '·' + mcpSelectedServer : '');
     mcpToggle.dataset.tip = tip;
     mcpToggle.title = tip;
+    saveChatCfg({ mcpServer: mcpSelectedServer });
   });
 }
 // MCP 服务器连接状态变化时刷新下拉（只在 MCP 开启时）
@@ -4032,6 +4202,7 @@ function selectComputerUseIfReady() {
     mcpServerSelect.value = 'ComputerUse';
     mcpSelectedServer = 'ComputerUse';
     if (window.api.setMcpServer) window.api.setMcpServer('ComputerUse');
+    saveChatCfg({ mcpEnabled: true, mcpServer: 'ComputerUse' });
     const tip = 'MCP 外部工具：开·ComputerUse';
     mcpToggle.dataset.tip = tip;
     mcpToggle.title = tip;
@@ -4257,6 +4428,7 @@ async function switchModel(profileId, model) {
     aiState.activeId = state.activeId;
     updateModelInfo();
     closeModelMenu();
+    saveChatCfg({ profileId: state.activeId, model: model || null }); // 模型是会话级配置
     // 在聊天区显示切换提示
     const p = aiState.profiles.find((x) => x.id === profileId);
     if (p) addBubble('system', `已切换到 ${p.providerName} 的 ${p.model || '（未选模型）'}`);
@@ -4301,8 +4473,8 @@ function addBubble(role, text) {
   bubble.className = 'chat-bubble';
   bubble.textContent = text;
   wrap.appendChild(bubble);
-  chatMessagesEl.appendChild(wrap);
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  msgEl().appendChild(wrap);
+  msgEl().scrollTop = msgEl().scrollHeight;
   return bubble;
 }
 
@@ -4313,8 +4485,8 @@ function appendSystemLine(text) {
 
 // 清理没有任何文字内容的 AI 气泡（防止流式输出或历史恢复时留下空条）
 function removeEmptyAssistantBubbles() {
-  if (!chatMessagesEl) return;
-  chatMessagesEl.querySelectorAll('.chat-msg.assistant .chat-bubble').forEach((b) => {
+  if (!msgEl()) return;
+  msgEl().querySelectorAll('.chat-msg.assistant .chat-bubble').forEach((b) => {
     if (!b.textContent.trim()) {
       const wrap = b.closest('.chat-msg');
       if (wrap) wrap.remove();
@@ -4329,8 +4501,8 @@ function addToolLine(name, detail) {
   label.className = 'tool-name';
   label.textContent = '⚙ ' + name;
   div.append(label, document.createTextNode(' ' + detail));
-  chatMessagesEl.appendChild(div);
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  msgEl().appendChild(div);
+  msgEl().scrollTop = msgEl().scrollHeight;
   return div;
 }
 
@@ -4356,17 +4528,24 @@ window.api.onAiText((t, meta) => {
   // 流式下每片只是模型回复的一小段，必须直接拼接；插 \n 会让每片独占一行（气泡被压成竖条）
   s.cur += t;
   s.last = s.cur;
-  // 用户已切到其他会话 / 这是别的会话的任务：只累积内容，不往当前界面渲染（隔离）
-  if (!isActiveRun(meta)) return;
-  clearThinkingHint(); // 首字到达：撤掉「思考中…」占位
-  if (!currentAssistantBubble) currentAssistantBubble = addBubble('assistant', '');
-  enqueueTypeText(t);  // 入队后由打字机匀速吐出，而不是整片一次刷出
+  // 用户已切到其他会话 / 这是别的会话的任务：写进该 run 的离屏容器（切回来即可见），不占用当前界面
+  withTarget(resolveTarget(meta), () => {
+    if (renderHost) {
+      // 离屏（后台会话）：不走打字机（rAF 在后台不可靠），直接整片累加
+      let b = getCurBubble();
+      if (!b) { b = addBubble('assistant', ''); setCurBubble(b); }
+      b.textContent += t;
+      return;
+    }
+    clearThinkingHint(); // 首字到达：撤掉「思考中…」占位
+    if (!currentAssistantBubble) currentAssistantBubble = addBubble('assistant', '');
+    enqueueTypeText(t);  // 入队后由打字机匀速吐出，而不是整片一次刷出
+  });
 });
 
 // 引导消息已被注入到正在跑的任务（下一轮生效，当前轮不中断）
 window.api.onAiSteerAck((d, meta) => {
-  if (!isActiveRun(meta)) return;
-  addEventLine('➤ 已引导到正在运行的任务：' + ((d && d.text) || ''));
+  withTarget(resolveTarget(meta), () => addEventLine('➤ 已引导到正在运行的任务：' + ((d && d.text) || '')));
 });
 
 // 模型进入深度思考（推 reasoning_content）：占位立刻切成「深度思考中…」
@@ -4381,21 +4560,25 @@ window.api.onAiReasoning((meta) => {
 
 window.api.onAiToolStart(({ name, input }, meta) => {
   segStateOf(runIdOf(meta)).open = false; // 工具调用打断当前文本段
-  if (!isActiveRun(meta)) return;
-  flushTypeText(); // 先把队列里没吐完的字补上，否则下面判空会把有内容的气泡误删
-  // 助手只调用工具没出文字时，把空文字气泡清掉，避免留下空条
-  if (currentAssistantBubble && !currentAssistantBubble.textContent.trim()) {
-    const emptyWrap = currentAssistantBubble.closest('.chat-msg');
-    if (emptyWrap) emptyWrap.remove();
-  }
-  currentAssistantBubble = null;
-  addToolLine(name, toolSummary(name, input));
+  withTarget(resolveTarget(meta), () => {
+    // 打字机队列属于「可见的那个会话」，离屏时绝不能 flush（会写串容器）
+    if (!renderHost) flushTypeText(); // 先把队列里没吐完的字补上，否则下面判空会把有内容的气泡误删
+    // 助手只调用工具没出文字时，把空文字气泡清掉，避免留下空条
+    const b = getCurBubble();
+    if (b && !b.textContent.trim()) {
+      const emptyWrap = b.closest('.chat-msg');
+      if (emptyWrap) emptyWrap.remove();
+    }
+    setCurBubble(null);
+    addToolLine(name, toolSummary(name, input));
+  });
 });
 
 window.api.onAiToolEnd(({ name, input, result }, meta) => {
-  if (!isActiveRun(meta)) return;
-  addToolLine(name + ' ✓', result.slice(0, 200) + (result.length > 200 ? '…' : ''));
-  captureWorkItem(name, input, result);
+  withTarget(resolveTarget(meta), () => {
+    addToolLine(name + ' ✓', result.slice(0, 200) + (result.length > 200 ? '…' : ''));
+    if (!renderHost) captureWorkItem(name, input, result); // 右侧「工作完成」列表只记当前会话的
+  });
 });
 
 // ========== 右侧栏「工作完成」列表 ==========
@@ -4908,12 +5091,14 @@ function addEventLine(text) {
   const div = document.createElement('div');
   div.className = 'chat-event';
   div.textContent = text;
-  chatMessagesEl.appendChild(div);
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  msgEl().appendChild(div);
+  msgEl().scrollTop = msgEl().scrollHeight;
 }
-window.api.onAiSubagentStart((d, meta) => { if (isActiveRun(meta)) addEventLine(`⟶ 启动子代理「${d.description}」（${d.type === 'explore' ? '只读探索' : '通用'}）`); });
-window.api.onAiSubagentEnd((d, meta) => { if (isActiveRun(meta)) addEventLine(`⟵ 子代理「${d.description}」完成`); });
-window.api.onAiCompact((meta) => { if (isActiveRun(meta)) addEventLine('⟲ 对话过长，已自动压缩历史'); });
+// 子代理 / 压缩事件：后台会话写进它自己的离屏容器，切回来照样能看到
+const runEventLine = (meta, text) => withTarget(resolveTarget(meta), () => addEventLine(text));
+window.api.onAiSubagentStart((d, meta) => { runEventLine(meta, `⟶ 启动子代理「${d.description}」（${d.type === 'explore' ? '只读探索' : '通用'}）`); });
+window.api.onAiSubagentEnd((d, meta) => { runEventLine(meta, `⟵ 子代理「${d.description}」完成`); });
+window.api.onAiCompact((meta) => { runEventLine(meta, '⟲ 对话过长，已自动压缩历史'); });
 
 document.getElementById('btn-confirm-yes').addEventListener('click', () => {
   const remember = rememberBox.checked;
@@ -5095,8 +5280,8 @@ function addUserMessage(text, attachments) {
   if (text) bubble.textContent = text;
   wrap.appendChild(bubble);
   if (attachments && attachments.length) appendAttachmentViews(wrap, attachments, true);
-  chatMessagesEl.appendChild(wrap);
-  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  msgEl().appendChild(wrap);
+  msgEl().scrollTop = msgEl().scrollHeight;
   return bubble;
 }
 
@@ -5216,7 +5401,8 @@ async function startChatRun(runChatId, text, attachmentsMeta, opts = {}) {
 
   const runId = genRunId();
   const queue = [];
-  chatRuns.set(runChatId, { runId, queue, deep: false });
+  const run = { runId, queue, deep: false, offscreen: false };
+  chatRuns.set(runChatId, run);
   setRunningChat(runChatId);
   resetRunSegments(runId);
   setSending();
@@ -5225,6 +5411,10 @@ async function startChatRun(runChatId, text, attachmentsMeta, opts = {}) {
   if (visible) {
     addUserMessage(text, attachmentsMeta);
     chatStatusEl.innerHTML = '<span class="agent-working">智能体工作中…</span>';
+  } else {
+    // 后台会话（用户已切走 / 排队自动续跑）：开一个离屏容器，内容照常渲染，切回来即可见
+    run.offscreen = true;
+    withTarget(offHost(runId), () => addUserMessage(text, attachmentsMeta));
   }
   // 存完整消息（含 tool_calls/tool）以便下次续接；初版是简版文本
   let baseHistory;
@@ -5236,7 +5426,8 @@ async function startChatRun(runChatId, text, attachmentsMeta, opts = {}) {
     const chat = chatList.find((c) => c.id === runChatId);
     baseHistory = chat && Array.isArray(chat.messages) ? chat.messages.slice() : [];
   }
-  currentAssistantBubble = null;
+  // 后台会话不能动 currentAssistantBubble —— 那是「当前正在看的会话」正在写的气泡
+  if (visible) currentAssistantBubble = null;
 
   // 「继续」智能注入：如有未完成的任务，把当前 todo 列表拼成上下文
   let augmentedText = text;
@@ -5249,12 +5440,14 @@ async function startChatRun(runChatId, text, attachmentsMeta, opts = {}) {
   }
 
   // 传完整历史（含 tool_calls/tool）；agent loop 会正确清洗；本轮附件随附发送
-  const r = await runAiChat(baseHistory, augmentedText, attachmentsMeta, { runId, chatId: runChatId });
+  const cfg = chatCfgOf(runChatId) || defaultChatCfg();
+  const r = await runAiChat(baseHistory, augmentedText, attachmentsMeta, { runId, chatId: runChatId, cfg });
 
   // 本实例收尾：先取回累积文本，再清实例状态
   const segFallback = lastSegTextOf(runId);
   chatRuns.delete(runChatId);
   clearRunSegments(runId);
+  dropHost(runId);   // 任务结束：离屏容器不再需要，下次切回走正常历史重建（内容已落库）
   if (visible) chatStatusEl.textContent = '';
   const stillActive = runChatId === activeChatId; // 运行期间用户可能切去了别的会话
   if (!r || !r.ok) {

@@ -2457,8 +2457,23 @@ function petFeedText(chunk) {
   }, 700);
 }
 
-ipcMain.handle('ai-chat', async (event, { history, text, attachments, runId, chatId }) => {
-  const profile = aiConfig.getActiveProfile();
+// 会话级模型（v0.11.28）：任务自带 profileId / model 时用它，否则回退到全局当前配置
+function resolveProfileById(profileId, model) {
+  if (!profileId && !model) return null;
+  const st = aiConfig.getState();
+  const list = (st && st.profiles) || [];
+  let p = profileId ? list.find((x) => x.id === profileId) : null;
+  if (!p && model) p = list.find((x) => x.model === model);
+  if (!p) return null;
+  return model ? Object.assign({}, p, { model }) : p;
+}
+
+ipcMain.handle('ai-chat', async (event, { history, text, attachments, runId, chatId, cfg }) => {
+  // 每个会话独立的权限 / MCP / 模型配置（v0.11.28）；没传时回退到全局值，兼容老调用
+  const runPerm = cfg && ['ask', 'trust', 'deny'].includes(cfg.perm) ? cfg.perm : permissionMode;
+  const runMcpEnabled = cfg && typeof cfg.mcpEnabled === 'boolean' ? cfg.mcpEnabled : mcpEnabledMode;
+  const runMcpServer = cfg && cfg.mcpServer !== undefined ? (cfg.mcpServer || null) : mcpSelectedServer;
+  const profile = resolveProfileById(cfg && cfg.profileId, cfg && cfg.model) || aiConfig.getActiveProfile();
   if (!profile) return { ok: false, error: '请先在「AI 设置」中添加并启用一个 AI 配置' };
   if (!profile.model) return { ok: false, error: '当前 AI 配置未选择模型，请到「AI 设置」拉取并选择模型' };
   const wc = event.sender;
@@ -2481,8 +2496,8 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments, runId, cha
       skillsDir: SKILLS_DIR,
       attachments: resolvedAttachments,
       webAccess: aiConfig.getWebAccess(),
-      mcpEnabled: mcpEnabledMode,
-      mcpServer: mcpSelectedServer,
+      mcpEnabled: runMcpEnabled,
+      mcpServer: runMcpServer,
       chatId: activeChatId,
       runId: rid,
       memoryEnabled: aiConfig.getMemoryEnabled(),
@@ -2498,9 +2513,9 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments, runId, cha
           title: (payload && payload.title) || '',
           desc: (payload && payload.desc) || (typeof payload === 'string' ? payload : ''),
         };
-        // 权限模式：deny 全部拒绝，trust 全部放行，ask 才弹窗询问
-        if (permissionMode === 'deny') { resolve(false); return; }
-        if (permissionMode === 'trust') { resolve(true); return; }
+        // 权限模式：deny 全部拒绝，trust 全部放行，ask 才弹窗询问（取本任务所属会话的模式）
+        if (runPerm === 'deny') { resolve(false); return; }
+        if (runPerm === 'trust') { resolve(true); return; }
         // 本次会话已勾选「不再询问」的同类操作，直接放行
         if (type && sessionApproved.has(type)) { resolve(true); return; }
         // 并发：按 runId 登记回调，多个任务同时请求授权时互不覆盖
