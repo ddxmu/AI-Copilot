@@ -1,16 +1,16 @@
 {
-  "version": "0.12.4",
-  "notes": "### 优化：六个功能模块收进侧边栏「更多」\n\n- 侧边栏精简为：**AI 助手 → 自动化 → 更多 →（历史记录）→ AI 设置**，「更多」就放在「自动化」下面。\n- 「按规则替换文件 / 文件名修改 / 文件格式转换 / PDF去水印 / 文件自动化 / PPT 写手」六个模块收进「更多」里，默认折叠；点「更多」展开（右侧箭头会转向），再点收起。\n- 选中的是当前折叠组里的模块时，「更多」本身也会亮起当前态，收起后仍看得出正在用哪个模块。\n- AI 助手让你跳到某个模块时（例如「去处理替换文件」），若该模块在「更多」里会自动展开，不会出现「切过去了但侧边栏看不到」的情况。",
-  "pubDate": "2026-11-01T16:57:09+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.4/AI.Copilot-0.12.4-arm64.dmg",
-  "sha256": "c7dea6b79da21c2a5df903c55482e33482f5c0d5ce17b1615f34d3da008ffe67",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.4/AI.Copilot-0.12.4.zip",
-  "patchSha256": "9ce610df8112127ddcdc7218954929b9c1878cb9ac4cd426986bf19a4943fa19",
+  "version": "0.12.5",
+  "notes": "- 自动化工作流：7 个任务节点（替换文件 / 文件名修改 / 格式转换 / PDF去水印 / 文件自动化 / PPT 编写 / 模块自定义）**全部补上红色「AI 模型选择」输入端口**，可把「AI 模型选择」节点的模型接给任意任务节点\n- 端口标签由「模型」改为「AI 模型选择」，颜色保持红色 #e8577a，与其它端口类型（文件/规则/技能/保存位置）区分",
+  "pubDate": "2026-11-01T17:07:48+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.5/AI.Copilot-0.12.5-arm64.dmg",
+  "sha256": "97cf93399ec894ba218567dc587e64e5d70fde32a54929be6806fc902c1dd574",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.5/AI.Copilot-0.12.5.zip",
+  "patchSha256": "38d0f1ac6c709057651d5c352867a27bde019fe982b6e6f31c38138cd269c914",
   "deltas": [
     {
-      "from": "0.12.3",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.4/AI.Copilot-0.12.4.zip",
-      "sha256": "9ce610df8112127ddcdc7218954929b9c1878cb9ac4cd426986bf19a4943fa19"
+      "from": "0.12.4",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.5/AI.Copilot-0.12.5.zip",
+      "sha256": "38d0f1ac6c709057651d5c352867a27bde019fe982b6e6f31c38138cd269c914"
     }
   ]
 }
