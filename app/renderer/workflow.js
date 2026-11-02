@@ -15,8 +15,10 @@
   // 端口圆点垂直居中于第 i 行：中心 = HEAD_H + i*PORT_GAP + PORT_GAP/2
   const PORT_TOP = HEAD_H + PORT_GAP / 2 - PORT_R;
 
-  const PORT_COLOR = { files: '#4d9cf6', rules: '#f2b544', skill: '#a06bf0', save: '#37c46f', model: '#e8577a' };
-  const PORT_LABEL = { files: '文件', rules: '规则', skill: '技能', save: '保存位置', model: 'AI 模型选择' };
+  const PORT_COLOR = { files: '#4d9cf6', rules: '#f2b544', skill: '#a06bf0', save: '#37c46f', model: '#e8577a', prompt: '#ffffff' };
+  const PORT_LABEL = { files: '文件', rules: '规则', skill: '技能', save: '保存位置', model: 'AI 模型选择', prompt: '提示词' };
+  // 白色「提示词」接口的连线颜色：亮灰，深浅两套主题下都看得清
+  const PORT_EDGE = { prompt: '#b7c0cd' };
 
   /* ---------------- 节点定义 ---------------- */
   const DEFS = {
@@ -25,6 +27,8 @@
     skill:      { title: '技能选择',    group: 'input', color: '#7a4fc0', ins: [], outs: ['skill'] },
     output:     { title: '保存位置',    group: 'input', color: '#2a9c5c', ins: [], outs: ['save'] },
     aimodel:    { title: 'AI 模型选择', group: 'input', color: '#c2435f', ins: [], outs: ['model'] },
+    // 提示词：白色万能接口（输入/输出各一个），可连任意颜色的端口，内容会并入 AI 任务提示词
+    prompt:     { title: '提示词',      group: 'input', color: '#eef1f5', ins: ['prompt'], outs: ['prompt'] },
 
     replace:    { title: '替换文件',    group: 'task', color: '#2f6fed', ins: ['files', 'rules', 'skill', 'model', 'save'], outs: ['files'] },
     rename:     { title: '文件名修改',  group: 'task', color: '#2f6fed', ins: ['files', 'rules', 'model', 'save'], outs: ['files'] },
@@ -35,7 +39,7 @@
     // 模块自定义：自己写提示词，可接文件 / 规则 / 技能 / AI 模型 / 保存位置
     custom:     { title: '模块自定义',  group: 'task', color: '#2f6fed', ins: ['files', 'rules', 'skill', 'model', 'save'], outs: ['files'] },
   };
-  const INPUT_ORDER = ['source', 'rules', 'skill', 'output', 'aimodel'];
+  const INPUT_ORDER = ['source', 'rules', 'skill', 'output', 'aimodel', 'prompt'];
   const TASK_ORDER = ['replace', 'rename', 'convert', 'pdfwm', 'automation', 'ppt', 'custom'];
 
   const TASK_TIP = {
@@ -96,6 +100,10 @@
 
   /* ---------------- 小工具 ---------------- */
   function uid(p) { return (p || 'n') + (seq++) + '_' + Math.random().toString(36).slice(2, 6); }
+  function cssVar(name, fallback) {
+    try { const v = getComputedStyle(document.body).getPropertyValue(name).trim(); return v || fallback; }
+    catch (e) { return fallback; }
+  }
   function el(tag, cls, txt) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -141,6 +149,7 @@
       case 'skill': return { skill: '' };
       case 'output': return { mode: 'overwrite', dir: '', keep: true };
       case 'aimodel': return { profileId: '', model: '', label: '' };
+      case 'prompt': return { items: [''] };
       case 'convert': return { src: 'auto', dst: 'txt' };
       case 'pdfwm': return { marks: '', auto: true };
       case 'automation': return { layout: 'default', template: '' };
@@ -166,6 +175,7 @@
   function makePortRow(kind, dir) {
     const s = el('span', 'pl ' + dir);
     const dot = el('i', 'pd');
+    if (kind === 'prompt') dot.classList.add('uni');
     dot.style.background = PORT_COLOR[kind] || '#888';
     const txt = el('span', 'pt', PORT_LABEL[kind] || kind);
     if (dir === 'in') { s.appendChild(dot); s.appendChild(txt); }
@@ -328,6 +338,31 @@
       return;
     }
 
+    if (n.type === 'prompt') {
+      const top = el('div', 'btn-row');
+      const add = el('button', 'mini primary', '＋ 添加提示内容');
+      add.addEventListener('click', () => { d.items.push(''); markDirty(); render(); });
+      top.appendChild(add);
+      box.appendChild(top);
+      if (!d.items.length) box.appendChild(el('div', 'rule-empty', '暂无提示内容'));
+      d.items.forEach((t, i) => {
+        const item = el('div', 'rule-item');
+        const x = el('div', 'ri-x', '×');
+        x.title = '删除该条提示内容';
+        x.addEventListener('click', () => { d.items.splice(i, 1); markDirty(); render(); });
+        item.appendChild(x);
+        const ta = el('textarea');
+        ta.value = t || '';
+        ta.placeholder = '填写提示内容，例如：输出的表格要按日期排序…';
+        ta.addEventListener('input', () => { d.items[i] = ta.value; markDirty(); });
+        item.appendChild(ta);
+        box.appendChild(item);
+      });
+      box.appendChild(el('div', 'nf-label',
+        '用白色接口连到任务节点（任何端口都能连），内容会并入该任务的 AI 提示词'));
+      return;
+    }
+
     if (n.type === 'convert') {
       const s1 = el('select');
       SRC_FORMATS.forEach((f) => { const o = el('option'); o.value = f.v; o.textContent = f.t; s1.appendChild(o); });
@@ -435,6 +470,7 @@
     e.style.left = n.x + 'px';
     e.style.top = n.y + 'px';
     e.style.setProperty('--nc', def.color);
+    if (n.type === 'prompt') e.classList.add('in-prompt');
 
     const head = el('div', 'node-head');
     const title = el('span', 'node-title', def.title);
@@ -491,7 +527,7 @@
       const a = portPos(e.from.node, e.from.port, 'out');
       const b = portPos(e.to.node, e.to.port, 'in');
       const d = pathOf(a, b);
-      const color = PORT_COLOR[e.from.port] || '#7aa2f7';
+      const color = PORT_EDGE[e.from.port] || PORT_COLOR[e.from.port] || '#7aa2f7';
       const hit = document.createElementNS(SVGNS, 'path');
       hit.setAttribute('d', d);
       hit.setAttribute('class', 'edge-hit');
@@ -548,7 +584,7 @@
     if (fromDir === toDir) return false;
     const a = fromDir === 'out' ? { n: fromNodeId, p: fromPort } : { n: toNodeId, p: toPort };
     const b = fromDir === 'out' ? { n: toNodeId, p: toPort } : { n: fromNodeId, p: fromPort };
-    if (a.p !== b.p) return false;                       // 端口类型必须一致（文件↔文件）
+    if (a.p !== b.p && a.p !== 'prompt' && b.p !== 'prompt') return false; // 端口类型需一致（白色「提示词」接口可连任意端口）
     if (edges.some((e) => e.from.node === a.n && e.from.port === a.p && e.to.node === b.n && e.to.port === b.p)) return false;
     return true;
   }
@@ -595,7 +631,7 @@
       if (!tempPath) {
         tempPath = document.createElementNS(SVGNS, 'path');
         tempPath.setAttribute('fill', 'none');
-        tempPath.setAttribute('stroke', '#ffffff');
+        tempPath.setAttribute('stroke', cssVar('--drag', '#ffffff'));
         tempPath.setAttribute('stroke-width', '2');
         tempPath.setAttribute('stroke-dasharray', '5 4');
         tempPath.setAttribute('pointer-events', 'none');
@@ -619,7 +655,7 @@
           edges.push({ id: uid('e'), from: from, to: to });
           markDirty();
         } else {
-          setStatus('这条连线不成立：端口类型需一致，且输出要连到输入');
+          setStatus('这条连线不成立：输出要连到输入，且端口类型需一致（白色「提示词」接口可连任意端口）');
         }
       }
       link = null;
@@ -997,12 +1033,18 @@
     e.textContent = text || '';
   }
 
+  function promptTextsOf(src) {
+    return (src.data.items || []).map((t) => String(t || '').trim()).filter(Boolean);
+  }
+
   function collectInputs(n, rt) {
-    const res = { files: [], rules: [], skill: null, save: null, model: null, baseDir: '' };
+    const res = { files: [], rules: [], skill: null, save: null, model: null, promptTexts: [], baseDir: '' };
     edges.forEach((e) => {
       if (e.to.node !== n.id) return;
       const src = nodeById(e.from.node);
       if (!src) return;
+      // 「提示词」节点的内容随任意端口流入任务节点，统一并进提示词
+      if (src.type === 'prompt') { res.promptTexts = res.promptTexts.concat(promptTextsOf(src)); return; }
       const kind = e.to.port;
       if (kind === 'files') {
         if (DEFS[src.type].group === 'task') {
@@ -1108,6 +1150,8 @@
     }
     if (n.type === 'ppt') {
       let prompt = String(n.data.prompt || '').trim();
+      const extra = (inp.promptTexts || []).join('\n\n');
+      if (extra) prompt = prompt ? (extra + '\n\n' + prompt) : extra;
       if (prompt && inp.skill) prompt = '【技能：' + inp.skill + '】\n' + prompt;
       if (prompt) {
         setStatus('PPT 节点：AI 处理中…');
@@ -1123,7 +1167,9 @@
     }
     if (n.type === 'custom') {
       let prompt = String(n.data.prompt || '').trim();
-      if (!prompt) throw new Error('请在「信息内容」里填写提示词');
+      const extra = (inp.promptTexts || []).join('\n\n');
+      if (extra) prompt = prompt ? (extra + '\n\n' + prompt) : extra;
+      if (!prompt) throw new Error('请在「信息内容」里填写提示词，或连接一个「提示词」节点');
       if (inp.rules.length) {
         prompt += '\n\n【替换规则】\n' + inp.rules.map((r) => (r.find || '') + ' → ' + (r.replace || '')).join('\n');
       }
@@ -1246,6 +1292,23 @@
     setStatus('正在停止…');
   });
   nameEl.addEventListener('input', markDirty);
+
+  /* ---------------- 浅色 / 深色显示开关 ---------------- */
+  const themeBtn = document.getElementById('btn-theme');
+  function applyTheme(t) {
+    const light = t === 'light';
+    document.body.classList.toggle('light', light);
+    if (themeBtn) themeBtn.title = light ? '切换为深色显示' : '切换为浅色显示';
+    try { localStorage.setItem('wf-theme', light ? 'light' : 'dark'); } catch (e) { /* ignore */ }
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener('click', () => {
+      applyTheme(document.body.classList.contains('light') ? 'dark' : 'light');
+    });
+    let saved = 'dark';
+    try { saved = localStorage.getItem('wf-theme') || 'dark'; } catch (e) { /* ignore */ }
+    applyTheme(saved);
+  }
 
   const yesBtn = document.getElementById('confirm-yes');
   const noBtn = document.getElementById('confirm-no');
