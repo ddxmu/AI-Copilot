@@ -53,6 +53,11 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
       window.api.openWorkflowWindow();
       return;
     }
+    // 定时任务：打开独立的「定时任务」窗口，主界面不切换面板
+    if (btn.dataset.panel === 'schedule') {
+      window.api.openScheduleWindow();
+      return;
+    }
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'));
     document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
     btn.classList.add('active');

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline';" />
+<title>定时任务</title>
+<link rel="stylesheet" href="schedule.css" />
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="side-head">定时任务</div>
+    <button id="btn-new"><span class="plus">＋</span>新建任务</button>
+    <div id="task-list"></div>
+    <div id="task-empty" class="side-empty hidden">暂无已安排的任务</div>
+    <div class="side-foot">任务在 AI Copilot 运行期间按时执行</div>
+  </aside>
+
+  <main id="main">
+    <!-- 首页：预设任务 -->
+    <section id="view-home">
+      <div class="hero">
+        <div class="clock">
+          <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <circle cx="24" cy="24" r="20" fill="#f1f3f7" stroke="#c9d2e0" stroke-width="2.5"/>
+            <circle cx="24" cy="24" r="15.5" fill="#ffffff" stroke="#dfe5ee" stroke-width="1.5"/>
+            <path d="M24 14v10l7 4" stroke="#2f6fed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h1>安排任务</h1>
+        <p>AI Copilot 可以帮你处理持续性任务，让你不必亲自动手。</p>
+      </div>
+      <div id="preset-grid" class="grid"></div>
+    </section>
+
+    <!-- 新建 / 编辑 -->
+    <section id="view-editor" class="hidden">
+      <div class="editor-wrap">
+        <div class="bubble">
+          <textarea id="ed-prompt" spellcheck="false" placeholder="告诉 AI 这个任务每次要做些什么，例如：每周五下午帮我总结本周完成的工作…"></textarea>
+        </div>
+
+        <div class="frow">
+          <label>名称</label>
+          <input id="ed-name" type="text" maxlength="40" placeholder="给任务起个名字" />
+        </div>
+
+        <div class="frow">
+          <label>重复</label>
+          <div class="frow-ctrl">
+            <select id="ed-repeat">
+              <option value="daily">每天</option>
+              <option value="weekly">每周</option>
+              <option value="monthly">每月</option>
+            </select>
+            <span id="ed-weekdays" class="wd-chips hidden"></span>
+            <span id="ed-day-wrap" class="hidden">每月 <input id="ed-day" type="number" min="1" max="28" value="1" /> 号</span>
+            <input id="ed-time" type="time" value="09:00" />
+          </div>
+        </div>
+
+        <button id="ed-adv-toggle" class="adv-toggle">高级 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+        <div id="ed-adv" class="adv hidden">
+          <div class="arow">
+            <span>在此电脑上运行</span>
+            <label class="switch"><input id="ed-local" type="checkbox" checked /><span class="knob"></span></label>
+          </div>
+          <div class="arow">
+            <span>通知</span>
+            <select id="ed-notify">
+              <option value="important">重要更新</option>
+              <option value="all">全部通知</option>
+              <option value="none">不通知</option>
+            </select>
+          </div>
+          <div class="arow">
+            <span>运行时联网搜索</span>
+            <label class="switch"><input id="ed-web" type="checkbox" checked /><span class="knob"></span></label>
+          </div>
+        </div>
+
+        <div class="btns">
+          <button id="ed-cancel">取消</button>
+          <button id="ed-save" class="primary">创建</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 任务详情 -->
+    <section id="view-detail" class="hidden">
+      <div class="detail-wrap">
+        <div class="d-head">
+          <div class="d-icon" id="d-icon">⏰</div>
+          <div class="d-title">
+            <div class="d-name" id="d-name"></div>
+            <div class="d-sub" id="d-sub"></div>
+          </div>
+          <span class="chip" id="d-state"></span>
+        </div>
+        <div class="d-actions">
+          <button id="d-run">▶ 立即运行</button>
+          <button id="d-toggle">暂停</button>
+          <button id="d-edit">编辑</button>
+          <button id="d-del" class="danger">删除</button>
+        </div>
+        <div class="d-hist-title">运行历史</div>
+        <div id="d-hist"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="schedule.js"></script>
+</body>
+</html>

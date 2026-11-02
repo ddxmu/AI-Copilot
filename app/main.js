@@ -16,6 +16,7 @@ const pdfwm = require('./pdf-watermark');
 const sessionEvents = require('./session-events');
 const petWindow = require('./pet-window');
 const workflowWindow = require('./workflow-window');
+const scheduleWindow = require('./schedule-window');
 
 // 内置 Computer Use MCP 子进程：本进程以 --run-computer-use 启动时，不创建窗口，
 // 直接作为 MCP stdio 服务器运行（模拟鼠标/键盘操作电脑）。由 mcp.js 以
@@ -244,6 +245,8 @@ app.whenReady().then(() => {
   petWindow.applyConfig();
   // 自动化工作流（独立窗口）：注册窗口与项目持久化 IPC
   workflowWindow.init();
+  // 定时任务（独立窗口 + 后台调度器）：到点自动跑 AI 任务
+  scheduleWindow.init();
   // 启动静默检查更新（仅在有新版本时通知渲染进程，不自动下载）
   checkUpdatesInBackground(true);
   // 空闲定时检查更新（每 10 分钟自动查询一次 GitHub）
@@ -2334,6 +2337,7 @@ app.on('before-quit', () => {
   // （表现为 Cmd+Q / 菜单「退出」点了没反应，进程一直不结束）。
   try { petWindow.close(); } catch (e) { /* ignore */ }
   try { workflowWindow.close(); } catch (e) { /* ignore */ }
+  try { scheduleWindow.close(); } catch (e) { /* ignore */ }
   try {
     if (cursorOverlay && !cursorOverlay.isDestroyed()) cursorOverlay.destroy();
     cursorOverlay = null;

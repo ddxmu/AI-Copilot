@@ -179,6 +179,12 @@ contextBridge.exposeInMainWorld('api', {
   onWfAiText: (cb) => ipcRenderer.on('wf-ai-text', (_e, t) => cb(t)),
   onWfConfirm: (cb) => ipcRenderer.on('wf-confirm', (_e, d) => cb(d)),
   onWfAskUser: (cb) => ipcRenderer.on('wf-ask-user', (_e, d) => cb(d)),
+  // 定时任务（独立窗口）：任务持久化 + 立即运行
+  openScheduleWindow: () => ipcRenderer.invoke('schedule-open'),
+  scheduleTasksGet: () => ipcRenderer.invoke('schedule-tasks-get'),
+  scheduleTasksSave: (tasks) => ipcRenderer.invoke('schedule-tasks-save', tasks),
+  scheduleRunNow: (id) => ipcRenderer.invoke('schedule-run-now', { id }),
+  onScheduleChanged: (cb) => ipcRenderer.on('schedule-changed', () => cb()),
   // Computer Use 光标遮罩事件
   cursorMove: (cb) => ipcRenderer.on('cursor-move', (_e, d) => cb(d)),
   cursorAction: (cb) => ipcRenderer.on('cursor-action', (_e, d) => cb(d)),
