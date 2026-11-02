@@ -90,6 +90,16 @@ body {
 #btn-theme svg { width: 15px; height: 15px; }
 #btn-theme .ic-sun { display: none; }
 #btn-theme .ic-moon { display: block; }
+/* 默认授权开关（顶栏左上，项目名左侧） */
+#btn-auto-allow {
+  height: 28px; flex: none; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px;
+  padding: 0 10px; margin-right: 10px;
+  border: 1px solid var(--line); background: var(--input); color: var(--muted);
+}
+#btn-auto-allow:hover { color: var(--text); border-color: var(--accent); }
+#btn-auto-allow.on {
+  color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600;
+}
 body.light #btn-theme .ic-sun { display: block; }
 body.light #btn-theme .ic-moon { display: none; }
 /* 浅色主题下「＋新建」主按钮加深，避免太淡 */

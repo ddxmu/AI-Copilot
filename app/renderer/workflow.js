@@ -820,6 +820,12 @@
 
   function showConfirm(data) {
     if (!confirmDlg) return;
+    // 「默认授权」开关打开时自动允许，不再弹框
+    if (autoAllow) {
+      setStatus('已默认授权：' + (data.title || '确认'));
+      if (api.wfConfirmReply) api.wfConfirmReply({ runId: data.runId, allow: true });
+      return;
+    }
     pendingConfirm = { runId: data.runId };
     confirmTitleEl.textContent = data.title || '授权确认';
     confirmDescEl.textContent = data.desc || '';
@@ -1101,19 +1107,17 @@
       if (e.to.node !== n.id) return;
       const src = nodeById(e.from.node);
       if (!src) return;
-      // 「提示词」节点：文本并入下游提示词；白色接口把收到的 模型/保存位置/文件 原样透传给下游；
-      // 提示词节点自身已执行过 AI 时，下游优先拿它的结果文件
+      // 「提示词」节点：文本并入下游提示词；白色接口把收到的 模型/保存位置/文件 原样透传给下游。
+      // 注意：提示词节点自己执行 AI 的结果文件不注入下游文件列表（AI 只跑一遍，
+      // 下游任务继续用它自己的来源/规则处理原文件）
       if (src.type === 'prompt') {
-        const done = rt.get(src.id);
         const up = promptNodeCollect(src, new Set());
         res.promptTexts = res.promptTexts.concat(up.texts);
         if (up.model && !res.model) res.model = up.model;
         if (up.save && !res.save) res.save = up.save;
-        if (done && (done.files || []).length) {
-          res.files = res.files.concat(done.files);
-          if (!res.baseDir) res.baseDir = done.baseDir || up.baseDir || '';
-        } else if (up.files.length) {
+        if (up.files.length) {
           res.files = res.files.concat(up.files);
+          if (!res.baseDir) res.baseDir = up.baseDir || '';
         }
         if (up.baseDir && !res.baseDir) res.baseDir = up.baseDir;
         return;
@@ -1419,6 +1423,26 @@
     setStatus('正在停止…');
   });
   nameEl.addEventListener('input', markDirty);
+
+  /* ---------------- 默认授权开关（左上，开了之后 AI 授权自动允许） ---------------- */
+  let autoAllow = false;
+  try { autoAllow = localStorage.getItem('wf-auto-allow') === '1'; } catch (e) { /* ignore */ }
+  const autoAllowBtn = document.getElementById('btn-auto-allow');
+  function applyAutoAllow() {
+    if (autoAllowBtn) {
+      autoAllowBtn.textContent = '默认授权：' + (autoAllow ? '开' : '关');
+      autoAllowBtn.classList.toggle('on', autoAllow);
+    }
+  }
+  if (autoAllowBtn) {
+    autoAllowBtn.addEventListener('click', () => {
+      autoAllow = !autoAllow;
+      try { localStorage.setItem('wf-auto-allow', autoAllow ? '1' : '0'); } catch (e) { /* ignore */ }
+      applyAutoAllow();
+      setStatus(autoAllow ? '已开启默认授权：AI 的授权请求将自动允许' : '已关闭默认授权：AI 授权需要逐次确认');
+    });
+    applyAutoAllow();
+  }
 
   /* ---------------- 浅色 / 深色显示开关 ---------------- */
   const themeBtn = document.getElementById('btn-theme');
