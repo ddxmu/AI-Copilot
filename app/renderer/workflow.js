@@ -1107,17 +1107,19 @@
       if (e.to.node !== n.id) return;
       const src = nodeById(e.from.node);
       if (!src) return;
-      // 「提示词」节点：文本并入下游提示词；白色接口把收到的 模型/保存位置/文件 原样透传给下游。
-      // 注意：提示词节点自己执行 AI 的结果文件不注入下游文件列表（AI 只跑一遍，
-      // 下游任务继续用它自己的来源/规则处理原文件）
+      // 「提示词」节点：文本并入下游提示词；白色接口把收到的 模型/保存位置/文件 原样透传给下游；
+      // 提示词节点自身已执行过 AI 时，下游优先拿它的结果文件
       if (src.type === 'prompt') {
+        const done = rt.get(src.id);
         const up = promptNodeCollect(src, new Set());
         res.promptTexts = res.promptTexts.concat(up.texts);
         if (up.model && !res.model) res.model = up.model;
         if (up.save && !res.save) res.save = up.save;
-        if (up.files.length) {
+        if (done && (done.files || []).length) {
+          res.files = res.files.concat(done.files);
+          if (!res.baseDir) res.baseDir = done.baseDir || up.baseDir || '';
+        } else if (up.files.length) {
           res.files = res.files.concat(up.files);
-          if (!res.baseDir) res.baseDir = up.baseDir || '';
         }
         if (up.baseDir && !res.baseDir) res.baseDir = up.baseDir;
         return;
