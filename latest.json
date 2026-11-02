@@ -1,16 +1,16 @@
 {
-  "version": "0.12.11",
-  "notes": "### 修复：工作流「提示词」节点接口透传（AI 模型接提示词不生效）\n\n- **问题**：「AI 模型选择 → 提示词 → 任务节点」这种接法，模型和提示内容在提示词节点处断掉了，下游任务收不到（AI 不按提示词工作）；直接把模型接到任务节点则正常。\n- **修复**：提示词节点两端白色接口现在真正连通——左口收到的一切（AI 模型、保存位置、文件）会**原样透传**到右口下游任务节点；提示内容照旧并入下游任务的 AI 提示词；多个提示词节点串接（提示词 → 提示词）内容会合并，不会循环卡死。\n- 也就是说「AI 模型选择 → 提示词 → 模块自定义 / PPT 编写」和直连效果完全一致。",
-  "pubDate": "2026-11-02T11:41:27+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.11/AI.Copilot-0.12.11-arm64.dmg",
-  "sha256": "a5a6602b404552403f1040ce6b736b7f5389402cb750771df350a9a498c369aa",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.11/AI.Copilot-0.12.11.zip",
-  "patchSha256": "9fdf759ca42d2c90ce8c4f49274cace7ec69d5920b1fc5a1bfaee39549644454",
+  "version": "0.12.12",
+  "notes": "### 修复：浅色主题下「＋ 新建」按钮颜色太淡\n- 浅色主题（白色界面）时左侧「＋ 新建」主按钮改为深蓝字 + 浅蓝底 + 明显描边，悬停更深；深色主题样式不变。",
+  "pubDate": "2026-11-02T11:53:28+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.12/AI.Copilot-0.12.12-arm64.dmg",
+  "sha256": "71811287c1b087a76a78ed431d9242e1f29a5710cb2b82120d19f56ad8fbb515",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.12/AI.Copilot-0.12.12.zip",
+  "patchSha256": "68b102de7463a39e77d26660f5c1034907da3534a7f3e4fe474918bc22d9df5b",
   "deltas": [
     {
-      "from": "0.12.10",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.11/AI.Copilot-0.12.11.zip",
-      "sha256": "9fdf759ca42d2c90ce8c4f49274cace7ec69d5920b1fc5a1bfaee39549644454"
+      "from": "0.12.11",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.12/AI.Copilot-0.12.12.zip",
+      "sha256": "68b102de7463a39e77d26660f5c1034907da3534a7f3e4fe474918bc22d9df5b"
     }
   ]
 }
