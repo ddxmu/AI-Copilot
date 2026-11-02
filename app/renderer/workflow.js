@@ -360,7 +360,7 @@
         box.appendChild(item);
       });
       box.appendChild(el('div', 'nf-label',
-        '用白色接口连到任务节点（任何端口都能连），内容会并入该任务的 AI 提示词'));
+        '运行时本节点按提示内容调用 AI（左口可接 AI 模型 / 文件 / 保存位置），结果从右口传给下游任务节点'));
       return;
     }
 
@@ -1101,13 +1101,20 @@
       if (e.to.node !== n.id) return;
       const src = nodeById(e.from.node);
       if (!src) return;
-      // 「提示词」节点：文本并入下游提示词；白色接口把收到的 模型/保存位置/文件 原样透传给下游
+      // 「提示词」节点：文本并入下游提示词；白色接口把收到的 模型/保存位置/文件 原样透传给下游；
+      // 提示词节点自身已执行过 AI 时，下游优先拿它的结果文件
       if (src.type === 'prompt') {
+        const done = rt.get(src.id);
         const up = promptNodeCollect(src, new Set());
         res.promptTexts = res.promptTexts.concat(up.texts);
         if (up.model && !res.model) res.model = up.model;
         if (up.save && !res.save) res.save = up.save;
-        if (up.files.length) res.files = res.files.concat(up.files);
+        if (done && (done.files || []).length) {
+          res.files = res.files.concat(done.files);
+          if (!res.baseDir) res.baseDir = done.baseDir || up.baseDir || '';
+        } else if (up.files.length) {
+          res.files = res.files.concat(up.files);
+        }
         if (up.baseDir && !res.baseDir) res.baseDir = up.baseDir;
         return;
       }
@@ -1182,6 +1189,45 @@
         baseDir: toDir ? outputDir : baseDir,
         note: '完成 ' + (s.done || 0) + '/' + (s.total || inp.files.length),
       };
+    }
+
+    /* 「提示词」节点：本身会执行 AI —— 左口收 AI 模型 / 文件 / 保存位置，
+     * 运行时按提示内容真跑 AI，结果写成文件从右口传给下游任务节点。 */
+    if (n.type === 'prompt') {
+      const g = promptNodeCollect(n, new Set());
+      const aiPrompt = g.texts.join('\n\n');
+      if (!aiPrompt) throw new Error('请在「提示词」节点里点「＋ 添加提示内容」填写提示内容');
+      setStatus('提示词：AI 处理中…');
+      const rid = 'wf-' + n.id + '-' + Date.now();
+      curRunId = rid;
+      let r = null;
+      try {
+        r = await api.wfAiRun({
+          profileId: g.model ? g.model.profileId : '',
+          model: g.model ? g.model.model : '',
+          prompt: aiPrompt,
+          files: (g.files || []).slice(0, 20),
+          runId: rid,
+          interactive: true,
+        });
+      } finally {
+        curRunId = null;
+        if (pendingConfirm) closeConfirm(false);
+        if (pendingAsk) closeAsk(false);
+      }
+      if (stopFlag) return { files: [], baseDir: '', note: '已停止' };
+      if (!r || !r.ok) throw new Error((r && r.error) || 'AI 调用失败');
+      const text = String((r && r.text) || '').trim();
+      if (!text) throw new Error('AI 没有返回任何内容');
+      let dir;
+      if (g.save && g.save.dir) dir = String(g.save.dir).replace(/\/+$/, '');
+      else if (g.files.length) dir = dirOf(g.files[0]) + '/提示词输出';
+      else throw new Error('请连接「保存位置」或「来源」节点，用于存放 AI 结果');
+      const fp = dir + '/提示词-' + stamp() + '.md';
+      const w = await api.wfWriteText({ filePath: fp, content: text });
+      if (!w || !w.ok) throw new Error((w && w.error) || '结果写入失败');
+      const outPath = (w && w.filePath) || fp;
+      return { files: [outPath], baseDir: dir, note: '已生成 ' + outPath.split('/').pop() };
     }
 
     if (!inp.files.length) {
@@ -1280,7 +1326,7 @@
 
   async function runWorkflow() {
     if (running) return;
-    const tasks = nodes.filter((n) => DEFS[n.type].group === 'task');
+    const tasks = nodes.filter((n) => DEFS[n.type].group === 'task' || n.type === 'prompt');
     if (!tasks.length) {
       setStatus('请先添加一个任务节点（替换文件 / 文件名修改 / 格式转换 / PDF去水印 / 文件自动化 / PPT 编写 / 模块自定义）');
       return;
