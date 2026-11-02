@@ -28,7 +28,7 @@
     output:     { title: '保存位置',    group: 'input', color: '#2a9c5c', ins: [], outs: ['save'] },
     aimodel:    { title: 'AI 模型选择', group: 'input', color: '#c2435f', ins: [], outs: ['model'] },
     // 提示词：白色万能接口（输入/输出各一个），可连任意颜色的端口，内容会并入 AI 任务提示词
-    prompt:     { title: '提示词',      group: 'input', color: '#eef1f5', ins: ['model', 'prompt'], outs: ['prompt'] },
+    prompt:     { title: '提示词',      group: 'input', color: '#eef1f5', ins: ['prompt'], outs: ['prompt'] },
 
     replace:    { title: '替换文件',    group: 'task', color: '#2f6fed', ins: ['files', 'rules', 'skill', 'model', 'save'], outs: ['files'] },
     rename:     { title: '文件名修改',  group: 'task', color: '#2f6fed', ins: ['files', 'rules', 'model', 'save'], outs: ['files'] },
@@ -1197,6 +1197,10 @@
       const g = promptNodeCollect(n, new Set());
       const aiPrompt = g.texts.join('\n\n');
       if (!aiPrompt) throw new Error('请在「提示词」节点里点「＋ 添加提示内容」填写提示内容');
+      let dir;
+      if (g.save && g.save.dir) dir = String(g.save.dir).replace(/\/+$/, '');
+      else if (g.files.length) dir = dirOf(g.files[0]) + '/提示词输出';
+      else throw new Error('请连接「保存位置」或「来源」节点，用于存放 AI 结果');
       setStatus('提示词：AI 处理中…');
       const rid = 'wf-' + n.id + '-' + Date.now();
       curRunId = rid;
@@ -1219,10 +1223,6 @@
       if (!r || !r.ok) throw new Error((r && r.error) || 'AI 调用失败');
       const text = String((r && r.text) || '').trim();
       if (!text) throw new Error('AI 没有返回任何内容');
-      let dir;
-      if (g.save && g.save.dir) dir = String(g.save.dir).replace(/\/+$/, '');
-      else if (g.files.length) dir = dirOf(g.files[0]) + '/提示词输出';
-      else throw new Error('请连接「保存位置」或「来源」节点，用于存放 AI 结果');
       const fp = dir + '/提示词-' + stamp() + '.md';
       const w = await api.wfWriteText({ filePath: fp, content: text });
       if (!w || !w.ok) throw new Error((w && w.error) || '结果写入失败');
@@ -1358,7 +1358,13 @@
       } catch (err) {
         setEdgeFlowByTarget(n.id, false);
         setNodeStatus(n.id, 'error', err && err.message ? err.message : String(err));
-        setStatus('「' + DEFS[n.type].title + '」执行失败：' + (err && err.message ? err.message : err));
+        const msg = '「' + DEFS[n.type].title + '」执行失败：' + (err && err.message ? err.message : err);
+        if (n.type === 'prompt') {
+          // 「提示词」节点失败不拦截工作流：标记错误后继续执行其它任务
+          setStatus(msg + '（已跳过，继续执行其它任务）');
+          continue;
+        }
+        setStatus(msg);
         break;
       }
     }
