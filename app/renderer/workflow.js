@@ -76,6 +76,7 @@
   let selection = null;      // { kind: 'node' | 'edge', id }
   let running = false;
   let stopFlag = false;
+  const flowEdges = new Set(); // 正在播数据流动画的连线 id
   let skillCache = null;
   let modelCache = null;
   let curRunId = null;       // 当前正在跑的 AI 调用 id（点「停止」时用它中断）
@@ -542,9 +543,34 @@
       vis.setAttribute('fill', 'none');
       vis.setAttribute('stroke-linecap', 'round');
       vis.setAttribute('pointer-events', 'none');
+      // 数据流动画层：任务运行时点亮（沿连线方向流动的虚线）
+      const flow = document.createElementNS(SVGNS, 'path');
+      flow.setAttribute('d', d);
+      flow.setAttribute('class', 'edge-flow' + (flowEdges.has(e.id) ? ' on' : ''));
+      flow.setAttribute('stroke', color);
+      flow.setAttribute('stroke-width', '2.8');
+      flow.setAttribute('fill', 'none');
+      flow.setAttribute('stroke-linecap', 'round');
+      flow.setAttribute('pointer-events', 'none');
+      flow.dataset.id = e.id;
       svgEl.appendChild(vis);
+      svgEl.appendChild(flow);
       svgEl.appendChild(hit);
     });
+  }
+
+  // 点亮 / 熄灭流入某节点的连线动画（数据流动方向 = 源 → 目标）
+  function setEdgeFlowByTarget(nodeId, on) {
+    edges.forEach((e) => {
+      if (e.to.node !== nodeId) return;
+      if (on) flowEdges.add(e.id); else flowEdges.delete(e.id);
+      const p = svgEl.querySelector('.edge-flow[data-id="' + e.id + '"]');
+      if (p) p.classList.toggle('on', on);
+    });
+  }
+  function clearEdgeFlowAll() {
+    flowEdges.clear();
+    svgEl.querySelectorAll('.edge-flow.on').forEach((p) => p.classList.remove('on'));
   }
 
   /* ---------------- 选择 / 增删 ---------------- */
@@ -1226,6 +1252,7 @@
     runBtn.disabled = true;
     stopBtn.classList.remove('hidden');
     nodes.forEach((n) => setNodeStatus(n.id, '', ''));
+    clearEdgeFlowAll();
     setProgress(0);
 
     const rt = new Map();
@@ -1233,19 +1260,23 @@
     for (const n of order) {
       if (stopFlag) { setStatus('已停止'); break; }
       setNodeStatus(n.id, 'running', '运行中…');
+      setEdgeFlowByTarget(n.id, true); // 点亮流入该节点的连线：数据正在流向它
       setStatus('正在执行：' + DEFS[n.type].title);
       try {
         const out = await execTask(n, rt);
         rt.set(n.id, out);
         setNodeStatus(n.id, 'done', out.note);
         okCount++;
+        setEdgeFlowByTarget(n.id, false);
         setStatus('「' + DEFS[n.type].title + '」' + out.note);
       } catch (err) {
+        setEdgeFlowByTarget(n.id, false);
         setNodeStatus(n.id, 'error', err && err.message ? err.message : String(err));
         setStatus('「' + DEFS[n.type].title + '」执行失败：' + (err && err.message ? err.message : err));
         break;
       }
     }
+    clearEdgeFlowAll();
     setProgress(100);
     setTimeout(() => setProgress(0), 1200);
     running = false;

@@ -124,6 +124,17 @@ body.light #btn-theme .ic-moon { display: none; }
 #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 #edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 #edges .edge-hit { pointer-events: stroke; cursor: pointer; }
+/* 数据流动画层：运行中沿连线方向流动的虚线（默认隐藏） */
+#edges .edge-flow { opacity: 0; }
+#edges .edge-flow.on {
+  opacity: 1;
+  stroke-dasharray: 5 9;
+  animation: wf-edge-flow .5s linear infinite;
+}
+@keyframes wf-edge-flow {
+  from { stroke-dashoffset: 28; }
+  to   { stroke-dashoffset: 0; }
+}
 #nodes { position: absolute; left: 0; top: 0; }
 
 /* 节点 */
