@@ -1200,7 +1200,11 @@
       let dir;
       if (g.save && g.save.dir) dir = String(g.save.dir).replace(/\/+$/, '');
       else if (g.files.length) dir = dirOf(g.files[0]) + '/提示词输出';
-      else throw new Error('请连接「保存位置」或「来源」节点，用于存放 AI 结果');
+      else {
+        // 未连「保存位置」/「来源」：优先用画布上任一「保存位置」节点的目录，否则落到桌面「提示词输出」
+        const outNode = nodes.find((m) => m.type === 'output' && m.data && m.data.mode === 'output' && m.data.dir);
+        dir = outNode ? String(outNode.data.dir).replace(/\/+$/, '') + '/提示词输出' : '~/Desktop/提示词输出';
+      }
       setStatus('提示词：AI 处理中…');
       const rid = 'wf-' + n.id + '-' + Date.now();
       curRunId = rid;

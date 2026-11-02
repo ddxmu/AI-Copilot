@@ -7,6 +7,7 @@
 const { BrowserWindow, screen, ipcMain, dialog, app } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 let win = null;
 
@@ -130,8 +131,10 @@ function init() {
   // 模块自定义节点：把 AI 产出的文本写成文件（结果作为该节点的输出文件）
   ipcMain.handle('wf-write-text', async (_e, { filePath, content }) => {
     try {
-      const p = String(filePath || '');
+      let p = String(filePath || '');
       if (!p) return { ok: false, error: '缺少输出路径' };
+      if (p === '~') p = os.homedir();
+      else if (p.startsWith('~/')) p = path.join(os.homedir(), p.slice(2));
       fs.mkdirSync(path.dirname(p), { recursive: true });
       fs.writeFileSync(p, String(content || ''), 'utf8');
       return { ok: true, filePath: p };
