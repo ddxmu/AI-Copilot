@@ -1,16 +1,16 @@
 {
-  "version": "0.12.15",
-  "notes": "### 修复：「提示词」只接 AI 模型时 AI 不工作\n- 「提示词」节点未连「保存位置」/「来源」时不再报错拦住，改为自动落盘：优先用画布上任一「保存位置」节点的目录（建「提示词输出」子文件夹），没有则保存到桌面「提示词输出」文件夹——AI 实际执行。\n- 输出路径支持 `~/` 开头（自动展开为家目录）。",
-  "pubDate": "2026-11-02T18:35:53+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.15/AI.Copilot-0.12.15-arm64.dmg",
-  "sha256": "d71d481af14b429466cc542f3c020bd4094e550c098a3cefe3b39b73a8322d0f",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.15/AI.Copilot-0.12.15.zip",
-  "patchSha256": "2697d222d6bb95b8172633575f73cd17352d13a5add10ead851acdbf12a95f4d",
+  "version": "0.12.16",
+  "notes": "### 新增：「默认授权」开关（顶栏左上）\n- 顶栏项目名左侧新增「默认授权：关/开」按钮。开启后 AI 的授权请求（写文件 / 执行命令等）自动允许，不再弹确认框；关闭恢复逐次确认。选择会记住。\n\n### 修复：接 AI + 提示词后 AI 结果被下游再处理一遍\n- 「提示词」节点执行的 AI 结果文件不再注入下游任务的文件列表（此前替换文件会多处理一个 AI 输出文件，看起来像 AI 又跑了一遍）。提示词内容 / AI 模型 / 保存位置仍正常透传，下游任务继续用它自己的来源与规则处理原文件。",
+  "pubDate": "2026-11-02T19:08:51+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.16/AI.Copilot-0.12.16-arm64.dmg",
+  "sha256": "85b40f7b9d94fa34623fd1aed74cc41d9bac571070abedf5154d4062eb7bc902",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.16/AI.Copilot-0.12.16.zip",
+  "patchSha256": "3b114e2a49b57fb3403172b529e419ee4f39ef9feed33b6fc878096dca1bba1c",
   "deltas": [
     {
-      "from": "0.12.14",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.15/AI.Copilot-0.12.15.zip",
-      "sha256": "2697d222d6bb95b8172633575f73cd17352d13a5add10ead851acdbf12a95f4d"
+      "from": "0.12.15",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.16/AI.Copilot-0.12.16.zip",
+      "sha256": "3b114e2a49b57fb3403172b529e419ee4f39ef9feed33b6fc878096dca1bba1c"
     }
   ]
 }
