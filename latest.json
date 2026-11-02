@@ -1,16 +1,16 @@
 {
-  "version": "0.12.14",
-  "notes": "### 修复：「提示词」接入后其它任务不执行 / 连线无流动效果\n- 删除「提示词」节点左侧的红色「AI 模型选择」接口（恢复单个白色提示词口；AI 模型从白色口接入仍可透传）。\n- 「提示词」节点执行失败（如没连保存位置/来源）不再中断整个工作流：标记该节点错误并跳过，继续执行其它任务，连线流动动画正常。\n- 「没连保存位置/来源」的检查提前到调用 AI 之前，秒级报错不浪费 AI 调用。",
-  "pubDate": "2026-11-02T12:36:09+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.14/AI.Copilot-0.12.14-arm64.dmg",
-  "sha256": "91841df8d2ab8e947df9028852d68c399a42c892c6f101675ef5f1682a82ca26",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.14/AI.Copilot-0.12.14.zip",
-  "patchSha256": "f0858f8d80d38295005d2f80cb9feabd2a93ff4a56c933bf0a0de2576c0afd8d",
+  "version": "0.12.15",
+  "notes": "### 修复：「提示词」只接 AI 模型时 AI 不工作\n- 「提示词」节点未连「保存位置」/「来源」时不再报错拦住，改为自动落盘：优先用画布上任一「保存位置」节点的目录（建「提示词输出」子文件夹），没有则保存到桌面「提示词输出」文件夹——AI 实际执行。\n- 输出路径支持 `~/` 开头（自动展开为家目录）。",
+  "pubDate": "2026-11-02T18:35:53+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.15/AI.Copilot-0.12.15-arm64.dmg",
+  "sha256": "d71d481af14b429466cc542f3c020bd4094e550c098a3cefe3b39b73a8322d0f",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.15/AI.Copilot-0.12.15.zip",
+  "patchSha256": "2697d222d6bb95b8172633575f73cd17352d13a5add10ead851acdbf12a95f4d",
   "deltas": [
     {
-      "from": "0.12.13",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.14/AI.Copilot-0.12.14.zip",
-      "sha256": "f0858f8d80d38295005d2f80cb9feabd2a93ff4a56c933bf0a0de2576c0afd8d"
+      "from": "0.12.14",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.15/AI.Copilot-0.12.15.zip",
+      "sha256": "2697d222d6bb95b8172633575f73cd17352d13a5add10ead851acdbf12a95f4d"
     }
   ]
 }
