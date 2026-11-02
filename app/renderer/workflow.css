@@ -92,6 +92,14 @@ body {
 #btn-theme .ic-moon { display: block; }
 body.light #btn-theme .ic-sun { display: block; }
 body.light #btn-theme .ic-moon { display: none; }
+/* 浅色主题下「＋新建」主按钮加深，避免太淡 */
+body.light .rail-btn.primary {
+  color: #1d5edb;
+  background: #dce7fd;
+  border-color: #9dbdf6;
+  font-weight: 600;
+}
+body.light .rail-btn.primary:hover { background: #c8d9fb; color: #1448a8; border-color: #7fa5f0; }
 
 /* ---------- 主体 ---------- */
 #main { flex: 1; display: flex; min-height: 0; }
