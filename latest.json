@@ -1,16 +1,16 @@
 {
-  "version": "0.12.12",
-  "notes": "### 修复：浅色主题下「＋ 新建」按钮颜色太淡\n- 浅色主题（白色界面）时左侧「＋ 新建」主按钮改为深蓝字 + 浅蓝底 + 明显描边，悬停更深；深色主题样式不变。",
-  "pubDate": "2026-11-02T11:53:28+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.12/AI.Copilot-0.12.12-arm64.dmg",
-  "sha256": "71811287c1b087a76a78ed431d9242e1f29a5710cb2b82120d19f56ad8fbb515",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.12/AI.Copilot-0.12.12.zip",
-  "patchSha256": "68b102de7463a39e77d26660f5c1034907da3534a7f3e4fe474918bc22d9df5b",
+  "version": "0.12.13",
+  "notes": "### 新增：「提示词」节点左侧加红色「AI 模型选择」输入接口\n- 「提示词」节点左侧新增红色 model 接口（与任务节点的 AI 模型选择一致），可直接连「AI 模型选择」参数节点；原有白色提示词接口不变。\n- 连接后模型沿提示词节点透传给下游任务节点（引擎此前已支持，本次补齐入口）。",
+  "pubDate": "2026-11-02T12:06:17+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.13/AI.Copilot-0.12.13-arm64.dmg",
+  "sha256": "d7da48e680d013db281428c555bb78dc0e3c0644ee5f83db46fa0056450cd3e8",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.13/AI.Copilot-0.12.13.zip",
+  "patchSha256": "d013703220cacb93bf4d8009bdd7e255d8947682c7f77d3cacf754e129d7f44d",
   "deltas": [
     {
-      "from": "0.12.11",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.12/AI.Copilot-0.12.12.zip",
-      "sha256": "68b102de7463a39e77d26660f5c1034907da3534a7f3e4fe474918bc22d9df5b"
+      "from": "0.12.12",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.13/AI.Copilot-0.12.13.zip",
+      "sha256": "d013703220cacb93bf4d8009bdd7e255d8947682c7f77d3cacf754e129d7f44d"
     }
   ]
 }
