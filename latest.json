@@ -1,16 +1,16 @@
 {
-  "version": "0.12.10",
-  "notes": "### 新增：工作流连线「数据流」运行动画\n\n- 点「▶ 运行」后，正在执行的任务节点的**所有连线**上会出现沿连线方向流动的虚线动画（从来源节点流向当前节点），运行结束自动熄灭；多任务工作流里能直观看出数据正在流向哪一步、执行到哪个节点。\n- 停止 / 出错时动画同步熄灭；深浅两套主题下都清晰可见。",
-  "pubDate": "2026-11-02T11:21:05+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.10/AI.Copilot-0.12.10-arm64.dmg",
-  "sha256": "d7ae94befd9f7f7a4a5155956498c8ddcc821e898618675b50c88eb18c78786c",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.10/AI.Copilot-0.12.10.zip",
-  "patchSha256": "6786ba77b440be4c083dbcfb9f35c92abb84924a114d212fa80ad05cc984eda5",
+  "version": "0.12.11",
+  "notes": "### 修复：工作流「提示词」节点接口透传（AI 模型接提示词不生效）\n\n- **问题**：「AI 模型选择 → 提示词 → 任务节点」这种接法，模型和提示内容在提示词节点处断掉了，下游任务收不到（AI 不按提示词工作）；直接把模型接到任务节点则正常。\n- **修复**：提示词节点两端白色接口现在真正连通——左口收到的一切（AI 模型、保存位置、文件）会**原样透传**到右口下游任务节点；提示内容照旧并入下游任务的 AI 提示词；多个提示词节点串接（提示词 → 提示词）内容会合并，不会循环卡死。\n- 也就是说「AI 模型选择 → 提示词 → 模块自定义 / PPT 编写」和直连效果完全一致。",
+  "pubDate": "2026-11-02T11:41:27+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.11/AI.Copilot-0.12.11-arm64.dmg",
+  "sha256": "a5a6602b404552403f1040ce6b736b7f5389402cb750771df350a9a498c369aa",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.11/AI.Copilot-0.12.11.zip",
+  "patchSha256": "9fdf759ca42d2c90ce8c4f49274cace7ec69d5920b1fc5a1bfaee39549644454",
   "deltas": [
     {
-      "from": "0.12.9",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.10/AI.Copilot-0.12.10.zip",
-      "sha256": "6786ba77b440be4c083dbcfb9f35c92abb84924a114d212fa80ad05cc984eda5"
+      "from": "0.12.10",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.11/AI.Copilot-0.12.11.zip",
+      "sha256": "9fdf759ca42d2c90ce8c4f49274cace7ec69d5920b1fc5a1bfaee39549644454"
     }
   ]
 }
