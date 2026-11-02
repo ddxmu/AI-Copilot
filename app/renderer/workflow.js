@@ -1063,14 +1063,54 @@
     return (src.data.items || []).map((t) => String(t || '').trim()).filter(Boolean);
   }
 
+  // 汇总流入「提示词」节点的内容：自身提示内容 + 上游提示词节点链的文本，
+  // 以及白色接口透传进来的 模型 / 保存位置 / 文件（左口收什么，右口就能出什么）
+  function promptNodeCollect(src, seen) {
+    const out = { texts: [], model: null, save: null, files: [], baseDir: '' };
+    if (!src || seen.has(src.id)) return out;
+    seen.add(src.id);
+    out.texts = out.texts.concat(promptTextsOf(src));
+    edges.forEach((e) => {
+      if (e.to.node !== src.id) return;
+      const up = nodeById(e.from.node);
+      if (!up) return;
+      if (up.type === 'prompt') {
+        const sub = promptNodeCollect(up, seen);
+        out.texts = out.texts.concat(sub.texts);
+        if (sub.model && !out.model) out.model = sub.model;
+        if (sub.save && !out.save) out.save = sub.save;
+        out.files = out.files.concat(sub.files);
+        if (sub.baseDir && !out.baseDir) out.baseDir = sub.baseDir;
+        return;
+      }
+      if (e.to.port === 'model' || up.type === 'aimodel') {
+        if (!out.model) out.model = { profileId: up.data.profileId || '', model: up.data.model || '', label: up.data.label || '' };
+      } else if (e.to.port === 'save' || up.type === 'output') {
+        if (!out.save) out.save = { mode: up.data.mode || 'overwrite', dir: up.data.dir || '', keep: up.data.keep !== false };
+      } else if (e.to.port === 'files' || up.type === 'source') {
+        out.files = out.files.concat(up.data.files || []);
+        if (!out.baseDir && up.data.folder) out.baseDir = up.data.folder;
+      }
+    });
+    return out;
+  }
+
   function collectInputs(n, rt) {
     const res = { files: [], rules: [], skill: null, save: null, model: null, promptTexts: [], baseDir: '' };
     edges.forEach((e) => {
       if (e.to.node !== n.id) return;
       const src = nodeById(e.from.node);
       if (!src) return;
-      // 「提示词」节点的内容随任意端口流入任务节点，统一并进提示词
-      if (src.type === 'prompt') { res.promptTexts = res.promptTexts.concat(promptTextsOf(src)); return; }
+      // 「提示词」节点：文本并入下游提示词；白色接口把收到的 模型/保存位置/文件 原样透传给下游
+      if (src.type === 'prompt') {
+        const up = promptNodeCollect(src, new Set());
+        res.promptTexts = res.promptTexts.concat(up.texts);
+        if (up.model && !res.model) res.model = up.model;
+        if (up.save && !res.save) res.save = up.save;
+        if (up.files.length) res.files = res.files.concat(up.files);
+        if (up.baseDir && !res.baseDir) res.baseDir = up.baseDir;
+        return;
+      }
       const kind = e.to.port;
       if (kind === 'files') {
         if (DEFS[src.type].group === 'task') {
