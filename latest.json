@@ -1,16 +1,16 @@
 {
-  "version": "0.12.16",
-  "notes": "### 新增：「默认授权」开关（顶栏左上）\n- 顶栏项目名左侧新增「默认授权：关/开」按钮。开启后 AI 的授权请求（写文件 / 执行命令等）自动允许，不再弹确认框；关闭恢复逐次确认。选择会记住。\n\n### 修复：接 AI + 提示词后 AI 结果被下游再处理一遍\n- 「提示词」节点执行的 AI 结果文件不再注入下游任务的文件列表（此前替换文件会多处理一个 AI 输出文件，看起来像 AI 又跑了一遍）。提示词内容 / AI 模型 / 保存位置仍正常透传，下游任务继续用它自己的来源与规则处理原文件。",
-  "pubDate": "2026-11-02T19:08:51+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.16/AI.Copilot-0.12.16-arm64.dmg",
-  "sha256": "85b40f7b9d94fa34623fd1aed74cc41d9bac571070abedf5154d4062eb7bc902",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.16/AI.Copilot-0.12.16.zip",
-  "patchSha256": "3b114e2a49b57fb3403172b529e419ee4f39ef9feed33b6fc878096dca1bba1c",
+  "version": "0.12.17",
+  "notes": "### 调整：「提示词」节点的处理方式回退到 v0.12.15\n- 恢复「提示词」节点执行 AI 的结果文件传给下游任务的处理方式（撤回 v0.12.16 中「结果文件不注入下游」的改动）。提示词文本 / AI 模型 / 保存位置照常透传。\n\n### 保留：「默认授权」开关（顶栏左上）\n- 顶栏左上「默认授权：关/开」按钮保持不变：开启后 AI 的授权请求自动允许，不再弹确认框；选择会记住。",
+  "pubDate": "2026-11-02T19:35:13+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.17/AI.Copilot-0.12.17-arm64.dmg",
+  "sha256": "1e6dd8fd6b497f3409a0804c99dcd5410f674e3a1288c0950d020774ec54f3fb",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.17/AI.Copilot-0.12.17.zip",
+  "patchSha256": "e988560884aa0e6b4c6305d0e7fbab6ef36703a979d68accaa0b6b58357f2482",
   "deltas": [
     {
-      "from": "0.12.15",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.16/AI.Copilot-0.12.16.zip",
-      "sha256": "3b114e2a49b57fb3403172b529e419ee4f39ef9feed33b6fc878096dca1bba1c"
+      "from": "0.12.16",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.17/AI.Copilot-0.12.17.zip",
+      "sha256": "e988560884aa0e6b4c6305d0e7fbab6ef36703a979d68accaa0b6b58357f2482"
     }
   ]
 }
