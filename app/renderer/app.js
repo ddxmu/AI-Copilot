@@ -1499,10 +1499,31 @@ async function initVoiceSettings() {
   function switchSttProvider(p) {
     activeSttProvider = p;
     sttTabs.forEach((t) => t.classList.toggle('active', t.dataset.sttProvider === p));
-    sttPanels.forEach((panel) => panel.classList.toggle('active', panel.id === `voice-stt-panel-${p}`));
+    sttPanels.forEach((panel) => {
+      const on = panel.id === `voice-stt-panel-${p}`;
+      panel.classList.toggle('active', on);
+      panel.classList.toggle('hidden', !on); // .hidden 带 !important，不去掉面板永远不显示
+    });
   }
   if (sttTabs.length) {
-    sttTabs.forEach((tab) => tab.addEventListener('click', () => switchSttProvider(tab.dataset.sttProvider)));
+    sttTabs.forEach((tab) => tab.addEventListener('click', async () => {
+      const p = tab.dataset.sttProvider;
+      switchSttProvider(p);
+      // 切换识别方式立即写盘，避免「选了本地但没点保存」仍走远程接口
+      if (voiceConfig.sttProvider === p) return;
+      try {
+        voiceConfig = await window.api.aiVoiceConfigSet({
+          ...voiceConfig,
+          sttProvider: p,
+          sttEnabled: sttEnabledToggle ? sttEnabledToggle.checked : !!voiceConfig.sttEnabled,
+        });
+        if (sttStatus) sttStatus.textContent = p === 'local'
+          ? '✓ 已切换到本地离线听写（无需 API Key / 模型名）'
+          : '✓ 已切换识别方式';
+      } catch (e) {
+        if (sttStatus) sttStatus.textContent = '切换保存失败：' + (e && e.message ? e.message : String(e));
+      }
+    }));
     switchSttProvider(activeSttProvider);
   }
   if (sttBaseUrl) sttBaseUrl.value = voiceConfig.sttBaseUrl || '';
@@ -3742,9 +3763,7 @@ micGrantBtn.addEventListener('click', async () => {
   micGrantBtn.textContent = '授权';
   if (ok) {
     closeMicModal();
-    const useLocalStt = voiceConfig.sttEnabled && voiceConfig.sttProvider === 'local';
-    if (useLocalStt) startLocalSTT();
-    else startRecording();
+    startRecording();
   }
 });
 
@@ -3848,7 +3867,7 @@ function checkSilenceTick() {
 }
 
 async function handleVoiceBlob(blob) {
-  chatStatusEl.textContent = '正在识别…';
+  chatStatusEl.textContent = voiceConfig.sttProvider === 'local' ? '正在转写…' : '正在识别…';
   try {
     const text = await transcribeWithMinimax(blob);
     if (!text || !text.trim()) {
@@ -3871,7 +3890,7 @@ async function handleVoiceBlob(blob) {
 async function transcribeWithMinimax(blob) {
   // STT 走独立配置（req #2）：main 进程按 sttProvider / sttKey / sttBaseUrl / sttModel 路由
   if (!voiceConfig.sttEnabled) {
-    throw new Error('请先在「AI 语音 → 语音识别(STT)」中开启并填写配置后保存');
+    throw new Error('请先在「AI 语音 → 语音识别(STT)」中启用语音识别');
   }
   // 语音识别需要 wav/16kHz base64
   const base64 = await blobToWavBase16(blob, 16000);
@@ -3884,91 +3903,8 @@ async function transcribeWithMinimax(blob) {
   return resp.text || '';
 }
 
-// —— 本地语音识别（Web Speech API，无需第三方 API Key，不联网）——
-const LocalSpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let localSttActive = false;
-let localRecognition = null;
-
-function isLocalSTTAvailable() { return !!LocalSpeechRecognition; }
-
-async function startLocalSTT() {
-  if (!LocalSpeechRecognition) {
-    chatStatusEl.textContent = '本地识别不可用：当前环境未启用浏览器语音识别（Web Speech API）。请改用远程识别，或联系开发者开启内置离线引擎。';
-    return;
-  }
-  if (localSttActive) { stopLocalSTT(); return; }
-  // 先确保麦克风采权限（SpeechRecognition 在部分环境需要）
-  let micOk = micGranted;
-  if (!micOk) {
-    try { micOk = await requestMicPermission(); } catch (e) { micOk = false; }
-  }
-  if (!micOk) { openMicModal(); return; }
-  try {
-    const rec = new LocalSpeechRecognition();
-    rec.lang = (voiceConfig.sttLang && voiceConfig.sttLang.trim()) || 'zh-CN';
-    rec.continuous = false;
-    rec.interimResults = true;
-    let finalText = '';
-    rec.onresult = (event) => {
-      let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const res = event.results[i];
-        if (res.isFinal) finalText += res[0].transcript;
-        else interim += res[0].transcript;
-      }
-      chatStatusEl.textContent = '正在聆听（本地识别）…' + (finalText || interim);
-    };
-    rec.onerror = (e) => {
-      const err = e && e.error ? e.error : 'unknown';
-      if (err === 'no-speech') { chatStatusEl.textContent = '未检测到语音，请重试'; }
-      else if (err === 'not-allowed' || err === 'service-not-allowed') {
-        chatStatusEl.textContent = '麦克风权限被拒绝，请在系统设置 › 隐私与安全性 › 麦克风 中允许「AI Copilot」。';
-      } else if (err === 'network') {
-        chatStatusEl.textContent = '本地识别需要系统语音服务支持；当前不可用（可能是系统未启用语音识别）。';
-      } else {
-        chatStatusEl.textContent = '本地识别出错：' + err;
-      }
-    };
-    rec.onend = () => {
-      localSttActive = false;
-      btnVoice.classList.remove('listening');
-      if (voiceWaveWrap) voiceWaveWrap.classList.add('hidden');
-      stopWaveformLoop();
-      const text = finalText.trim();
-      if (!text) {
-        const cur = chatStatusEl.textContent || '';
-        if (cur.indexOf('识别') === -1 && cur.indexOf('权限') === -1 && cur.indexOf('服务') === -1) {
-          chatStatusEl.textContent = '未识别到语音，请重试';
-        }
-        return;
-      }
-      chatInput.value = text;
-      autoGrow();
-      chatInput.focus();
-      chatStatusEl.textContent = '已识别，自动发送中…';
-      voiceSendPending = true; // 标记来自语音 → 触发 AI 语音朗读回复
-      sendChat();
-    };
-    localRecognition = rec;
-    localSttActive = true;
-    btnVoice.classList.add('listening');
-    chatStatusEl.textContent = '正在聆听（本地识别）…请说话，结束自动发送';
-    rec.start();
-  } catch (e) {
-    localSttActive = false;
-    btnVoice.classList.remove('listening');
-    chatStatusEl.textContent = '无法启动本地识别：' + (e && e.message ? e.message : String(e));
-  }
-}
-
-function stopLocalSTT() {
-  if (localRecognition) {
-    try { localRecognition.stop(); } catch (e) {}
-    localRecognition = null;
-  }
-  localSttActive = false;
-  btnVoice.classList.remove('listening');
-}
+// 「本地（无需 Key）」听写：与远程模式共用 MediaRecorder 录音 / 静音检测 / 波形链路，
+// 录音结束后由主进程交给 macOS 系统离线听写（见 main.js 的 transcribeLocal）。
 
 // 将 Blob 解码并重采样为 16kHz WAV 后返回 base64
 async function blobToWavBase16(blob, targetSampleRate) {
@@ -4033,14 +3969,6 @@ let voiceMouseHeld = false;
 const VOICE_HOLD_THRESHOLD = 180; // ms：超过即视为按住说话，松开即停
 
 function voiceStartOrToggle() {
-  // 本地 STT 模式：走浏览器内置识别，不经 MediaRecorder
-  const useLocalStt = voiceConfig.sttEnabled && voiceConfig.sttProvider === 'local';
-  if (useLocalStt) {
-    if (localSttActive) { stopLocalSTT(); return; }
-    try { window.speechSynthesis.cancel(); } catch (e) {}
-    startLocalSTT();
-    return;
-  }
   if (isRecording) { finalizeRecording(); return; }
   try { window.speechSynthesis.cancel(); } catch (e) {}
   if (micGranted) { startRecording(); }

@@ -2994,8 +2994,49 @@ ipcMain.handle('ai-voice-tts', async (_e, { text, config }) => {
 //  - 默认 sttProvider='openai' → POST {sttBaseUrl}/audio/transcriptions（multipart，兼容 OpenAI / 硅基流动 / 通义等）
 //  - 仅当用户明确选择 sttProvider='minimax' 时，才调用 MiniMax 原生 /v1/audio/asr
 //    （MiniMax 的 OpenAI 兼容 /audio/transcriptions 不存在，会 404，故绝不作为默认）
+// 本地离线听写：把 16kHz WAV 交给 macOS 系统语音识别（SFSpeechRecognizer，on-device）。
+// 辅助程序是独立的 ad-hoc 签名 .app，不向 Electron 主进程加载任何原生扩展，
+// 不联网、不需要 API Key、不加载 Vosk / whisper 等第三方语音模型。
+function transcribeLocal(audioBase64, lang) {
+  return new Promise((resolve) => {
+    const tmp = path.join(os.tmpdir(), `aicopilot-stt-${process.pid}-${Date.now()}.wav`);
+    try {
+      fs.writeFileSync(tmp, Buffer.from(String(audioBase64 || ''), 'base64'));
+    } catch (e) {
+      resolve({ ok: false, error: '写入临时音频失败：' + (e && e.message ? e.message : e) });
+      return;
+    }
+    const helper = path.join(__dirname, 'native', 'SpeechTranscriber.app', 'Contents', 'MacOS', 'SpeechTranscriber');
+    if (!fs.existsSync(helper)) {
+      try { fs.unlinkSync(tmp); } catch (e) { /* ignore */ }
+      resolve({ ok: false, error: '本地听写组件缺失，请安装完整版 DMG 后重试' });
+      return;
+    }
+    // OTA 解压可能丢掉可执行位，这里确保可运行
+    try { fs.chmodSync(helper, 0o755); } catch (e) { /* ignore */ }
+    execFile(helper, [tmp, String(lang || 'zh-CN')], { timeout: 90000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+      try { fs.unlinkSync(tmp); } catch (e) { /* ignore */ }
+      if (err && err.killed) {
+        resolve({ ok: false, error: '识别超时；首次使用时若弹出「语音识别」授权，请点允许后重试' });
+        return;
+      }
+      let parsed = null;
+      const lines = String(stdout || '').trim().split('\n');
+      try { parsed = JSON.parse(lines[lines.length - 1]); } catch (e) { /* ignore */ }
+      if (parsed && parsed.ok) { resolve({ ok: true, text: parsed.text || '' }); return; }
+      if (parsed && parsed.error) { resolve({ ok: false, error: parsed.error }); return; }
+      const detail = (err && err.message) || String(stderr || '').trim() || '未知错误';
+      resolve({ ok: false, error: '本地听写失败：' + detail });
+    });
+  });
+}
+
 ipcMain.handle('ai-voice-stt', async (_e, { audioBase64, mime, config }) => {
   try {
+    // 「本地（无需 Key）」：走 macOS 系统离线听写，不进入任何远程 STT 配置检查
+    if (config && config.sttProvider === 'local') {
+      return await transcribeLocal(audioBase64, config.sttLang);
+    }
     const sttProvider = (config && config.sttProvider === 'minimax') ? 'minimax' : 'openai';
     // OpenAI 兼容路径使用独立的 sttKey；MiniMax 原生路径复用 MiniMax TTS 的 minimaxKey
     const sttKey = (sttProvider === 'minimax')
