@@ -1,16 +1,16 @@
 {
-  "version": "0.12.17",
-  "notes": "### 调整：「提示词」节点的处理方式回退到 v0.12.15\n- 恢复「提示词」节点执行 AI 的结果文件传给下游任务的处理方式（撤回 v0.12.16 中「结果文件不注入下游」的改动）。提示词文本 / AI 模型 / 保存位置照常透传。\n\n### 保留：「默认授权」开关（顶栏左上）\n- 顶栏左上「默认授权：关/开」按钮保持不变：开启后 AI 的授权请求自动允许，不再弹确认框；选择会记住。",
-  "pubDate": "2026-11-02T19:35:13+08:00",
-  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.17/AI.Copilot-0.12.17-arm64.dmg",
-  "sha256": "1e6dd8fd6b497f3409a0804c99dcd5410f674e3a1288c0950d020774ec54f3fb",
-  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.17/AI.Copilot-0.12.17.zip",
-  "patchSha256": "e988560884aa0e6b4c6305d0e7fbab6ef36703a979d68accaa0b6b58357f2482",
+  "version": "0.12.18",
+  "notes": "### 语音识别：「本地（无需 Key）」改用 macOS 系统离线听写\n- 原来的「本地」走 Chromium Web Speech API（依赖 Google 在线服务，国内网络下无法识别），实际是个摆设。现改为 **macOS 系统听写 SFSpeechRecognizer 的 on-device 模式**：不联网、不上传音频、不需要 API Key / 模型名，也不加载 Vosk / whisper 等第三方语音模型。\n- 点麦克风 → 录音 + 实时波形 → 松开或再点结束 → 显示「正在转写…」→ 文字填入输入框并自动发送（与远程模式共用原有录音链路）。\n- 修复「选了本地却仍报『请先填写 STT 模型名』」：`ai-config.js` 的字段白名单原本不认 `sttProvider='local'`、也丢掉 `sttLang`，导致本地选项永远存不进去、实际仍走远程接口。\n- 切换识别方式的选项现在**立即保存**，无需再点「保存」；同时修复设置面板因 `.hidden` 带 `!important` 导致切换后内容不显示的问题。\n- 首次使用系统会弹出「语音识别」授权，允许一次即可；若之前拒绝，可在「系统设置 › 隐私与安全性 › 语音识别」中开启。",
+  "pubDate": "2026-11-11T13:06:33+08:00",
+  "dmgUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.18/AI.Copilot-0.12.18-arm64.dmg",
+  "sha256": "93caeca6ab28312bd57996017f09b91d538b12a6d548161f6dd3101daa10d9cb",
+  "patchUrl": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.18/AI.Copilot-0.12.18.zip",
+  "patchSha256": "bf8976989448ef715903fc39e9de2e8d397eeb5e1028b0aefcf131d17e65a9e8",
   "deltas": [
     {
-      "from": "0.12.16",
-      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.17/AI.Copilot-0.12.17.zip",
-      "sha256": "e988560884aa0e6b4c6305d0e7fbab6ef36703a979d68accaa0b6b58357f2482"
+      "from": "0.12.17",
+      "url": "https://github.com/ddxmu/AI-Copilot/releases/download/v0.12.18/AI.Copilot-0.12.18.zip",
+      "sha256": "bf8976989448ef715903fc39e9de2e8d397eeb5e1028b0aefcf131d17e65a9e8"
     }
   ]
 }
