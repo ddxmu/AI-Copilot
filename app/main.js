@@ -237,6 +237,14 @@ function checkUpdatesInBackground(force = false) {
 }
 
 app.whenReady().then(() => {
+  // 「关于 AI Copilot」与左下角版本统一：系统默认 About 面板读 Info.plist，
+  // 但 OTA 增量更新只替换 Contents/Resources/app/，Info.plist 会一直停在初次安装时的版本
+  // （例如装的是 0.10.29 的 DMG，之后一路 OTA 到 0.12.18，About 仍显示 0.10.29）。
+  // 这里显式用 package.json 的当前版本覆盖，以后改版本只需改 package.json 这一处。
+  try {
+    const aboutVersion = require('./package.json').version;
+    app.setAboutPanelOptions({ applicationVersion: aboutVersion, version: aboutVersion });
+  } catch (e) { /* 读不到版本时保持系统默认 */ }
   migrateLegacyUserData();
   detectPdfEngines();
   createWindow();
@@ -2476,6 +2484,9 @@ function resolveProfileById(profileId, model) {
   return model ? Object.assign({}, p, { model }) : p;
 }
 
+// 正在运行的聊天任务实例：用于判断「引导」还能不能插进当前任务（任务已结束就别再塞队列）
+const activeChatRuns = new Set();
+
 ipcMain.handle('ai-chat', async (event, { history, text, attachments, runId, chatId, cfg }) => {
   // 每个会话独立的权限 / MCP / 模型配置（v0.11.28）；没传时回退到全局值，兼容老调用
   const runPerm = cfg && ['ask', 'trust', 'deny'].includes(cfg.perm) ? cfg.perm : permissionMode;
@@ -2489,6 +2500,7 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments, runId, cha
   // 渲染进程据此把事件路由到对应会话（否则并发时会把 A 会话的字写进 B 会话）。
   const rid = runId || ('run-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6));
   const cid = chatId || currentChatId || null;
+  activeChatRuns.add(rid);
   const meta = { runId: rid, chatId: cid };
   const send = (ch, payload) => { try { wc.send(ch, payload, meta); } catch (e) { /* ignore */ } };
   try {
@@ -2568,7 +2580,7 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments, runId, cha
     // 任务结束：桌宠显示完成状态（2.6 秒后自回 idle）
     clearTimeout(petTextTimer); petTextTimer = null; petTextBuf = '';
     petWindow.setState('done', result.ok ? '任务完成' : '出错了');
-    return { ok: result.ok, error: result.error, usage: result.usage, messages: result.messages || [], todos: result.todos || [], hitMaxTurns: result.hitMaxTurns || false };
+    return { ok: result.ok, error: result.error, usage: result.usage, messages: result.messages || [], todos: result.todos || [], hitMaxTurns: result.hitMaxTurns || false, pendingSteers: result.pendingSteers || [] };
   } catch (err) {
     clearTimeout(petTextTimer); petTextTimer = null; petTextBuf = '';
     petWindow.setState('idle', '出错了：' + (err && err.message ? err.message.slice(0, 60) : ''));
@@ -2578,6 +2590,7 @@ ipcMain.handle('ai-chat', async (event, { history, text, attachments, runId, cha
     pendingConfirms.delete(rid);
     pendingAskUsers.delete(rid);
     pendingInstallSkills.delete(rid);
+    activeChatRuns.delete(rid);
     try { agent.clearRun(rid); } catch (e) { /* ignore */ }
   }
 });
@@ -2672,8 +2685,12 @@ ipcMain.handle('wf-ask-user-reply', (_e, { runId, text } = {}) => {
 
 // 引导（steer）：把排队中的消息插进正在跑的任务（消息发出，但不中断当前轮）
 ipcMain.handle('ai-chat-steer', (_e, { runId, text } = {}) => {
-  try { return { ok: !!agent.pushSteer(runId, text) }; }
-  catch (e) { return { ok: false, error: e.message }; }
+  try {
+    // 任务已结束（或 runId 不存在）时不能再往它的队列塞消息，否则会被 clearRun 静默丢掉；
+    // 返回 finished 让渲染层把内容放回排队队列，任务结束后自动接着执行。
+    if (!runId || !activeChatRuns.has(runId)) return { ok: false, finished: true };
+    return { ok: !!agent.pushSteer(runId, text) };
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // 只停止「指定任务实例」：并发下不会连坐其他会话正在跑的任务

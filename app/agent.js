@@ -1633,9 +1633,11 @@ function takeSteers(runId) {
 }
 // 任务结束：清掉该实例的停止控制与未消费的引导消息，防止 runControls 无限增长
 function clearRun(runId) {
-  if (!runId) return;
+  if (!runId) return [];
   runControls.delete(runId);
+  const leftover = steerQueues.get(runId) || [];
   steerQueues.delete(runId);
+  return leftover.slice(); // 没被消费的引导交还调用方，避免用户点的引导凭空消失
 }
 
 function httpPostJson(urlStr, headers, body, timeoutMs = 300000, signal = null) {
@@ -2288,6 +2290,22 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
   const MAX_AUTO_CONTINUE = 6; // 40 轮 × 6 段 = 最多 240 轮工具调用，防死循环
   let undoneContinues = 0;     // 「输出文本但 todo 未完成」的自动续跑次数
   const MAX_UNDONE_CONTINUE = 2;
+  // 引导兜底：模型准备收尾（break）时，用户刚点的引导可能还在队列里没被取走。
+  // 以前循环一 break，这些消息就随任务结束被 clearRun 删掉，表现为「点了引导没反应」。
+  // 这里在退出前把它们注入 messages 并再跑一轮，让引导真正被当前任务执行。
+  let steerFollowups = 0;
+  const MAX_STEER_FOLLOWUPS = 3;
+  function drainPendingSteers() {
+    if (steerFollowups >= MAX_STEER_FOLLOWUPS || isStop(ctx)) return false;
+    const pending = takeSteers(ctx.runId);
+    if (!pending.length) return false;
+    steerFollowups++;
+    for (const s of pending) {
+      messages.push({ role: 'user', content: s });
+      ctx.emit('steer', { text: s });
+    }
+    return true;
+  }
   for (let turn = 0; ; turn++) {
     // 引导（steer）：被「引导」的排队消息在这里注入 —— 消息发出，但不打断当前轮正在生成的内容
     const steers = takeSteers(ctx.runId);
@@ -2311,6 +2329,8 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
         turn = -1; // continue 后 turn++ 归零，重新计本段轮数
         continue;
       }
+      // 收尾前再看一眼有没有刚到、还没被处理的引导
+      if (drainPendingSteers()) { turn = -1; continue; }
       break; // 续跑次数用尽，按原逻辑收尾
     }
     // 上下文压缩：主对话且超阈值时触发
@@ -2401,6 +2421,8 @@ async function runAgentLoop(profile, apiType, userText, ctx, opts = {}) {
           continue;
         }
       }
+      // 模型已给出最终回复，但刚点的引导还没被处理：注入后再跑一轮，别让它随任务结束丢掉
+      if (drainPendingSteers()) { turn = -1; continue; }
       break;
     }
 
@@ -2533,18 +2555,24 @@ async function runAgent(profile, chatHistory, userText, callbacks) {
   sessionEvents.emit({ type: 'session_meta', session: ctx.chatId || '' });
   sessionEvents.emit({ type: 'started', session: ctx.chatId || '' });
 
+  let outcome = null;
   try {
     const result = await runAgentLoop(profile, apiType, userText, ctx, {});
     // 后台异步提炼长期记忆，不阻塞回复
     if (ctx.memoryEnabled && Array.isArray(result.messages)) {
       extractMemoryFacts(profile, apiType, result.messages).catch(() => {});
     }
-    return { ok: true, stopped: !!result.stopped, usage: result.usage, rules: ctx.rules, todos: ctx.todos, messages: result.messages, hitMaxTurns: result.hitMaxTurns };
+    outcome = { ok: true, stopped: !!result.stopped, usage: result.usage, rules: ctx.rules, todos: ctx.todos, messages: result.messages, hitMaxTurns: result.hitMaxTurns };
+    return outcome;
   } catch (err) {
     sessionEvents.emit({ type: 'finished', session: ctx.chatId || '', outcome: 'failed', text: sessionEvents.clean(err && err.message) });
-    return { ok: false, error: err.message };
+    outcome = { ok: false, error: err.message };
+    return outcome;
   } finally {
-    clearRun(ctx.runId);
+    // 任务收尾：没来得及被当前任务处理的引导消息交还调用方，
+    // 渲染层会放回排队队列，任务结束后自动接着执行（不丢用户的引导）。
+    const leftover = clearRun(ctx.runId);
+    if (outcome && leftover.length) outcome.pendingSteers = leftover;
   }
 }
 

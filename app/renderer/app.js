@@ -3018,6 +3018,17 @@ function steerQueued(chatId, itemId) {
     .then((r) => {
       if (r && r.ok) {
         if (chatId === activeChatId) addEventLine('➤ 已引导到正在运行的任务：' + item.text);
+      } else if (r && r.finished) {
+        // 任务已经结束，不能再往它的队列里塞消息：把内容放回排队队列，
+        // 复用「任务结束后自动接着跑下一条」，保证引导内容一定会被执行。
+        const cur = getChatRun(chatId);
+        if (cur && cur.queue) {
+          cur.queue.unshift(item);
+          if (chatId === activeChatId) renderQueuedMessages();
+        } else {
+          startChatRun(chatId, item.text, item.attachments || [], {});
+        }
+        if (chatId === activeChatId) addEventLine('➤ 上个任务已结束，引导内容将自动执行：' + item.text);
       } else restore();
     })
     .catch(restore);
@@ -5458,6 +5469,14 @@ async function startChatRun(runChatId, text, attachmentsMeta, opts = {}) {
     }
     if (!replyText && segFallback) replyText = segFallback;
     if (replyText) speakText(replyText);
+  }
+
+  // 主进程在任务收尾时交还的、没来得及被当前任务处理的引导内容：放回队列，
+  // 下面会自动接着执行，避免「点了引导却只显示一句提示、什么都没发生」。
+  if (r && Array.isArray(r.pendingSteers) && r.pendingSteers.length) {
+    for (const t of r.pendingSteers) {
+      if (t) queue.push({ id: ++queueSeq, text: t, attachments: [] });
+    }
   }
 
   // 队列里还有消息：任务结束后自动接着跑下一条（排队消息按序执行）
